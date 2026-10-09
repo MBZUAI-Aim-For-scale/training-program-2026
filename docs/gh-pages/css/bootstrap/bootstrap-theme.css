@@ -1,0 +1,239 @@
+/* ==========================================================================
+   MODERN THEME
+   ========================================================================== */
+
+/* 1. Design Tokens for Consistency */
+:root {
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+  --radius-base: 0.375rem;
+  --radius-lg: 0.5rem;
+}
+
+/* 2. Modern Buttons (Clean, accessible, micro-gradients) */
+.btn-default,
+.btn-primary,
+.btn-success,
+.btn-info,
+.btn-warning,
+.btn-danger {
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-default:active, .btn-default.active,
+.btn-primary:active, .btn-primary.active,
+.btn-success:active, .btn-success.active,
+.btn-info:active, .btn-info.active,
+.btn-warning:active, .btn-warning.active,
+.btn-danger:active, .btn-danger.active {
+  box-shadow: var(--shadow-inset);
+  background-image: none;
+}
+
+/* Grouped disabled states for massive file size reduction */
+.btn-default.disabled, .btn-default[disabled], fieldset[disabled] .btn-default,
+.btn-primary.disabled, .btn-primary[disabled], fieldset[disabled] .btn-primary,
+.btn-success.disabled, .btn-success[disabled], fieldset[disabled] .btn-success,
+.btn-info.disabled, .btn-info[disabled], fieldset[disabled] .btn-info,
+.btn-warning.disabled, .btn-warning[disabled], fieldset[disabled] .btn-warning,
+.btn-danger.disabled, .btn-danger[disabled], fieldset[disabled] .btn-danger {
+  box-shadow: none;
+  opacity: 0.65;
+  background-image: none !important;
+}
+
+/* Remove legacy badge text shadows */
+.btn .badge { text-shadow: none; }
+
+/* Individual Button Styles */
+.btn-default {
+  background: linear-gradient(to bottom, #ffffff, #f0f0f0);
+  border-color: #d0d0d0;
+}
+.btn-default:hover, .btn-default:focus { background: #e0e0e0; }
+
+.btn-primary {
+  background: linear-gradient(to bottom, #337ab7, #286090);
+  border-color: #204d74;
+}
+.btn-primary:hover, .btn-primary:focus { background: #286090; }
+
+.btn-success {
+  background: linear-gradient(to bottom, #5cb85c, #449d44);
+  border-color: #398439;
+}
+.btn-success:hover, .btn-success:focus { background: #449d44; }
+
+.btn-info {
+  background: linear-gradient(to bottom, #5bc0de, #31b0d5);
+  border-color: #269abc;
+}
+.btn-info:hover, .btn-info:focus { background: #31b0d5; }
+
+.btn-warning {
+  background: linear-gradient(to bottom, #f0ad4e, #ec971f);
+  border-color: #d58512;
+}
+.btn-warning:hover, .btn-warning:focus { background: #ec971f; }
+
+.btn-danger {
+  background: linear-gradient(to bottom, #d9534f, #c9302c);
+  border-color: #ac2925;
+}
+.btn-danger:hover, .btn-danger:focus { background: #c9302c; }
+
+/* 3. Thumbnails & Images */
+.thumbnail,
+.img-thumbnail {
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--color-border, #dee2e6);
+}
+
+/* 4. Dropdowns */
+.dropdown-menu > li > a:hover,
+.dropdown-menu > li > a:focus {
+  background: linear-gradient(to bottom, #f8f9fa, #e9ecef);
+}
+
+.dropdown-menu > .active > a,
+.dropdown-menu > .active > a:hover,
+.dropdown-menu > .active > a:focus {
+  background: linear-gradient(to bottom, #337ab7, #286090);
+}
+
+/* 5. Navbars */
+.navbar-default {
+  background: linear-gradient(to bottom, #ffffff, #f8f9fa);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.navbar-default .navbar-nav > .open > a,
+.navbar-default .navbar-nav > .active > a {
+  background: linear-gradient(to bottom, #e9ecef, #dee2e6);
+  box-shadow: var(--shadow-inset);
+}
+
+.navbar-inverse {
+  background: linear-gradient(to bottom, #343a40, #212529);
+}
+
+.navbar-inverse .navbar-nav > .open > a,
+.navbar-inverse .navbar-nav > .active > a {
+  background: linear-gradient(to bottom, #1a1d20, #000000);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.navbar-static-top,
+.navbar-fixed-top,
+.navbar-fixed-bottom {
+  border-radius: 0;
+}
+
+@media (max-width: 767px) {
+  .navbar .navbar-nav .open .dropdown-menu > .active > a,
+  .navbar .navbar-nav .open .dropdown-menu > .active > a:hover,
+  .navbar .navbar-nav .open .dropdown-menu > .active > a:focus {
+    background: linear-gradient(to bottom, #337ab7, #286090);
+  }
+}
+
+/* 6. Alerts (Modernized: flat, accessible, high contrast) */
+.alert {
+  box-shadow: var(--shadow-sm);
+  border-width: 1px;
+  border-style: solid;
+}
+
+.alert-success {
+  background: linear-gradient(to bottom, #d4edda, #c3e6cb);
+  border-color: #b1dfbb;
+  color: #155724;
+}
+
+.alert-info {
+  background: linear-gradient(to bottom, #d1ecf1, #bee5eb);
+  border-color: #a6d9e6;
+  color: #0c5460;
+}
+
+.alert-warning {
+  background: linear-gradient(to bottom, #fff3cd, #ffeeba);
+  border-color: #ffe8a1;
+  color: #856404;
+}
+
+.alert-danger {
+  background: linear-gradient(to bottom, #f8d7da, #f5c6cb);
+  border-color: #f1b0b7;
+  color: #721c24;
+}
+
+/* 7. Progress Bars */
+.progress {
+  background: linear-gradient(to bottom, #e9ecef, #f8f9fa);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-base);
+  overflow: hidden;
+}
+
+.progress-bar {
+  background: linear-gradient(to bottom, #337ab7, #286090);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+}
+
+.progress-bar-success { background: linear-gradient(to bottom, #5cb85c, #449d44); }
+.progress-bar-info { background: linear-gradient(to bottom, #5bc0de, #31b0d5); }
+.progress-bar-warning { background: linear-gradient(to bottom, #f0ad4e, #ec971f); }
+.progress-bar-danger { background: linear-gradient(to bottom, #d9534f, #c9302c); }
+
+.progress-bar-striped {
+  background-image: linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.15) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+}
+
+/* 8. List Groups & Panels */
+.list-group {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.list-group-item.active,
+.list-group-item.active:hover,
+.list-group-item.active:focus {
+  background: linear-gradient(to bottom, #337ab7, #286090);
+  border-color: #286090;
+}
+
+.panel {
+  box-shadow: var(--shadow-sm);
+  border: 1px solid rgba(0, 0, 0, 0.125);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.panel-default > .panel-heading { background: linear-gradient(to bottom, #f8f9fa, #e9ecef); }
+.panel-primary > .panel-heading { background: linear-gradient(to bottom, #337ab7, #286090); color: #fff; }
+.panel-success > .panel-heading { background: linear-gradient(to bottom, #d4edda, #c3e6cb); color: #155724; }
+.panel-info > .panel-heading { background: linear-gradient(to bottom, #d1ecf1, #bee5eb); color: #0c5460; }
+.panel-warning > .panel-heading { background: linear-gradient(to bottom, #fff3cd, #ffeeba); color: #856404; }
+.panel-danger > .panel-heading { background: linear-gradient(to bottom, #f8d7da, #f5c6cb); color: #721c24; }
+
+/* 9. Wells (Modernized to subtle card-like appearance) */
+.well {
+  background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+  border: 1px solid #e9ecef;
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+/*# sourceMappingURL=bootstrap-theme.css.map */

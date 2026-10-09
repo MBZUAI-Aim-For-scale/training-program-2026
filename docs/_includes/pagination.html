@@ -1,0 +1,69 @@
+{% assign sorted_episodes = site.episodes | sort: 'order' %}
+{% for episode in sorted_episodes %}
+  {% if episode.url == page.url %}
+    {% assign prev_index = forloop.index0 | minus: 1 %}
+    {% assign next_index = forloop.index0 | plus: 1 %}
+    
+    {% if prev_index >= 0 %}
+      {% assign prev = sorted_episodes[prev_index] %}
+    {% elsif page.url != '/' %}
+      {% assign prev_home = true %}
+    {% endif %}
+    
+    {% if next_index < sorted_episodes.size %}
+      {% assign next = sorted_episodes[next_index] %}
+    {% elsif page.url contains '/episodes/' %}
+      {% assign next_ref = true %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+
+<nav class="pagination-nav" aria-label="Page navigation">
+  {% if prev %}
+    <a href="{{ prev.url | relative_url }}" class="pagination-link prev">
+      <span class="pagination-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Previous
+      </span>
+      <span class="pagination-title">{{ prev.title }}</span>
+    </a>
+  {% elsif prev_home %}
+    <a href="{{ '/' | relative_url }}" class="pagination-link prev">
+      <span class="pagination-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Previous
+      </span>
+      <span class="pagination-title">Home</span>
+    </a>
+  {% else %}
+    <div></div>
+  {% endif %}
+  
+  {% if next %}
+    <a href="{{ next.url | relative_url }}" class="pagination-link next">
+      <span class="pagination-label">
+        Next
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </span>
+      <span class="pagination-title">{{ next.title }}</span>
+    </a>
+  {% elsif next_ref %}
+    <a href="{{ '/reference/' | relative_url }}" class="pagination-link next">
+      <span class="pagination-label">
+        Next
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+      </span>
+      <span class="pagination-title">Reference</span>
+    </a>
+  {% else %}
+    <div></div>
+  {% endif %}
+</nav>

@@ -1,0 +1,30 @@
+# Python
+/.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# macOS
+.DS_Store
+
+# External NetCDF data
+/data/external/**/*.nc
+/data/*.nc
+**/*.nc
+
+# Shapefile and GeoJSON data
+/data/external/shapefile/
+
+# Built slides / site
+reports/slides/_site/
+docs/_site/
+**/_site/
+
+# Jupyter / notebooks outputs (optional but helpful)
+*.ipynb_checkpoints
+
+notebooks/*.ipynb
+.agents/skills
+.claude/skills
+ai_weather.egg-info/
+anaconda_projects/db/

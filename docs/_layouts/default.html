@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  
+  <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.title }}</title>
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/bootstrap-theme.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/header.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/footer.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/tabs.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/nav.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
+  
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌤️</text></svg>">
+</head>
+<body>
+  <!-- Header with Navigation -->
+  <header class="site-header">
+    <div class="header-container">
+      <a href="{{ '/' | relative_url }}" class="logo">
+        🌤️ {{ site.title }}
+      </a>
+      
+      <button class="menu-toggle" aria-label="Toggle menu" onclick="document.querySelector('nav').classList.toggle('active')">☰</button>
+      
+      <nav aria-label="Main navigation">
+        <ul>
+          <li>
+            <a href="{{ '/' | relative_url }}" {% if page.url == '/' %}class="active"{% endif %}>
+              Home
+            </a>
+          </li>
+          
+          {% assign sorted_episodes = site.episodes | sort: 'name' %}
+          {% for episode in sorted_episodes %}
+            <li>
+              <a href="{{ episode.url | relative_url }}" {% if page.url == episode.url %}class="active"{% endif %}>
+                {{ episode.title }}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <article>
+      {{ content }}
+    </article>
+    
+    <!-- Navigation Links (Previous/Next) -->
+    {% if page.url contains '/episodes/' or page.url contains '/01-' or page.url contains '/02-' or page.url contains '/03-' or page.url contains '/04-' or page.url contains '/05-' or page.url contains '/06-'%}
+      {% assign sorted_episodes = site.episodes | sort: 'name' %}
+      {% for episode in sorted_episodes %}
+        {% if episode.url == page.url %}
+          {% assign prev_index = forloop.index0 | minus: 1 %}
+          {% assign next_index = forloop.index0 | plus: 1 %}
+          
+          <nav class="pagination" aria-label="Page navigation">
+            {% if prev_index >= 0 %}
+              {% assign prev = sorted_episodes[prev_index] %}
+              <a href="{{ prev.url | relative_url }}" class="prev">
+                {{ prev.title }}
+              </a>
+            {% else %}
+              <div></div>
+            {% endif %}
+            
+            {% if next_index < sorted_episodes.size %}
+              {% assign next = sorted_episodes[next_index] %}
+              <a href="{{ next.url | relative_url }}" class="next">
+                {{ next.title }}
+              </a>
+            {% else %}
+              <div></div>
+            {% endif %}
+          </nav>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-content">
+        <p><strong>{{ site.title }}</strong></p>
+        <p>&copy; {{ site.time | date: '%Y' }}. All rights reserved.</p>
+        {% if site.email %}
+          <p>Contact: <a href="mailto:{{ site.email }}">{{ site.email }}</a></p>
+        {% endif %}
+      </div>
+      
+      <div class="footer-links">
+        {% if site.repository %}
+          <a href="https://github.com/{{ site.repository }}" target="_blank" rel="noopener">
+            GitHub Repository
+          </a>
+        {% endif %}
+        <a href="{{ '/' | relative_url }}">Home</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
