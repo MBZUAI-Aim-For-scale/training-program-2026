@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sys
 os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime

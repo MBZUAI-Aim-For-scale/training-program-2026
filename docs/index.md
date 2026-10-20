@@ -21,6 +21,6 @@ More details about the files we'll use and where to download them are available 
 
 ## Getting Started
 
-To get started with installing Python, follow the directions given in the [ Lesson section of the course page](https://mesfind.github.io/ai_weather).
+To get started with installing Python, follow the directions given in the [ Lesson section of the course page](https://mbzuai-aim-for-scale.github.io/training-program-2026/).
 
-In addition to installing Python on your own computer, you will also need to download the data files used in the tutorials. Details for doing this are found in the [Setup]({{ '/setup/' | relative_url }}) page.
+In addition to installing Python on your own computer, you will also need to download the data files used in the tutorials. Details for doing this are found in the [Setup]({{ '/01-setup/' | relative_url }}) page.

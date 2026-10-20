@@ -1,5 +1,5 @@
 # ============================================================
-# AI WEATHER - Complete Configuration
+# AI WEATHER Configuration
 # ============================================================
 
 # --- Site Metadata ---
@@ -10,8 +10,8 @@ author: "HCWF"
 
 # --- URLs ---
 # Update these for your actual deployment
-url: "https://mbzuai-aim-for-scale.github.io"
-baseurl: "/training-program-2026"  
+url: "https://mbzuai-aim-for-scale.github.io/training-program-2026"
+baseurl: "training-program-2026"  
 
 # --- Repository ---
 repository: "MBZUAI-Aim-For-scale/training-program-2026"
