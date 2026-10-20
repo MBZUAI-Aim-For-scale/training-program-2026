@@ -1,0 +1,194 @@
+/* ========== BASE STYLES ========== */
+:root {
+  --r-main-font: 'Helvetica Neue', Arial, sans-serif;
+  --r-heading-font: 'Helvetica Neue', Arial, sans-serif;
+  --r-main-font-size: 28px;
+  --r-heading1-size: 2.5em;
+  --r-heading2-size: 1.8em;
+  --r-heading3-size: 1.3em;
+  --r-heading4-size: 1em;
+  --r-link-color: #1a73e8;
+  --r-link-color-hover: #0d47a1;
+  --r-selection-background-color: #ff9800;
+}
+
+/* ========== ADAPTIVE DARK BACKGROUNDS (THE MASTER VARIABLE FIX) ========== */
+
+/* 1. Tell Reveal.js to change its core variables when a slide is dark */
+.reveal .has-dark-background {
+  --r-heading-color: #ffffff !important;
+  --r-main-color: #f8f9fa !important;
+  color: #f8f9fa !important;
+}
+
+/* 2. Bruteforce the specific headers just in case Quarto tries to bypass the variables */
+.reveal .has-dark-background h1,
+.reveal .has-dark-background h2,
+.reveal .has-dark-background h3,
+.reveal .has-dark-background h4,
+.reveal .has-dark-background h5,
+.reveal .has-dark-background h6 {
+  color: var(--r-heading-color) !important;
+  border-bottom-color: #ffffff !important; /* Fixes the underline */
+}
+
+/* 3. Ensure bullet points and text follow suit */
+.reveal .has-dark-background p,
+.reveal .has-dark-background li,
+.reveal .has-dark-background div {
+  color: var(--r-main-color) !important;
+}
+
+.navigate-up .controls-arrow,
+.navigate-down .controls-arrow {
+  font-size: 8px;
+  color: red;
+}
+
+
+/* ========== TITLE SLIDE ========== */
+.title-slide {
+  text-align: left !important;
+}
+
+.title-slide h1 {
+  font-size: 3em !important;
+  margin-bottom: 0.5em;
+  color: #2c3e50;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+}
+
+
+.title-slide .author, 
+.title-slide .date, 
+.title-slide .affiliation {
+  text-align: left !important;
+  color: #34495e;
+}
+
+.title-slide .author {
+  font-size: 1.4em !important;
+  margin-top: 1.5em;
+}
+
+/* ========== CONTENT SLIDES ========== */
+.reveal .slide {
+  text-align: left;
+  padding: 20px 60px !important;
+}
+
+.reveal .slide h1 {
+  color: #2c3e50;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 10px;
+  margin-bottom: 30px;
+}
+
+
+
+/* ========== CODE BLOCKS ========== */
+.reveal pre {
+  width: 100% !important;
+  margin: 20px auto !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+  border-radius: 5px;
+}
+
+
+.reveal code {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9em;
+  line-height: 1.4;
+  max-height: 600px !important;
+}
+
+/* ========== TABLES & FIGURES ========== */
+.reveal table {
+  margin: 20px auto;
+  border-collapse: collapse;
+}
+
+.reveal table th {
+  background-color: #3498db;
+  color: white;
+  padding: 10px 15px;
+}
+
+.reveal table td {
+  padding: 8px 15px;
+  border-bottom: 1px solid #ddd;
+}
+
+.reveal img {
+  max-height: 700px;
+  margin: 20px auto;
+  display: block;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.reveal figcaption {
+  font-size: 0.7em;
+  color: #7f8c8d;
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* ========== SPECIAL ELEMENTS ========== */
+.reveal .callout {
+  background-color: #e3f2fd;
+  border-left: 5px solid #2196f3;
+  padding: 15px;
+  margin: 20px 0;
+  border-radius: 0 5px 5px 0;
+}
+
+.reveal .important {
+  background-color: #ffebee;
+  border-left: 5px solid #f44336;
+}
+
+.reveal .tip {
+  background-color: #e8f5e9;
+  border-left: 5px solid #4caf50;
+}
+
+/* ========== TRANSITIONS & ANIMATIONS ========== */
+.reveal .slide-background {
+  transition: all 0.8s ease-in-out;
+}
+
+/* ========== FOOTER ========== */
+.reveal .footer {
+  font-size: 0.5em !important;
+  color: #7f8c8d !important;
+  opacity: 0.8 !important;
+}
+
+/* ========== PROGRESS BAR ========== */
+.reveal .progress {
+  height: 6px;
+  background: rgba(0,0,0,0.1);
+}
+
+.reveal .progress span {
+  background: #3498db;
+  transition: width 0.8s ease;
+}
+
+/* Hide slide number AND progress bar when the title slide is actively on screen */
+.reveal:has(#title-slide.present) .slide-number,
+.reveal:has(#title-slide.present) .progress {
+  display: none !important;
+}
+
+/* ========== PRINT STYLES ========== */
+@media print {
+  .reveal .slide {
+    page-break-after: always !important;
+    padding: 20px !important;
+  }
+  
+  .reveal .slide h1 {
+    font-size: 2em !important;
+  }
+}

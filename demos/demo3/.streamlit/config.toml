@@ -1,0 +1,4 @@
+# The page is designed on a light background; don't follow the browser's dark mode.
+[theme]
+base = "light"
+textColor = "#111827"

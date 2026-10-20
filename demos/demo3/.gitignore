@@ -1,0 +1,6 @@
+# model outputs and job logs live on the Spark only
+outputs/
+__pycache__/
+*.pyc
+.DS_Store
+.venv/

@@ -1,0 +1,230 @@
+# ==============================================================================
+# Rainy season Onset Metrics Package (ROMP) Configuration
+# Version: 0.0.1
+# Description: Workflow configuration for evaluating rainy season onset forecast 
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. CORE STRUCTURE & DIMENSIONS
+# ------------------------------------------------------------------------------
+import os
+project_name = "test ROMP run with sample data"
+work_dir = ".."
+pkg_dir = work_dir + "apps/benchmarking/ROMP/momp/" # package dir where the momp/ folder is
+
+# Internal data layout (e.g., dimensions in the processed case).
+# Frozen with major ROMP version
+layout = ("model", "verification_window")
+
+# Explicit mode label (informational — this file sets model_list, FAR,
+# probabilistic, etc. directly below, so those explicit values always win
+# regardless of this label).
+mode = "prob"
+
+# List of models to process (e.g., "AIFS", "IFS", "NGCM", AIFS_ENS).
+# Must be models from the same category, e.g., all probabilistic models
+# for all parameter lists in config.in, keep the trailing comma if only one item
+model_list = ("AIFS_ENS",)
+
+# ------------------------------------------------------------------------------
+# 2. OBSERVATION DATA SETTINGS
+# ------------------------------------------------------------------------------
+# Name of the observational dataset (e.g., IMD, CHIRPS).
+
+data_dir = os.path.join(os.path.expanduser("~"), "data")
+obs = "CHIRPS"
+obs_dir = os.path.join(data_dir, "external", obs)
+
+# Pattern to find files. {} is replaced by date/year components.
+obs_file_pattern = ("{}.nc",)
+
+# Variable name for rainfall in the NetCDF file.
+#obs_var = 
+obs_var = "precip"
+
+# Multiplier for unit conversion (e.g., 1000 to convert m to mm). None if no change.
+obs_unit_cvt = None
+
+# ------------------------------------------------------------------------------
+# 3. REFERENCE MODEL (BENCHMARK) SETTINGS
+# ------------------------------------------------------------------------------
+# The baseline to compare against. Use "climatology" or a specific model name.
+ref_model = "climatology"
+
+# Directory for the reference model data.
+ref_model_dir = data_dir + "CHIRPS_IMERG"
+
+# File naming pattern for the reference model.
+ref_model_file_pattern = "{}.nc"
+
+# Variable name for rainfall in the reference dataset.
+#ref_model_var = "RAINFALL"
+ref_model_var = "precip"
+
+# Unit conversion factor for the reference model.
+ref_model_unit_cvt = None
+
+# ------------------------------------------------------------------------------
+# 4. FORECAST MODEL SETTINGS
+# ------------------------------------------------------------------------------
+# List of directories corresponding to the 'model_list'.
+model_dir_list = (data_dir + "/external/AIFS_ENS/0p25",)
+
+# Variable names for rainfall in each forecast model (e.g., 'tp' for Total Precip).
+model_var_list = ("tp", )
+
+# Unit conversion factors for each forecast model.
+unit_cvt_list = (None, )
+
+# File patterns for each forecast model.
+file_pattern_list = ("{}.nc", )
+
+# ------------------------------------------------------------------------------
+# 5. REGION DEFINITIONS
+# ------------------------------------------------------------------------------
+# Target geographic region for evaluation.
+region = "Ethiopia"
+
+# regional mask in .NetCDF format with 1s and 0s
+#nc_mask = data_dir + "jjas_seasonal_mask_0p25.nc"
+
+nc_mask = os.path.join(data_dir, "external", "jjas_seasonal_mask_0p25.nc")
+
+# shapefile to define region boundary, None if not drawing boundary using shapefile
+shpfile_dir = None
+
+# Mask/boundary as region polygons, if True must define in params/region_def
+polygon = False
+
+# ------------------------------------------------------------------------------
+# 6. ONSET CRITERIA (Physics Logic)
+# ------------------------------------------------------------------------------
+# Rain threshold (mm) to identify the first potential wet day.
+wet_init = 1
+
+# Rainfall threshold (mm) used only if no spatial thresh_file is provided.
+wet_threshold = 20
+
+# Minimum number of days the accumlated rainfall must stay above threshold (Wet Spell).
+wet_spell = 3
+
+# Maximum allowed rainfall (mm) to define a dry day/spell.
+dry_threshold = 1
+
+# Maximum number of consecutive dry days allowed after onset.
+dry_spell = 7
+
+# Search window (days) after onset to check for the dry spell. Must be >= dry_spell.
+# set to 0 if rainy season cessation is not part of the search algorithm
+dry_extent = 0
+
+# Path to a NetCDF file containing spatial thresholds (MWset). None = Use scalar.
+thresh_file = None
+
+# Variable name for the threshold inside the thresh_file.
+thresh_var = None
+
+# Probability threshold (0.0 - 1.0) for determining onset in ensemble members.
+onset_percentage_threshold = 0.5
+
+# ------------------------------------------------------------------------------
+# 7. TEMPORAL SETTINGS (Dates & Years)
+# ------------------------------------------------------------------------------
+# Date range for the evaluation period.
+start_date = (2003, 5, 1)
+end_date = (2024, 7, 31)
+
+# Start and end years for calculating long-term climatology.
+start_year_clim = 2003
+end_year_clim = 2024
+
+# List of forecast initialization days (day of week, 0->Monday).
+init_days = (1,7,13,19,25)
+init_type = "monthly"
+
+# Year used for filtering or standardizing date formats.
+date_filter_year = 2024
+
+# ------------------------------------------------------------------------------
+# 8. EVALUATION & VERIFICATION PARAMETERS
+# ------------------------------------------------------------------------------
+# Range of days after initialization to consider for validation.
+verification_window_list = ((1, 15), (16,30))
+
+# Allowed error margin (in days) when comparing forecast to obs onset.
+tolerance_days_list = (3, 5,)
+
+# Total number of days to look ahead in the forecast.
+max_forecast_day = 30
+
+# Time windows for grouping statistics (e.g., Week 1, Week 2).
+day_bins = ((1, 5), (6, 10), (11, 15), (16, 20), (21, 25), (26, 30))
+
+# ------------------------------------------------------------------------------
+# 9. METRICS SELECTION
+# ------------------------------------------------------------------------------
+# --- Deterministic Metrics ---
+FAR = True  # False Alarm Ratio
+MAE = True  # Mean Absolute Error
+MR  = True  # Miss Rate (Hit Rate complement)
+
+# --- Probabilistic Metrics ---
+probabilistic = False # Set True to enable ensemble evaluation
+members = "All" # ensemble members to be included in evaluation
+
+BS          = True  # Brier Skill Score
+RPS         = True  # Ranked Probability Skill Score
+AUC         = True  # Area Under Curve (ROC)
+Reliability = True  # Reliability Diagram data generation
+skill_score = True  # Generic Skill Score calculation
+
+# ------------------------------------------------------------------------------
+# 10. OUTPUT & GRAPHICS SETTINGS
+# ------------------------------------------------------------------------------
+# Folders for output data and plots
+dir_out = work_dir + "data/ROMP_OUT/et/output"
+dir_fig = work_dir + "data/ROMP_OUT/et/figure"
+
+# Save file and figure options
+save_fig = True                   # Generate and save PNG/PDF figures
+save_nc_spatial_far_mr_mae = True # Save spatial metrics as NetCDF
+save_csv_score = True             # Save skill scores as CSV
+save_nc_climatology = True        # Save calculated climatology to NetCDF
+
+# Graphics configuration
+plot_spatial_far_mr_mae = True                     # Generate spatial maps of far,mr,mae
+plot_heatmap_bss_auc = True                         # Generate score heatmaps
+plot_reliability = True                            # Generate reliability curve plots
+plot_climatology_onset = True                      # Spatial map of climatology onset
+plot_panel_heatmap_error = True                    # panel heatmap of mae,mr,far 
+plot_panel_heatmap_skill = True                    # panel heatmap of skill score 
+plot_bar_bss_rpss_auc = True                    # bar plot of skill score 
+
+# interactive plot
+show_plot = False                                 # show individual model plot
+show_panel = True                                 # show panel plot
+# ------------------------------------------------------------------------------
+# 11. PARALLELIZATION SETTINGS
+# ------------------------------------------------------------------------------
+parallel = True # compute with multi-cores in parallel
+
+# ------------------------------------------------------------------------------
+# 12. DEBUG SETTINGS
+# ------------------------------------------------------------------------------
+debug = False # run ROMP in debug mode for developers
+
+# ------------------------------------------------------------------------------
+# PARAMS RESERVED FOR FUTURE VERSIONS, NOT VALID IN CURRENT PACKAGE VERSION
+# ------------------------------------------------------------------------------
+
+# Target date for "Rainy season Onset over a specific location e.g. Kerala" (Month, Day).
+mok = (5, 15) # set to None if not using date filter
+
+# Specific years to include in the forecast analysis.
+years = None #(2013, 2014, 2015)
+
+# Specific years used to generate the climatological baseline.
+years_clim = None #(2013, 2014, 2015)
+
+# Date buffer to search for onset if it occurs before the start_date.
+fallback_date = None #(4, 1) # set to None in crrent package version.

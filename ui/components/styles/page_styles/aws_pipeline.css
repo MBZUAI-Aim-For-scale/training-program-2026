@@ -1,0 +1,68 @@
+/* styles/page_styles/aws_pipeline.css */
+
+/* AWS Pipeline page: heatmaps, cumulative, maps */
+
+.pipeline-controls {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+}
+
+.heatmap-container {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+    margin: 1rem 0;
+}
+.heatmap-container .heatmap-title {
+    padding: 0.4rem 0.8rem;
+    background: #F1F5F9;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #1E3A5F;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.station-map-wrap {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #E2E8F0;
+    margin: 1rem 0;
+}
+
+/* Cumulative curves */
+.curve-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 0.65rem;
+    color: #334155;
+    margin-top: 0.3rem;
+}
+.curve-legend .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    margin-right: 3px;
+}
+
+.diagnostic-plot {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 0.75rem;
+    margin: 1rem 0;
+}
+.diagnostic-plot .station-name {
+    font-weight: 700;
+    color: #1E3A5F;
+    margin-bottom: 0.3rem;
+}

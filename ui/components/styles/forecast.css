@@ -1,0 +1,354 @@
+/* ==========================================================================
+   forecast.css — Unified Design System for AI Forecasting Page
+   ========================================================================== */
+
+:root {
+  /* Color Palette (Tailwind-inspired) */
+  --color-slate-900: #0F172A;
+  --color-slate-700: #334155;
+  --color-slate-500: #64748B;
+  --color-slate-200: #E2E8F0;
+  --color-slate-50:  #F8FAFC;
+  --color-blue-500:  #3B82F6;
+  --color-blue-50:   #EFF6FF;
+  --color-teal-700:  #0F766E;
+  --color-teal-500:  #14B8A6;
+  --color-teal-50:   #F0FDF4;
+  --color-green-500: #10B981;
+  --color-green-50:  #D1FAE5;
+  --color-amber-600: #D97706;
+  --color-amber-50:  #FEF3C7;
+  --color-rose-500:  #EF4444;
+  --color-rose-50:   #FEE2E2;
+  --color-violet-500:#8B5CF6;
+  --color-violet-50: #F5F3FF;
+
+  /* Elevation (Shadows) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 12px 20px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Motion */
+  --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Forecast Specific Tokens */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger:  #EF4444;
+  --primary: #0A2F6C;
+  --border:  #E2E8F0;
+  --muted:   #64748B;
+}
+
+/* --------------------------------------------------------------------------
+   2. Page Header & Section Headers
+   -------------------------------------------------------------------------- */
+.page-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--color-slate-900);
+  letter-spacing: -0.02em;
+  margin: 0 0 0.25rem 0;
+}
+
+.page-subtitle {
+  font-size: 0.95rem;
+  color: var(--color-slate-500);
+  margin: 0 0 1.25rem 0;
+}
+
+.sec-hd {
+  --accent-color: var(--color-blue-500);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-slate-900);
+  margin: 1.5rem 0 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-slate-200);
+}
+
+.sec-hd .sec-hd-accent {
+  display: inline-block;
+  width: 4px;
+  height: 1.25rem;
+  background-color: var(--accent-color);
+  border-radius: 2px;
+}
+
+.sec-hd.sky    { --accent-color: var(--color-blue-500); }
+.sec-hd.teal   { --accent-color: var(--color-teal-700); }
+.sec-hd.amber  { --accent-color: var(--color-amber-600); }
+.sec-hd.green  { --accent-color: var(--color-green-500); }
+.sec-hd.violet { --accent-color: var(--color-violet-500); }
+
+/* --------------------------------------------------------------------------
+   3. Info Boxes (Alerts/Notes)
+   -------------------------------------------------------------------------- */
+.ibox {
+  --ibox-border: var(--color-blue-500);
+  --ibox-bg: var(--color-blue-50);
+  padding: 0.875rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-slate-700);
+  background-color: var(--ibox-bg);
+  border-left: 4px solid var(--ibox-border);
+  border-radius: 8px;
+}
+
+.ibox.sky    { --ibox-border: var(--color-blue-500);   --ibox-bg: var(--color-blue-50); }
+.ibox.teal   { --ibox-border: var(--color-teal-700);   --ibox-bg: var(--color-teal-50); }
+.ibox.amber  { --ibox-border: var(--color-amber-600);  --ibox-bg: var(--color-amber-50); }
+.ibox.green  { --ibox-border: var(--color-green-500);  --ibox-bg: var(--color-green-50); }
+.ibox.rose   { --ibox-border: var(--color-rose-500);   --ibox-bg: var(--color-rose-50); }
+.ibox.violet { --ibox-border: var(--color-violet-500); --ibox-bg: var(--color-violet-50); }
+
+/* --------------------------------------------------------------------------
+   4. Forecast Dispatch KPI Cards (Unique to Forecasting)
+   -------------------------------------------------------------------------- */
+.forecast-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  margin: 1.25rem 0 1.75rem 0;
+}
+
+.forecast-kpi-card {
+  position: relative;
+  background: var(--card, #ffffff);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border, #E2E8F0);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  overflow: hidden;
+}
+
+.forecast-kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.08);
+}
+
+.forecast-kpi-accent {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+}
+
+/* High Chance (Green) */
+.forecast-kpi-high { background: linear-gradient(135deg, #ffffff 0%, #F0FDF4 100%); }
+.forecast-kpi-high:hover { border-color: var(--success); }
+.forecast-kpi-high .forecast-kpi-accent { background: var(--success); }
+.forecast-kpi-high .forecast-kpi-icon { background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: #ffffff; }
+.forecast-kpi-high .forecast-kpi-value { color: #047857; }
+
+/* Moderate (Amber) */
+.forecast-kpi-moderate { background: linear-gradient(135deg, #ffffff 0%, #FFFBEB 100%); }
+.forecast-kpi-moderate:hover { border-color: var(--warning); }
+.forecast-kpi-moderate .forecast-kpi-accent { background: var(--warning); }
+.forecast-kpi-moderate .forecast-kpi-icon { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); color: #ffffff; }
+.forecast-kpi-moderate .forecast-kpi-value { color: #92400E; }
+
+/* Uncertain (Red) */
+.forecast-kpi-uncertain { background: linear-gradient(135deg, #ffffff 0%, #FEF2F2 100%); }
+.forecast-kpi-uncertain:hover { border-color: var(--danger); }
+.forecast-kpi-uncertain .forecast-kpi-accent { background: var(--danger); }
+.forecast-kpi-uncertain .forecast-kpi-icon { background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); color: #ffffff; }
+.forecast-kpi-uncertain .forecast-kpi-value { color: #991B1B; }
+
+.forecast-kpi-icon {
+  flex-shrink: 0;
+  width: 52px; height: 52px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  transition: transform 0.25s ease;
+}
+.forecast-kpi-card:hover .forecast-kpi-icon { transform: scale(1.05) rotate(-3deg); }
+.forecast-kpi-icon svg { width: 26px; height: 26px; }
+
+.forecast-kpi-content { flex: 1; min-width: 0; }
+.forecast-kpi-label {
+  font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); margin-bottom: 0.15rem;
+}
+.forecast-kpi-value {
+  font-size: 2.25rem; font-weight: 700; line-height: 1;
+  margin-bottom: 0.25rem; letter-spacing: -0.02em;
+  font-family: 'Inter', sans-serif;
+}
+.forecast-kpi-subtitle {
+  font-size: 0.82rem; color: var(--muted); font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   5. Forecast Summary & Woreda Detail Cards
+   -------------------------------------------------------------------------- */
+.forecast-summary-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--card, #ffffff);
+  border: 1px solid var(--border, #E2E8F0);
+  border-left: 4px solid var(--primary, #0A2F6C);
+  border-radius: 10px; padding: 0.85rem 1.25rem;
+  margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+.forecast-summary-bar .summary-label {
+  font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted);
+}
+.forecast-summary-bar .summary-value {
+  font-size: 1.4rem; font-weight: 700;
+  color: var(--primary, #0A2F6C); letter-spacing: -0.02em;
+}
+
+.woreda-detail-card {
+  position: relative; background: #ffffff;
+  border-radius: 12px; padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border, #E2E8F0);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  overflow: hidden; margin-bottom: 1.25rem;
+}
+.woreda-detail-card .detail-accent { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.woreda-detail-card.card-high .detail-accent { background: var(--success); }
+.woreda-detail-card.card-moderate .detail-accent { background: var(--warning); }
+.woreda-detail-card.card-uncertain .detail-accent { background: var(--danger); }
+
+.woreda-detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+.woreda-detail-item { display: flex; flex-direction: column; }
+.woreda-detail-label {
+  font-size: 0.72rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--muted); margin-bottom: 0.25rem;
+}
+.woreda-detail-value { font-size: 1.05rem; font-weight: 600; color: #0F172A; }
+
+/* --------------------------------------------------------------------------
+   6. Metric Pills & Status Chips (Shared UI)
+   -------------------------------------------------------------------------- */
+.metric-pill {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  background: var(--color-slate-50);
+  border: 1px solid var(--color-slate-200);
+  border-radius: 8px;
+  font-size: 0.8rem; color: var(--color-slate-700);
+}
+.metric-pill strong { color: var(--color-slate-900); font-weight: 700; }
+
+.status-chip {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.3rem 0.75rem; border-radius: 999px;
+  font-size: 0.78rem; font-weight: 600;
+}
+.status-chip.success { background: var(--color-green-50); color: #065F46; }
+.status-chip.error   { background: var(--color-rose-50);  color: #991B1B; }
+.status-chip.idle    { background: var(--color-slate-200); color: var(--color-slate-700); }
+
+/* --------------------------------------------------------------------------
+   7. Category Badges (Forecast Specific)
+   -------------------------------------------------------------------------- */
+.badge-chip {
+  display: inline-flex; align-items: center;
+  padding: 0.25rem 0.65rem; border-radius: 9999px;
+  font-size: 0.82rem; font-weight: 600; width: fit-content;
+}
+.badge-chip.badge-high      { background-color: #DCFCE7; color: #15803D; }
+.badge-chip.badge-moderate  { background-color: #FEF3C7; color: #B45309; }
+.badge-chip.badge-uncertain { background-color: #FEE2E2; color: #B91C1C; }
+
+/* --------------------------------------------------------------------------
+   8. Run Section Container
+   -------------------------------------------------------------------------- */
+.run-section {
+  background: linear-gradient(135deg, var(--color-teal-50) 0%, var(--color-slate-50) 100%);
+  border: 1px solid var(--color-green-50);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin: 1rem 0;
+}
+
+/* --------------------------------------------------------------------------
+   9. Streamlit Overrides (Shared across app)
+   -------------------------------------------------------------------------- */
+div[data-testid="stTabs"] button[data-baseweb="tab"] {
+  font-weight: 600;
+  color: var(--color-slate-500);
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px 8px 0 0;
+  transition: var(--transition-base);
+}
+div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] {
+  color: var(--color-blue-500);
+  border-bottom: 3px solid var(--color-blue-500);
+}
+div[data-testid="stSelectbox"] label {
+  font-weight: 600;
+  color: var(--color-slate-700);
+  font-size: 0.875rem;
+}
+button[data-testid="baseButton-primary"] {
+  background-color: var(--color-teal-700) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  border-radius: 8px !important;
+  transition: var(--transition-base) !important;
+}
+button[data-testid="baseButton-primary"]:hover {
+  background-color: #0d5f58 !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+div[data-testid="stDataFrame"] {
+  border: 1px solid var(--color-slate-200);
+  border-radius: 8px;
+  overflow: hidden;
+}
+div[data-testid="stDataFrame"] th {
+  background-color: var(--color-slate-50) !important;
+  color: var(--color-slate-700) !important;
+  font-weight: 600 !important;
+  border-bottom: 2px solid var(--color-slate-200) !important;
+}
+div[data-testid="stExpander"] {
+  border: 1px solid var(--color-slate-200);
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+div[data-testid="stExpander"] summary {
+  font-weight: 600;
+  color: var(--color-slate-700);
+}
+
+/* --------------------------------------------------------------------------
+   10. Responsive Adjustments
+   -------------------------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .forecast-kpi-grid { grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+  .forecast-kpi-card { padding: 1rem 1.15rem; }
+  .forecast-kpi-icon { width: 46px; height: 46px; }
+  .forecast-kpi-icon svg { width: 22px; height: 22px; }
+  .forecast-kpi-value { font-size: 1.85rem; }
+}
+@media (max-width: 768px) {
+  .forecast-kpi-grid { grid-template-columns: 1fr; gap: 0.85rem; }
+  .forecast-kpi-card { padding: 1rem; }
+  .forecast-kpi-value { font-size: 1.65rem; }
+  .woreda-detail-grid { grid-template-columns: 1fr; gap: 0.85rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .forecast-kpi-card, .forecast-kpi-icon { transition: none !important; }
+  .forecast-kpi-card:hover { transform: none; }
+  .forecast-kpi-card:hover .forecast-kpi-icon { transform: none; }
+}

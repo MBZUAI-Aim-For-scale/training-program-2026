@@ -1,0 +1,50 @@
+# Welcome to the QMD File
+
+## About This File
+
+- QMD (Quick Markdown Documentation) format for interactive slide presentations
+- Supports slide-level navigation and dynamic content generation
+- Provides structured markup for presentation content
+
+## QMD File Features
+
+- **Slides**: Each QMD file represents a presentation slide
+- **Navigation**: Use `page: <number>` syntax to navigate between slides
+- **Content**: Inline text with simple Markdown formatting
+- **Tables**: Use `<table>` or `<code>` tags for text-based tables
+
+## Slide Example
+
+Example slide content:
+
+```
+# Welcome to my presentation
+
+Welcome to the QMD file!
+
+This slide demonstrates:
+
+- Use of page: syntax for navigation
+- Inline text formatting
+- Table syntax for text-based data
+
+# End of Slide
+```
+
+## How to Use
+
+### Navigate Slides
+
+- Start with `page: 1`
+- Navigate using `page: 2`, `page: 3`, etc.
+- End with `page: n` where n is the slide number
+
+### Content Formatting
+
+- Use standard Markdown for text content
+- Use code blocks for code syntax
+- Use tables for structured data
+
+## Slides in Use
+
+See the slides directory in the /Users/mesfind/opt/Research/uchicago/Training/slides/ folder.

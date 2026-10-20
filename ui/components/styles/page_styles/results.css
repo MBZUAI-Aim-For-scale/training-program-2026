@@ -1,0 +1,75 @@
+/* styles/page_styles/results.css */
+
+/* Results page: summary tables, visualizations, export */
+
+.result-section {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+}
+.result-section .section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1E3A5F;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid #E2E8F0;
+    padding-bottom: 0.4rem;
+}
+
+/* Dataframe container – ensure scroll */
+.dataframe-wrapper {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid #E2E8F0;
+}
+.dataframe-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+.dataframe-wrapper th {
+    background: #F1F5F9;
+    font-weight: 600;
+    padding: 0.4rem 0.6rem;
+    text-align: left;
+    color: #1E3A5F;
+    border-bottom: 1px solid #CBD5E1;
+}
+.dataframe-wrapper td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid #F1F5F9;
+}
+.dataframe-wrapper tr:hover {
+    background: #F8FAFC;
+}
+
+/* Download button */
+.download-bar {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+}
+.download-bar .stButton button {
+    background: #1E3A5F;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.4rem 1.2rem;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+.download-bar .stButton button:hover {
+    background: #2A4A6F;
+}
+
+/* Chart container */
+.chart-container {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 0.75rem;
+    margin: 0.75rem 0;
+}

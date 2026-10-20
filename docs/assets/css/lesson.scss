@@ -1,0 +1,413 @@
+/* 1. CSS Variables (Design Tokens)
+========================================================================== */
+:root {
+  // Branding
+  --color-brand: #2b3990;
+  --color-brand-light: #3e51cf;
+
+  // Code Blocks
+  --color-code-error-bg: #f8d7da;
+  --color-code-error-text: #842029;
+  --color-code-error-border: #dc3545;
+  --color-code-output-bg: #f8f9fa;
+  --color-code-output-text: #212529;
+  --color-code-output-border: #6c757d;
+  --color-code-source-bg: #e2e3f3;
+  --color-code-source-text: #2b3990;
+  --color-code-source-border: #2b3990;
+
+  // Language-specific code blocks
+  --color-code-bash-bg: #eff6ff;
+  --color-code-bash-text: #1e3a8a;
+  --color-code-bash-border: #3b82f6;
+  --color-code-python-bg: #fffbeb;
+  --color-code-python-text: #78350f;
+  --color-code-python-border: #f59e0b;
+  --color-code-yaml-bg: #faf5ff;
+  --color-code-yaml-text: #581c87;
+  --color-code-yaml-border: #8b5cf6;
+  --color-code-json-bg: #f0fdf4;
+  --color-code-json-text: #064e3b;
+  --color-code-json-border: #10b981;
+
+  // Callouts & Blockquotes (WCAG AA compliant contrast)
+  --color-callout-bg: #fff3cd;
+  --color-callout-text: #664d03;
+  --color-callout-border: #ffc107;
+  --color-challenge-bg: #f8d7da;
+  --color-challenge-text: #842029;
+  --color-challenge-border: #dc3545;
+  --color-checklist-bg: #e2e3f3;
+  --color-checklist-text: #2b3990;
+  --color-checklist-border: #2b3990;
+  --color-discussion-bg: #cff4fc;
+  --color-discussion-text: #055160;
+  --color-discussion-border: #0dcaf0;
+  --color-keypoints-bg: #d1e7dd;
+  --color-keypoints-text: #0f5132;
+  --color-keypoints-border: #198754;
+  --color-objectives-bg: #e7f1ff;
+  --color-objectives-text: #084298;
+  --color-objectives-border: #0d6efd;
+  --color-prereq-bg: #cff4fc;
+  --color-prereq-text: #055160;
+  --color-prereq-border: #0dcaf0;
+  --color-solution-bg: #d1e7dd;
+  --color-solution-text: #0f5132;
+  --color-solution-border: #198754;
+  --color-testimonial-bg: #f3e5f5;
+  --color-testimonial-text: #4a148c;
+  --color-testimonial-border: #ce93d8;
+  --color-tip-bg: #eff6ff;
+  --color-tip-text: #1e40af;
+  --color-tip-border: #3b82f6;
+  --color-warning-bg: #fef2f2;
+  --color-warning-text: #991b1b;
+  --color-warning-border: #ef4444;
+
+  // Layout
+  --callout-radius: 0.5rem;
+  --callout-padding: 1rem 1.25rem;
+  --callout-border-width: 4px;
+
+  // Typography
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", "Monaco", "Inconsolata", "Fira Code", "Courier New", monospace;
+}
+
+/* 2. SVG Icon Masks (Zero-dependency, perfectly scalable, colorable)
+========================================================================== */
+$icon-callout: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm.93-9.412-1 4.705c-.07.34.029.533.304.533.194 0 .487-.07.686-.246l-.088.416c-.287.346-.92.598-1.465.598-.703 0-1.002-.422-.808-1.319l.738-3.468c.064-.293.006-.399-.287-.47l-.451-.081.082-.381 2.29-.287zM8 5.5a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/></svg>');
+$icon-challenge: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11 .207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>');
+$icon-checklist: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1h12zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/><path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.235.235 0 0 1 .02-.022z"/></svg>');
+$icon-discussion: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2.678 11.894a1 1 0 0 1 .287.801 10.97 10.97 0 0 1-.398 2c1.395-.323 2.247-.697 2.634-.893a1 1 0 0 1 .71-.074A8.06 8.06 0 0 0 8 14c3.996 0 7-2.807 7-6 0-3.192-3.004-6-7-6S1 4.808 1 8c0 1.468.617 2.83 1.678 3.894zm-.493 3.905a21.682 21.682 0 0 1-.713.129c-.2.032-.352-.176-.273-.362a9.68 9.68 0 0 0 .244-.637l.003-.01c.248-.72.45-1.548.524-2.319C.743 11.37 0 9 .76 0 8c0-3.866 3.582-7 8-7s8 3.134 8 7-3.582 7-8 7a9.06 9.06 0 0 1-2.347-.306c-.52.263-1.639.742-3.468 1.105z"/></svg>');
+$icon-keypoints: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2 6a6 6 0 1 1 10.174 4.31c-.203.196-.359.4-.453.619l-.762 1.769A.5.5 0 0 1 10.5 13a.5.5 0 0 1 0 1 .5.5 0 0 1 0 1l-.224.447a1 1 0 0 1-.894.553H6.618a1 1 0 0 1-.894-.553L5.5 15a.5.5 0 0 1 0-1 .5.5 0 0 1 0-1 .5.5 0 0 1-.46-.302l-.761-1.77a1.964 1.964 0 0 0-.453-.618A5.984 5.984 0 0 1 2 6zm6-5a5 5 0 0 0-3.479 8.592c.263.254.514.564.676.941L5.83 12h4.342l.632-1 .467c.162-.377.413-.687.676-.941A5 5 0 0 0 8 1z"/></svg>');
+$icon-objectives: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8 13A5 5 0 1 1 8 3a5 5 0 0 1 0 10zm0 1A6 6 0 1 0 8 2a6 6 0 0 0 0 12z"/><path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/><path d="M9.5 8a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/></svg>');
+$icon-prereq: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v13.5a.5.5 0 0 1-.777.416L8 13.101l-5.223 2.815A.5.5 0 0 1 2 15.5V2zm2-1a1 1 0 0 0-1 1v12.566l4.723-2.482a.5.5 0 0 1 .554 0L13 14.566V2a1 1 0 0 0-1-1H4z"/></svg>');
+$icon-solution: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M10.97 4.97a.75.75 0 0 1 1.071 1.05l-3.992 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.235.235 0 0 1 .02-.022z"/></svg>');
+$icon-testimonial: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12 12a1 1 0 0 0 1-1V8.558a1 1 0 0 0-1-1h-1.388c0-.351.021-.703.062-1.054.062-.372.166-.703.31-.992.145-.29.331-.517.559-.683.227-.186.516-.279.868-.279V3c-.579 0-1.085.124-1.52.372a3.322 3.322 0 0 0-1.085.992 4.92 4.92 0 0 0-.62 1.458A7.712 7.712 0 0 0 9 7.558V11a1 1 0 0 0 1 1h2Zm-6 0a1 1 0 0 0 1-1V8.558a1 1 0 0 0-1-1H4.612c0-.351.021-.703.062-1.054.062-.372.166-.703.31-.992.145-.29.331-.517.559-.683.227-.186.516-.279.868-.279V3c-.579 0-1.085.124-1.52.372a3.322 3.322 0 0 0-1.085.992 4.92 4.92 0 0 0-.62 1.458A7.712 7.712 0 0 0 3 7.558V11a1 1 0 0 0 1 1h2Z"/></svg>');
+$icon-tip: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M8.93 6.588l-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 5.5a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1 0-1h1a.5.5 0 0 1 .5.5z"/></svg>');
+$icon-warning: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.96 0L.165 13.233c-.457.778.091 1.767.98 1.767h13.713c.889 0 1.438-.99.98-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>');
+
+/* 3. Mixins
+========================================================================== */
+// Specialized code blocks
+@mixin codeSetup($bg, $text, $border) {
+  background-color: $bg;
+  color: $text;
+  border-left: 4px solid $border;
+  border-radius: 0 var(--callout-radius) var(--callout-radius) 0;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+// Specialized blockquote environments
+@mixin calloutSetup($bg, $text, $border, $icon) {
+  background-color: $bg;
+  color: $text;
+  border: 1px solid rgba($border, 0.2);
+  border-left: var(--callout-border-width) solid $border;
+  border-radius: var(--callout-radius);
+  padding: var(--callout-padding);
+  margin: 1.5rem 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+
+  h2, h3, h4, h5, h6 {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: $text;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: none;
+    padding: 0;
+
+    &::before {
+      content: '';
+      display: inline-block;
+      width: 1.25rem;
+      height: 1.25rem;
+      background-color: $text;
+      mask-image: $icon;
+      mask-size: contain;
+      mask-repeat: no-repeat;
+      mask-position: center;
+      -webkit-mask-image: $icon;
+      -webkit-mask-size: contain;
+      -webkit-mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      flex-shrink: 0;
+    }
+  }
+
+  p:last-child {
+    margin-bottom: 0;
+  }
+
+  a {
+    color: $text;
+    text-decoration: underline;
+    font-weight: 600;
+
+    &:hover {
+      opacity: 0.8;
+    }
+  }
+}
+
+// Language label mixin for code blocks
+@mixin languageLabel($label, $color) {
+  position: relative;
+
+  &::before {
+    content: $label;
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    font-size: 0.7rem;
+    color: $color;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    font-family: var(--font-sans);
+    text-transform: uppercase;
+    pointer-events: none;
+    opacity: 0.9;
+  }
+}
+
+/* 4. Code Block Applications
+========================================================================== */
+.error  { @include codeSetup(var(--color-code-error-bg), var(--color-code-error-text), var(--color-code-error-border)); }
+.output { @include codeSetup(var(--color-code-output-bg), var(--color-code-output-text), var(--color-code-output-border)); }
+.source { @include codeSetup(var(--color-code-source-bg), var(--color-code-source-text), var(--color-code-source-border)); }
+
+// Language-specific code blocks (works with ```bash, ~~~bash, ```{bash}, pre.language-bash, pre[data-lang="bash"])
+.bash,
+.make,
+.matlab,
+.python,
+.r,
+.sql,
+.yaml,
+.json {
+  @include codeSetup(var(--color-code-source-bg), var(--color-code-source-text), var(--color-code-source-border));
+}
+
+// Bash-specific styling
+pre.language-bash,
+pre[data-lang="bash"],
+pre[class*="language-bash"],
+div.bash {
+  @include codeSetup(var(--color-code-bash-bg), var(--color-code-bash-text), var(--color-code-bash-border));
+  @include languageLabel("BASH", var(--color-code-bash-border));
+}
+
+// Python-specific styling
+pre.language-python,
+pre[data-lang="python"],
+pre[class*="language-python"],
+div.python {
+  @include codeSetup(var(--color-code-python-bg), var(--color-code-python-text), var(--color-code-python-border));
+  @include languageLabel("PYTHON", var(--color-code-python-border));
+}
+
+// YAML-specific styling
+pre.language-yaml,
+pre[data-lang="yaml"],
+pre[class*="language-yaml"],
+div.yaml {
+  @include codeSetup(var(--color-code-yaml-bg), var(--color-code-yaml-text), var(--color-code-yaml-border));
+  @include languageLabel("YAML", var(--color-code-yaml-border));
+}
+
+// JSON-specific styling
+pre.language-json,
+pre[data-lang="json"],
+pre[class*="language-json"],
+div.json {
+  @include codeSetup(var(--color-code-json-bg), var(--color-code-json-text), var(--color-code-json-border));
+  @include languageLabel("JSON", var(--color-code-json-border));
+}
+
+/* 5. Callout Applications
+========================================================================== */
+.callout     { @include calloutSetup(var(--color-callout-bg), var(--color-callout-text), var(--color-callout-border), $icon-callout); }
+.challenge   { @include calloutSetup(var(--color-challenge-bg), var(--color-challenge-text), var(--color-challenge-border), $icon-challenge); }
+.exercise    { @include calloutSetup(var(--color-challenge-bg), var(--color-challenge-text), var(--color-challenge-border), $icon-challenge); }
+.checklist   { @include calloutSetup(var(--color-checklist-bg), var(--color-checklist-text), var(--color-checklist-border), $icon-checklist); }
+.discussion  { @include calloutSetup(var(--color-discussion-bg), var(--color-discussion-text), var(--color-discussion-border), $icon-discussion); }
+.keypoints   { @include calloutSetup(var(--color-keypoints-bg), var(--color-keypoints-text), var(--color-keypoints-border), $icon-keypoints); }
+.objectives  { @include calloutSetup(var(--color-objectives-bg), var(--color-objectives-text), var(--color-objectives-border), $icon-objectives); }
+.prereq      { @include calloutSetup(var(--color-prereq-bg), var(--color-prereq-text), var(--color-prereq-border), $icon-prereq); }
+.solution    { @include calloutSetup(var(--color-solution-bg), var(--color-solution-text), var(--color-solution-border), $icon-solution); }
+.testimonial { @include calloutSetup(var(--color-testimonial-bg), var(--color-testimonial-text), var(--color-testimonial-border), $icon-testimonial); }
+.tip         { @include calloutSetup(var(--color-tip-bg), var(--color-tip-text), var(--color-tip-border), $icon-tip); }
+.info        { @include calloutSetup(var(--color-tip-bg), var(--color-tip-text), var(--color-tip-border), $icon-tip); }
+.warning     { @include calloutSetup(var(--color-warning-bg), var(--color-warning-text), var(--color-warning-border), $icon-warning); }
+
+/* 6. Base Overrides
+========================================================================== */
+code {
+  padding: 0.2em 0.4em;
+  color: var(--color-brand);
+  background-color: var(--color-code-source-bg);
+  border-radius: 0.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+pre {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--callout-radius);
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  line-height: 1.6;
+  position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+
+  code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: 0.9rem;
+    font-weight: 400;
+    display: block;
+  }
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* 7. Miscellaneous Utilities
+========================================================================== */
+.maintitle {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.footertext {
+  text-align: center;
+  color: var(--color-text-muted, #6c757d);
+  font-size: 0.875rem;
+  margin-top: 2rem;
+}
+
+img.navbar-logo {
+  height: 40px;
+  width: auto;
+  padding-top: 5px;
+  padding-right: 10px;
+}
+
+div.branding {
+  color: var(--color-brand);
+  font-weight: 600;
+}
+
+ul, ol {
+  padding-left: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+span.fold-unfold {
+  margin-left: 0.5rem;
+  opacity: 0.6;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+/* 8. Tables
+========================================================================== */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  background-color: #fff;
+  border-radius: var(--callout-radius);
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+
+  th, td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  th {
+    background-color: #f8fafc;
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  tr:hover {
+    background-color: #f8fafc;
+  }
+}
+
+/* 9. Dark Mode Support
+========================================================================== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-code-bash-bg: #1e3a8a;
+    --color-code-bash-text: #93c5fd;
+    --color-code-python-bg: #451a03;
+    --color-code-python-text: #fcd34d;
+    --color-code-yaml-bg: #3b0764;
+    --color-code-yaml-text: #d8b4fe;
+    --color-code-json-bg: #052e16;
+    --color-code-json-text: #86efac;
+    --color-tip-bg: #1e3a8a;
+    --color-tip-text: #93c5fd;
+    --color-warning-bg: #450a0a;
+    --color-warning-text: #fca5a5;
+  }
+
+  pre {
+    background-color: #0d1117;
+    color: #e2e8f0;
+    border-color: #334155;
+  }
+
+  table {
+    background-color: #1e293b;
+
+    th {
+      background-color: #334155;
+      color: #f1f5f9;
+    }
+
+    th, td {
+      border-color: #475569;
+    }
+
+    tr:hover {
+      background-color: #334155;
+    }
+  }
+}
+
+/* 10. Print Styles
+========================================================================== */
+@media print {
+  pre, .callout, .challenge, .exercise, .solution, .tip, .warning,
+  .keypoints, .objectives, .prereq, .discussion, .testimonial {
+    page-break-inside: avoid;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+  }
+}

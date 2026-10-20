@@ -1,0 +1,90 @@
+/* ==========================================================================
+   verification.css  —  AfriClimate AI page-level layout
+   Font: Inter  ·  Background: Off-White #f1f1f1
+   ========================================================================== */
+
+:root {
+  --page-font:   'Inter', sans-serif;
+  --page-bg:     #f1f1f1;
+  --page-border: #bac7c9;
+  --page-text:   #171d1a;
+  --page-muted:  #4B5563;
+  --page-green:  #0a9938;
+}
+
+/* ── Hide unused sidebar toggle ──────────────────────────────────────────── */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapsedControl"] {
+  display: none !important;
+}
+
+/* ── Page container — centered, max-width cap for ultra-wide screens ─────── */
+.block-container {
+  padding-top:    1.5rem !important;
+  padding-bottom: 0 !important;
+  margin-top:     0 !important;
+  margin-bottom:  0 !important;
+  padding-left:   4rem !important;
+  padding-right:  4rem !important;
+  max-width:      1700px !important;
+  margin-left:    auto !important;
+  margin-right:   auto !important;
+  font-family:    var(--page-font) !important;
+}
+
+/* Zero out Streamlit's own bottom bar */
+[data-testid="stBottom"],
+[data-testid="stBottomBlockContainer"] {
+  display:    none !important;
+  height:     0    !important;
+  min-height: 0    !important;
+}
+
+/* ── Window-level scrolling ─────────────────────────────────────────────────
+   Make html the scroll container so position:sticky works from the viewport
+   and the 100vw footer can break out of block-container without clipping.   */
+html {
+  overflow-x: hidden !important;
+  overflow-y: auto   !important;
+}
+body,
+[data-testid="stApp"],
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+[data-testid="stVerticalBlock"],
+[data-testid="stVerticalBlockBorderWrapper"],
+[data-testid="stTabs"],
+.element-container,
+[data-testid="stMarkdown"] {
+  overflow: visible !important;
+}
+[data-testid="stApp"] {
+  min-height: 100vh !important;
+  height:     auto  !important;
+}
+
+/* ── Headings ────────────────────────────────────────────────────────────── */
+.stHeading h1 {
+  font-family:    var(--page-font) !important;
+  font-weight:    700 !important;
+  color:          var(--page-text) !important;
+  margin-bottom:  0 !important;
+  padding-bottom: 0 !important;
+}
+
+/* ── Caption ─────────────────────────────────────────────────────────────── */
+.stCaption {
+  font-family:   var(--page-font) !important;
+  font-size:     0.75rem !important;
+  color:         var(--page-muted) !important;
+  margin-top:    -10px !important;
+  margin-bottom: -25px !important;
+}
+
+/* ── Divider ─────────────────────────────────────────────────────────────── */
+hr {
+  border-top:    1px solid var(--page-border) !important;
+  margin-top:    0 !important;
+  margin-bottom: 20px !important;
+}

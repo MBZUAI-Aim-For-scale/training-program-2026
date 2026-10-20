@@ -1,0 +1,16 @@
+{
+ "load_s": 9.8,
+ "fetch_s": 30.0,
+ "run_s": 195.8,
+ "post_s": 12.6,
+ "runtime_s": 252.8,
+ "peak_gpu_gb": 24.8,
+ "model": "aifs2_ens",
+ "init": "2026-05-13T00",
+ "lead_hours": 240,
+ "members": 2,
+ "output_mb": 531.3,
+ "synthetic": false,
+ "init_source": "IFS analysis (ECMWF Open Data)",
+ "when": "2026-10-15T13:43"
+}

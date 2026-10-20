@@ -1,0 +1,194 @@
+/* ==========================================================================
+   loader.css  —  Eye-Catching Loading Spinners, Skeletons & Glassmorphic UI
+   ========================================================================== */
+
+:root {
+    --loader-blue:       #0A2F6C;
+    --loader-blue-light: #3B82F6;
+    --loader-green:      #10B981;
+    --loader-indigo:     #6366F1;
+    --loader-text-muted: #64748B;
+    --loader-bg-track:   #E2E8F0;
+    --loader-skeleton-1: #F1F5F9;
+    --loader-skeleton-2: #CBD5E1;
+}
+
+/* Keyframe Animations */
+@keyframes agy-spin {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@keyframes agy-spin-reverse {
+    0%   { transform: rotate(360deg); }
+    100% { transform: rotate(0deg); }
+}
+
+@keyframes agy-pulse-glow {
+    0%, 100% {
+        box-shadow: 0 0 15px rgba(59, 130, 246, 0.25), 0 0 30px rgba(10, 47, 108, 0.15);
+        border-color: rgba(59, 130, 246, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 25px rgba(16, 185, 129, 0.35), 0 0 45px rgba(59, 130, 246, 0.25);
+        border-color: rgba(16, 185, 129, 0.6);
+    }
+}
+
+@keyframes agy-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+@keyframes agy-bar-progress {
+    0% {
+        left: -30%;
+        width: 30%;
+    }
+    50% {
+        width: 50%;
+    }
+    100% {
+        left: 100%;
+        width: 30%;
+    }
+}
+
+/* Glassmorphic Animated Loader Container */
+.agy-loader-card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    padding: 2.25rem 2rem;
+    margin: 1.5rem 0;
+    text-align: center;
+    animation: agy-pulse-glow 3s infinite ease-in-out;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    will-change: box-shadow, border-color;
+}
+
+/* Dual Ring Glowing Spinner */
+.agy-spinner-wrapper {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    margin-bottom: 1.25rem;
+}
+
+.agy-spinner-outer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 3.5px solid transparent;
+    border-top-color: var(--loader-blue-light);
+    border-right-color: var(--loader-green);
+    animation: agy-spin 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+    will-change: transform;
+}
+
+.agy-spinner-inner {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    border-bottom-color: var(--loader-blue);
+    border-left-color: var(--loader-indigo);
+    animation: agy-spin-reverse 0.9s linear infinite;
+    will-change: transform;
+}
+
+/* Typography */
+.agy-loader-title {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 1.1rem;
+    font-weight: 650;
+    background: linear-gradient(135deg, var(--loader-blue) 0%, var(--loader-blue-light) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.35rem;
+    letter-spacing: -0.01em;
+}
+
+.agy-loader-subtext {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 0.875rem;
+    color: var(--loader-text-muted);
+    margin-bottom: 1.25rem;
+}
+
+/* Progress Indicator Bar */
+.agy-progress-track {
+    width: 100%;
+    max-width: 320px;
+    height: 6px;
+    background: var(--loader-bg-track);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.agy-progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: linear-gradient(90deg, var(--loader-blue), var(--loader-blue-light), var(--loader-green));
+    border-radius: 10px;
+    animation: agy-bar-progress 1.8s ease-in-out infinite;
+    will-change: left, width;
+}
+
+/* Shimmer Skeleton Cards */
+.agy-skeleton-box {
+    width: 100%;
+    border-radius: 12px;
+    background: linear-gradient(90deg, 
+        var(--loader-skeleton-1) 0%, 
+        var(--loader-skeleton-2) 50%, 
+        var(--loader-skeleton-1) 100%);
+    background-size: 200% 100%;
+    animation: agy-shimmer 1.6s ease-in-out infinite;
+    margin-bottom: 1rem;
+    will-change: background-position;
+}
+
+.agy-skeleton-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    .agy-loader-card,
+    .agy-spinner-outer,
+    .agy-spinner-inner,
+    .agy-progress-bar,
+    .agy-skeleton-box {
+        animation: none !important;
+        will-change: auto;
+    }
+    
+    .agy-progress-bar {
+        width: 50%;
+        left: 25%;
+    }
+    
+    .agy-skeleton-box {
+        background: var(--loader-skeleton-2);
+    }
+}

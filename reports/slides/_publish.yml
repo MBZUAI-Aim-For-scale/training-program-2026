@@ -1,0 +1,4 @@
+- source: slides.qmd
+  quarto-pub:
+    - id: 4b5323ed-953e-4e66-b5cc-ab24aadc9ef2
+      url: https://mesfind.quarto.pub/slides

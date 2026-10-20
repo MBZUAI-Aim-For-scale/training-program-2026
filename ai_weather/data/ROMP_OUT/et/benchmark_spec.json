@@ -1,0 +1,56 @@
+{
+  "benchmark_coverage": "Ethiopia",
+  "shared": {
+    "wet_day_threshold": 20,
+    "minimum_wet_day_rainfall": 1,
+    "wet_spell_length": 3,
+    "dry_spell_limit": 7,
+    "dry_spell_search_extension": 21,
+    "area_mask_file": "",
+    "baseline_forecast": "climatology"
+  },
+  "models": [
+    {
+      "exec_key": "AIFS",
+      "model_name": "AIFS",
+      "eval_start": "2007-05-01",
+      "eval_end": "2023-07-31",
+      "baseline_start_year": 2007,
+      "baseline_end_year": 2024,
+      "init_days": [
+        0,
+        3
+      ],
+      "run_years_concurrently": true,
+      "ensemble_forecast": false
+    },
+    {
+      "exec_key": "FuXi",
+      "model_name": "FuXi",
+      "eval_start": "2007-05-01",
+      "eval_end": "2023-07-31",
+      "baseline_start_year": 2007,
+      "baseline_end_year": 2024,
+      "init_days": [
+        0,
+        3
+      ],
+      "run_years_concurrently": true,
+      "ensemble_forecast": false
+    },
+    {
+      "exec_key": "GraphCast",
+      "model_name": "GraphCast",
+      "eval_start": "2007-05-01",
+      "eval_end": "2023-07-31",
+      "baseline_start_year": 2007,
+      "baseline_end_year": 2024,
+      "init_days": [
+        0,
+        3
+      ],
+      "run_years_concurrently": true,
+      "ensemble_forecast": false
+    }
+  ]
+}

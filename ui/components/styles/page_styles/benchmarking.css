@@ -1,0 +1,646 @@
+/* ==========================================================================
+   Benchmarking Dashboard Styles
+   ui/components/styles/page_styles/benchmarking.css
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Design Tokens (Variables)
+   -------------------------------------------------------------------------- */
+:root {
+    /* Color Palette (Tailwind-inspired) */
+    --color-slate-900: #0F172A;
+    --color-slate-700: #334155;
+    --color-slate-500: #64748B;
+    --color-slate-200: #E2E8F0;
+    --color-slate-50:  #F8FAFC;
+
+    --color-blue-500:  #3B82F6;
+    --color-blue-50:   #EFF6FF;
+
+    --color-teal-700:  #0F766E;
+    --color-teal-500:  #14B8A6;
+    --color-teal-50:   #F0FDF4;
+
+    --color-green-500: #10B981;
+    --color-green-50:  #D1FAE5;
+
+    --color-amber-600: #D97706;
+    --color-amber-50:  #FEF3C7;
+
+    --color-rose-500:  #EF4444;
+    --color-rose-50:   #FEE2E2;
+
+    --color-violet-500:#8B5CF6;
+    --color-violet-50: #F5F3FF;
+
+    /* Elevation (Shadows) */
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+    --shadow-lg: 0 12px 20px rgba(0, 0, 0, 0.08);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+    /* Motion */
+    --transition-base: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* --------------------------------------------------------------------------
+   2. Page Header
+   -------------------------------------------------------------------------- */
+.page-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--color-slate-900);
+    letter-spacing: -0.02em;
+    margin: 0 0 0.25rem 0;
+}
+
+.page-subtitle {
+    font-size: 0.95rem;
+    color: var(--color-slate-500);
+    margin: 0 0 1.25rem 0;
+}
+
+/* --------------------------------------------------------------------------
+   3. Benchmark Cards (Image Display)
+   -------------------------------------------------------------------------- */
+.bench-card {
+    background-color: #ffffff;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 16px;
+    box-shadow: var(--shadow-md);
+    padding: 0.75rem 0.75rem 0.5rem;
+    margin-bottom: 1.5rem;
+    transition: var(--transition-base);
+}
+
+.bench-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: #cbd5e1;
+}
+
+.bench-card img {
+    width: 100%;
+    height: auto;
+    background-color: var(--color-slate-50);
+    border-radius: 12px;
+    object-fit: contain;
+}
+
+.bench-card-caption {
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--color-slate-900);
+    text-align: center;
+    margin-top: 0.75rem;
+    padding: 0 0.25rem;
+    word-break: break-word;
+    white-space: normal;
+}
+
+.bench-card-caption small {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--color-slate-500);
+    margin-top: 0.25rem;
+}
+
+/* --------------------------------------------------------------------------
+   4. Info Boxes (Alerts/Notes)
+   -------------------------------------------------------------------------- */
+.ibox {
+    --ibox-border: var(--color-blue-500);
+    --ibox-bg: var(--color-blue-50);
+
+    padding: 0.875rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--color-slate-700);
+    background-color: var(--ibox-bg);
+    border-left: 4px solid var(--ibox-border);
+    border-radius: 8px;
+}
+
+.ibox.sky    { --ibox-border: var(--color-blue-500);   --ibox-bg: var(--color-blue-50); }
+.ibox.teal   { --ibox-border: var(--color-teal-700);   --ibox-bg: var(--color-teal-50); }
+.ibox.amber  { --ibox-border: var(--color-amber-600);  --ibox-bg: var(--color-amber-50); }
+.ibox.green  { --ibox-border: var(--color-green-500);  --ibox-bg: var(--color-green-50); }
+.ibox.rose   { --ibox-border: var(--color-rose-500);   --ibox-bg: var(--color-rose-50); }
+.ibox.violet { --ibox-border: var(--color-violet-500); --ibox-bg: var(--color-violet-50); }
+
+/* --------------------------------------------------------------------------
+   5. Section Headers
+   -------------------------------------------------------------------------- */
+.sec-hd {
+    --accent-color: var(--color-blue-500);
+
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--color-slate-900);
+    margin: 1.5rem 0 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--color-slate-200);
+}
+
+.sec-hd .sec-hd-accent {
+    display: inline-block;
+    width: 4px;
+    height: 1.25rem;
+    background-color: var(--accent-color);
+    border-radius: 2px;
+}
+
+.sec-hd.sky    { --accent-color: var(--color-blue-500); }
+.sec-hd.teal   { --accent-color: var(--color-teal-700); }
+.sec-hd.amber  { --accent-color: var(--color-amber-600); }
+.sec-hd.green  { --accent-color: var(--color-green-500); }
+.sec-hd.violet { --accent-color: var(--color-violet-500); }
+
+/* --------------------------------------------------------------------------
+   6. KPI Metrics Row
+   -------------------------------------------------------------------------- */
+.kpi-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0.5rem 0 1rem;
+}
+
+.kpi {
+    --kpi-accent: var(--color-blue-500);
+
+    flex: 1 1 120px;
+    background-color: #ffffff;
+    border: 1px solid var(--color-slate-200);
+    border-left: 3px solid var(--kpi-accent);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    box-shadow: var(--shadow-xs);
+    transition: var(--transition-base);
+}
+
+.kpi:hover {
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
+
+.kpi .kpi-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-slate-500);
+    margin-bottom: 0.25rem;
+}
+
+.kpi .kpi-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--color-slate-900);
+}
+
+.kpi .kpi-unit {
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--color-slate-500);
+    margin-left: 0.25rem;
+}
+
+.kpi.sky    { --kpi-accent: var(--color-blue-500); }
+.kpi.teal   { --kpi-accent: var(--color-teal-700); }
+.kpi.amber  { --kpi-accent: var(--color-amber-600); }
+.kpi.violet { --kpi-accent: var(--color-violet-500); }
+.kpi.green  { --kpi-accent: var(--color-green-500); }
+
+/* --------------------------------------------------------------------------
+   7. Model Selection Cards
+   -------------------------------------------------------------------------- */
+.model-card {
+    background: #ffffff;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 12px;
+    padding: 1.1rem 1.25rem;
+    cursor: pointer;
+    transition: var(--transition-base);
+    position: relative;
+    overflow: hidden;
+}
+
+.model-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--card-accent, var(--color-blue-500));
+    opacity: 0.5;
+    transition: var(--transition-base);
+}
+
+.model-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.model-card:hover::before {
+    opacity: 1;
+    height: 4px;
+}
+
+.model-card.selected {
+    border-color: var(--card-accent, var(--color-blue-500));
+    box-shadow: var(--shadow-sm), 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.model-card.selected::before {
+    opacity: 1;
+    height: 4px;
+}
+
+.model-card .mc-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-slate-900);
+    margin-bottom: 0.15rem;
+}
+
+.model-card .mc-desc {
+    font-size: 0.8rem;
+    color: var(--color-slate-500);
+    line-height: 1.4;
+    margin-bottom: 0.6rem;
+}
+
+.model-card .mc-badge {
+    display: inline-block;
+    padding: 0.15rem 0.55rem;
+    background: var(--card-accent-bg, var(--color-blue-50));
+    color: var(--card-accent, var(--color-blue-500));
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   8. Metric Pills (Compact Config Summary)
+   -------------------------------------------------------------------------- */
+.metric-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    background: var(--color-slate-50);
+    border: 1px solid var(--color-slate-200);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: var(--color-slate-700);
+}
+
+.metric-pill strong {
+    color: var(--color-slate-900);
+    font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   9. Run Section Container
+   -------------------------------------------------------------------------- */
+.run-section {
+    background: linear-gradient(135deg, var(--color-teal-50) 0%, var(--color-slate-50) 100%);
+    border: 1px solid var(--color-green-50);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin: 1rem 0;
+}
+
+/* --------------------------------------------------------------------------
+   10. Status Chips
+   -------------------------------------------------------------------------- */
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.status-chip.success { background: var(--color-green-50); color: #065F46; }
+.status-chip.error   { background: var(--color-rose-50);  color: #991B1B; }
+.status-chip.idle    { background: var(--color-slate-200); color: var(--color-slate-700); }
+
+/* --------------------------------------------------------------------------
+   11. Figure Grid Wrapper
+   -------------------------------------------------------------------------- */
+.bench-fig-wrap {
+    background-color: #ffffff;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 12px;
+    padding: 0.75rem;
+    box-shadow: var(--shadow-xs);
+    transition: var(--transition-base);
+}
+
+.bench-fig-wrap:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.bench-fig-wrap img {
+    border-radius: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   12. Streamlit Overrides
+   -------------------------------------------------------------------------- */
+div[data-testid="stTabs"] button[data-baseweb="tab"] {
+    font-weight: 600;
+    color: var(--color-slate-500);
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px 8px 0 0;
+    transition: var(--transition-base);
+}
+
+div[data-testid="stTabs"] button[data-baseweb="tab"][aria-selected="true"] {
+    color: var(--color-blue-500);
+    border-bottom: 3px solid var(--color-blue-500);
+}
+
+div[data-testid="stSelectbox"] label {
+    font-weight: 600;
+    color: var(--color-slate-700);
+    font-size: 0.875rem;
+}
+
+button[data-testid="baseButton-primary"] {
+    background-color: var(--color-teal-700) !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    transition: var(--transition-base) !important;
+}
+
+button[data-testid="baseButton-primary"]:hover {
+    background-color: #0d5f58 !important;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+div[data-testid="stDataFrame"] {
+    border: 1px solid var(--color-slate-200);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+div[data-testid="stDataFrame"] th {
+    background-color: var(--color-slate-50) !important;
+    color: var(--color-slate-700) !important;
+    font-weight: 600 !important;
+    border-bottom: 2px solid var(--color-slate-200) !important;
+}
+
+div[data-testid="stExpander"] {
+    border: 1px solid var(--color-slate-200);
+    border-radius: 8px;
+    background-color: #ffffff;
+}
+
+div[data-testid="stExpander"] summary {
+    font-weight: 600;
+    color: var(--color-slate-700);
+}
+
+
+/* ==========================================================================
+   Metric Map Extensions
+   ========================================================================== */
+
+.map-note {
+    font-size: 0.85rem;
+    color: var(--color-slate-500);
+    margin: 0.25rem 0 0.75rem;
+}
+
+.map-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: flex-end;
+    margin-bottom: 0.75rem;
+}
+
+/* --------------------------------------------------------------------------
+   Swipe / Split View Comparison
+   -------------------------------------------------------------------------- */
+
+.swipe-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: #ffffff;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+}
+
+.swipe-layer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #ffffff;
+}
+
+.swipe-layer img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.swipe-base {
+    z-index: 1;
+}
+
+.swipe-top {
+    z-index: 2;
+    clip-path: inset(0 calc(100% - var(--split, 50%)) 0 0);
+}
+
+.swipe-divider {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--split, 50%);
+    width: 3px;
+    margin-left: -1.5px;
+    background: var(--color-blue-500);
+    opacity: 0.9;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.swipe-label {
+    position: absolute;
+    top: 10px;
+    z-index: 4;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.75);
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    pointer-events: none;
+}
+
+.swipe-label-left {
+    left: 10px;
+}
+
+.swipe-label-right {
+    right: 10px;
+}
+
+/* --------------------------------------------------------------------------
+   Metric Map Subtab Helpers
+   -------------------------------------------------------------------------- */
+
+div[data-testid="stTabs"] button[data-baseweb="tab"] {
+    font-size: 0.9rem;
+}
+
+.metric-map-caption {
+    font-size: 0.85rem;
+    color: var(--color-slate-500);
+    margin-top: 0.35rem;
+}
+
+/* --------------------------------------------------------------------------
+Phase 5: Uncertainty & Significance
+-------------------------------------------------------------------------- */
+div[data-testid="stTable"] {
+    font-size: 0.85rem;
+}
+
+div[data-testid="stDataFrame"] td {
+    white-space: nowrap;
+}
+
+div[data-testid="stDataFrame"] th {
+    white-space: nowrap;
+}
+
+
+/* --------------------------------------------------------------------------
+Phase 6: Benchmark Console
+-------------------------------------------------------------------------- */
+.dash-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.75rem 0;
+}
+
+.dash-muted {
+    color: var(--color-slate-500);
+    font-size: 0.85rem;
+}
+
+
+/* --------------------------------------------------------------------------
+13. All Metrics & Detailed Distribution Tables
+-------------------------------------------------------------------------- */
+.all-metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+    min-width: 600px;
+    margin-bottom: 1.5rem;
+    background-color: #ffffff;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: var(--shadow-xs);
+}
+
+.all-metrics-table th,
+.all-metrics-table td {
+    border: 1px solid var(--color-slate-200);
+    padding: 0.6rem 0.85rem;
+    text-align: right;
+    transition: var(--transition-base);
+}
+
+.all-metrics-table th {
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-900);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid var(--color-slate-200);
+}
+
+.all-metrics-table td:first-child,
+.all-metrics-table th:first-child {
+    text-align: left;
+    font-weight: 600;
+    color: var(--color-slate-700);
+    background-color: var(--color-slate-50);
+}
+
+.all-metrics-table tbody tr:hover {
+    background-color: var(--color-blue-50);
+}
+
+/* --------------------------------------------------------------------------
+14. Detailed Metric Distribution Blocks
+-------------------------------------------------------------------------- */
+.dist-block {
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background-color: #ffffff;
+    border: 1px solid var(--color-slate-200);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+}
+
+.dist-block h4 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-slate-900);
+    letter-spacing: -0.01em;
+}
+
+.dist-note {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--color-slate-500);
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px dashed var(--color-slate-200);
+}
+
+/* --------------------------------------------------------------------------
+15. Benchmark Outputs Figure Captions
+-------------------------------------------------------------------------- */
+.stCaption, [data-testid="stCaptionContainer"] {
+    text-align: center;
+    font-weight: 500;
+    color: var(--color-slate-700);
+    margin-top: -0.5rem;
+    margin-bottom: 1.5rem;
+}

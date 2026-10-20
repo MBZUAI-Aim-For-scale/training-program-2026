@@ -1,0 +1,745 @@
+/*-- scss:defaults --*/
+// Enhanced color palette
+$navy_blue: #003366;
+$golden: #D4AF37;
+$cream: #f8f7f2;
+$warm_gray: #3e2723;
+$light_accent: #6d4c41;
+$medium_brown: #8d6e63;
+$border_light: #d7ccc8;
+
+// Typography
+$font-family-sans-serif: "Palatino Linotype", "Book Antiqua", Palatino, 
+                         "Apple Garamond", "Garamond", "Times New Roman", 
+                         FreeSerif, serif !default;
+
+// Core variables
+$body-bg: #f8f7f2 !default;
+$body-color: #2a2a2a !default;
+$link-color: #6d4c41 !default;
+$selection-bg: #8d6e63 !default;
+$border-color: #d7ccc8 !default;
+$progress-color: #8d6e63 !default;
+
+// Presentation specific
+$presentation-heading-font: "Palatino Linotype", "Book Antiqua", Palatino, 
+                            "Apple Garamond", serif !default;
+$presentation-heading-color: #3e2723 !default;
+$presentation-heading-text-transform: none !default;
+$presentation-heading-text-shadow: none !default;
+$presentation-heading-font-weight: 600 !default;
+$presentation-h1-text-shadow: none !default;
+$presentation-font-smaller: 0.9 !default;
+$presentation-font-size-root: 32px !default;
+
+/*-- scss:rules --*/
+.reveal {
+  // Clean background without complex textures
+  background: linear-gradient(135deg, #f8f7f2 0%, #f0f1eb 50%, #e8e9e3 100%);
+  
+  .slides {
+    width: 100% !important;
+    height: 100% !important;
+    text-align: left !important;
+    box-sizing: border-box !important;
+  }
+  
+  .slide {
+    // Clean slide background - no frames, no borders
+    background: transparent;
+    padding: 1.5em 2.5em !important; // Increased side padding for better screen margins
+    margin: 0 !important;
+    border: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    position: relative;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+    box-shadow: none !important;
+    
+    // Ensure content stays within bounds
+    .slide-content {
+      width: 100% !important;
+      height: calc(100% - 40px) !important;
+      overflow: visible !important;
+      padding: 0.5em 0;
+      box-sizing: border-box !important;
+      max-width: 100% !important;
+    }
+    
+    // Clean image styling with proper constraints
+    img {
+      max-width: 85% !important; // More conservative for print
+      height: auto !important;
+      page-break-inside: avoid !important;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      display: block;
+      margin: 0.5em auto;
+    }
+    
+    // Image caption styling
+    p:has(+ img),
+    p:has(img) {
+      text-align: center;
+      font-style: italic;
+      color: $medium_brown;
+      font-size: 0.9em;
+      margin-top: 0.3em;
+      background: transparent;
+      padding: 0;
+      max-width: 85% !important;
+      margin-left: auto !important;
+      margin-right: auto !important;
+    }
+    
+    // Headings with proper margin constraints
+    h1, h2, h3, h4 {
+      line-height: 1.2;
+      margin: 0.3em 0 0.3em 0 !important;
+      max-width: 100% !important;
+      word-wrap: break-word !important;
+      box-sizing: border-box !important;
+      page-break-after: avoid !important;
+      page-break-inside: avoid !important;
+      width: 100% !important;
+      padding-right: 0 !important;
+    }
+    
+    h1 {
+      font-size: 2.2em;
+      color: $warm_gray;
+      padding-bottom: 0.3em;
+      margin: 0.2em 0 0.5em 0 !important;
+      position: relative;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      width: 100% !important;
+      
+      // Simple underline
+      &::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100px;
+        height: 2px;
+        background: $golden;
+        border-radius: 1px;
+      }
+    }
+    
+    h2 {
+      background: $navy_blue;
+      padding: 0.5em 0.8em !important;
+      color: white;
+      border-radius: 6px;
+      margin: 0.4em 0 0.6em 0 !important;
+      position: relative;
+      font-weight: 600;
+      font-size: 1.4em;
+      letter-spacing: -0.01em;
+      width: calc(100% - 0.1em) !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      page-break-after: avoid !important;
+      overflow: hidden;
+      
+      // Simple golden accent
+      &::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 50%;
+        background: $golden;
+        border-radius: 1px 0 0 1px;
+      }
+    }
+    
+    h3 {
+      font-size: 1.3em;
+      color: darken($warm_gray, 5%);
+      border-left: 3px solid $golden;
+      padding: 0.2em 0 0.2em 0.6em !important;
+      margin: 0.3em 0 0.5em 0 !important;
+      background: rgba($golden, 0.03);
+      font-weight: 600;
+      max-width: calc(100% - 0.6em) !important;
+      box-sizing: border-box !important;
+      page-break-after: avoid !important;
+      width: auto !important;
+    }
+    
+    h4 {
+      font-size: 1.1em;
+      color: $medium_brown;
+      margin: 0.2em 0 0.3em 0 !important;
+      font-weight: 600;
+      padding-left: 0.3em;
+      border-left: 2px solid rgba($golden, 0.4);
+      max-width: 100% !important;
+      page-break-after: avoid !important;
+      width: auto !important;
+    }
+    
+    // Content elements with strict width constraints
+    pre, code, table, blockquote {
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      page-break-inside: avoid !important;
+      width: 100% !important;
+    }
+    
+    pre {
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: auto !important;
+      
+      code {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+        display: block;
+      }
+    }
+    
+    table {
+      width: 100% !important;
+      max-width: 100% !important;
+      table-layout: fixed !important;
+      page-break-inside: avoid !important;
+      word-wrap: break-word !important;
+      
+      th, td {
+        padding: 0.3em 0.5em !important;
+        word-wrap: break-word !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+      }
+    }
+    
+    ul, ol {
+      max-width: 95% !important; // Constrained for better margins
+      box-sizing: border-box !important;
+      padding-left: 1.5em !important;
+      padding-right: 0.5em !important;
+      page-break-inside: avoid !important;
+      width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      
+      li {
+        margin: 0.3em 0;
+        word-wrap: break-word !important;
+        page-break-inside: avoid !important;
+        max-width: 100% !important;
+        padding-right: 0 !important;
+      }
+    }
+    
+    p {
+      max-width: 95% !important; // Constrained for better margins
+      word-wrap: break-word !important;
+      box-sizing: border-box !important;
+      margin: 0.5em 0 !important;
+      line-height: 1.4 !important;
+      page-break-inside: avoid !important;
+      width: 100% !important;
+      padding-right: 0 !important;
+    }
+    
+    // Force all direct children to respect margins
+    & > * {
+      max-width: 95% !important; // Constrained for better margins
+      box-sizing: border-box !important;
+      padding-right: 0 !important;
+      margin-right: 0 !important;
+    }
+  }
+  
+  .title-slide {
+    // Clean title slide
+    background: linear-gradient(160deg, #fcfbf8 0%, #f5f3ef 100%);
+    color: #333 !important;
+    text-align: center !important;
+    padding: 3em 2.5em !important; // Increased side padding
+    position: relative;
+    box-sizing: border-box !important;
+    page-break-after: always !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+
+    h1 {
+      font-size: 2.8em !important;
+      color: $warm_gray !important;
+      margin: 0.3em auto 0.5em !important;
+      position: relative;
+      font-weight: 700;
+      line-height: 1.1;
+      padding: 0 10% !important;
+      border-bottom: none;
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box !important;
+      text-align: center;
+      
+      // Simple center underline
+      &::after {
+        content: "";
+        display: block;
+        width: 120px;
+        height: 3px;
+        background: $golden;
+        margin: 0.5em auto 0;
+        border-radius: 1px;
+      }
+    }
+
+    .subtitle {
+      font-size: 1.4em !important;
+      color: $medium_brown !important;
+      margin: 0.8em auto 1.5em !important;
+      position: relative;
+      font-weight: 400;
+      max-width: 70% !important;
+      line-height: 1.4;
+      padding: 0.8em 0 !important;
+      width: 100% !important;
+      box-sizing: border-box !important;
+      text-align: center;
+      
+      & strong {
+        color: $warm_gray;
+        font-weight: 600;
+      }
+    }
+
+    .author {
+      font-size: 1.3em !important;
+      color: $warm_gray !important;
+      margin: 1em auto 0.5em !important;
+      position: relative;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      width: 100% !important;
+      text-align: center;
+      max-width: 100% !important;
+    }
+
+    .date {
+      font-size: 1.1em !important;
+      color: $medium_brown !important;
+      margin: 0.5em auto !important;
+      font-weight: 400;
+      font-style: italic;
+      width: 100% !important;
+      text-align: center;
+      max-width: 100% !important;
+    }
+
+    .institute {
+      margin: 1.5em auto 0 !important;
+      font-size: 1.1em !important;
+      color: $medium_brown !important;
+      font-style: normal;
+      width: 100% !important;
+      text-align: center;
+      max-width: 100% !important;
+    }
+  }
+}
+
+// Clean content blocks with proper constraints
+.highlight-box, .callout {
+  padding: 0.8em 1em !important;
+  margin: 0.8em 0 !important;
+  background: rgba($golden, 0.05);
+  border-left: 3px solid $golden;
+  border-radius: 0 6px 6px 0;
+  max-width: 95% !important; // Constrained for margins
+  box-sizing: border-box !important;
+  width: 100% !important;
+  page-break-inside: avoid !important;
+  word-wrap: break-word !important;
+}
+
+// Clean code blocks with overflow handling
+.reveal pre code {
+  border-radius: 6px;
+  border: 1px solid rgba(215, 204, 200, 0.3);
+  margin: 0.5em 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+  background: #fcfbf8 !important;
+  display: block;
+  word-wrap: break-word !important;
+}
+
+// Clean lists with proper constraints
+.reveal ul, .reveal ol {
+  margin: 0.5em 0 !important;
+  max-width: 95% !important; // Constrained for margins
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding-left: 1.5em !important;
+  padding-right: 0 !important;
+  
+  li {
+    margin: 0.3em 0 !important;
+    max-width: 100% !important;
+    word-wrap: break-word !important;
+    padding-right: 0 !important;
+    
+    &::marker {
+      color: $golden;
+    }
+  }
+}
+
+// Clean blockquote
+.reveal blockquote {
+  border-left: 2px solid $golden;
+  padding: 0.8em 1em !important;
+  margin: 0.8em 0 !important;
+  background: rgba($golden, 0.02);
+  font-style: italic;
+  max-width: 95% !important; // Constrained for margins
+  width: 100% !important;
+  box-sizing: border-box !important;
+  word-wrap: break-word !important;
+}
+
+// Paragraph spacing
+.reveal p {
+  margin: 0.5em 0 !important;
+  max-width: 95% !important; // Constrained for margins
+  width: 100% !important;
+  word-wrap: break-word !important;
+  box-sizing: border-box !important;
+  padding-right: 0 !important;
+}
+
+// Global constraint for all elements
+.reveal .slide * {
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  word-wrap: break-word !important;
+}
+
+/* ==========================================================================
+   PRINT STYLES - PDF EXPORT FIXES
+   ========================================================================== */
+@media print {
+  // Set page margins for PDF
+  @page {
+    margin: 0.5in !important; // Safe margins for all sides
+    size: letter; // Standard paper size
+  }
+  
+  .reveal {
+    background: white !important;
+    width: 100% !important;
+    height: auto !important;
+    
+    .slides {
+      width: 100% !important;
+      height: auto !important;
+      position: relative !important;
+      transform: none !important;
+    }
+    
+    .slide {
+      // Critical print margins and constraints
+      background: white !important;
+      padding: 0.4in 0.5in !important; // Conservative print margins
+      margin: 0 !important;
+      border: 1px solid #ddd !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      height: auto !important;
+      min-height: auto !important;
+      position: relative !important;
+      box-shadow: none !important;
+      
+      // Constrain all content within safe print area
+      .slide-content {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+      
+      // Even more conservative constraints for print
+      h1, h2, h3, h4, h5, h6 {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding-right: 0 !important;
+        margin-right: 0 !important;
+        page-break-after: avoid !important;
+      }
+      
+      h2 {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+      }
+      
+      p, ul, ol, blockquote {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding-right: 0 !important;
+        margin-right: 0 !important;
+        page-break-inside: avoid !important;
+      }
+      
+      ul, ol {
+        max-width: 95% !important;
+        padding-left: 1.2em !important;
+      }
+      
+      img {
+        max-width: 80% !important; // Even more conservative for print
+        height: auto !important;
+        page-break-inside: avoid !important;
+        display: block;
+        margin: 0.3em auto !important;
+      }
+      
+      pre, code {
+        max-width: 100% !important;
+        width: 100% !important;
+        overflow-x: hidden !important; // Prevent horizontal scroll in PDF
+        white-space: pre-wrap !important;
+        word-wrap: break-word !important;
+      }
+      
+      table {
+        max-width: 100% !important;
+        width: 100% !important;
+        table-layout: fixed !important;
+        page-break-inside: avoid !important;
+        
+        th, td {
+          word-wrap: break-word !important;
+          max-width: 100% !important;
+        }
+      }
+      
+      // Force all elements to stay within bounds
+      * {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+      }
+    }
+    
+    .title-slide {
+      background: #fcfbf8 !important;
+      border: 1px solid #ddd !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      padding: 0.6in 0.5in !important; // Conservative title slide margins
+      text-align: center !important;
+      
+      h1 {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 0 5% !important;
+      }
+      
+      .subtitle {
+        max-width: 80% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+      }
+    }
+  }
+  
+  // Hide presentation controls in print
+  .progress,
+  .controls,
+  .slide-number {
+    display: none !important;
+  }
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN
+   ========================================================================== */
+@media (max-width: 1200px) {
+  .reveal {
+    .title-slide {
+      h1 {
+        font-size: 2.4em !important;
+        padding: 0 5% !important;
+      }
+      
+      .subtitle {
+        font-size: 1.2em !important;
+        max-width: 80% !important;
+      }
+      
+      .author {
+        font-size: 1.1em !important;
+      }
+    }
+    
+    .slide {
+      padding: 1em 2em !important;
+      
+      h2 {
+        padding: 0.4em 0.6em !important;
+        font-size: 1.3em;
+        width: calc(100% - 0.1em) !important;
+      }
+      
+      h3 {
+        max-width: calc(100% - 0.6em) !important;
+      }
+      
+      p, ul, ol, blockquote {
+        max-width: 95% !important;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .reveal {
+    .title-slide {
+      padding: 2em 1.5em !important;
+      
+      h1 {
+        font-size: 2em !important;
+        padding: 0 3% !important;
+      }
+      
+      .subtitle {
+        font-size: 1.1em !important;
+        max-width: 90% !important;
+      }
+    }
+    
+    .slide {
+      padding: 1em 1.5em !important;
+      
+      h2 {
+        padding: 0.4em 0.6em !important;
+        font-size: 1.2em;
+        width: calc(100% - 0.1em) !important;
+      }
+      
+      h1 {
+        font-size: 1.6em;
+      }
+      
+      h3 {
+        font-size: 1.1em;
+        max-width: calc(100% - 0.6em) !important;
+      }
+      
+      p, ul, ol, blockquote {
+        max-width: 95% !important;
+      }
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .reveal {
+    font-size: 28px;
+    
+    .slide {
+      padding: 0.8em 1em !important;
+      
+      h2 {
+        padding: 0.3em 0.5em !important;
+        font-size: 1.1em;
+        width: calc(100% - 0.1em) !important;
+      }
+      
+      p, ul, ol, blockquote {
+        max-width: 95% !important;
+      }
+    }
+    
+    .title-slide {
+      padding: 1.5em 1em !important;
+      
+      h1 {
+        font-size: 1.8em !important;
+        padding: 0 2% !important;
+      }
+      
+      .subtitle {
+        max-width: 95% !important;
+      }
+    }
+  }
+}
+
+/*-- scss:rules --*/
+.reveal {
+  // ... existing code ...
+  
+  .slide {
+    // ... existing code ...
+    
+    // REAL background removal for images with white backgrounds
+    img {
+      max-width: 85% !important;
+      height: auto !important;
+      page-break-inside: avoid !important;
+      border-radius: 8px;
+      display: block;
+      margin: 0.5em auto;
+      background: transparent !important;
+      
+      // This ACTUALLY removes white backgrounds:
+      mix-blend-mode: multiply;
+      
+      // Enhance the effect
+      filter: 
+        contrast(1.1)
+        saturate(1.2)
+        brightness(1.05);
+      
+      // Add a subtle shadow for depth
+      box-shadow: 
+        0 4px 15px rgba(0, 0, 0, 0.1),
+        0 0 0 1px rgba($navy_blue, 0.1);
+      
+      // For images that don't work with multiply, try darken
+      &[src*="logo"],
+      &[src*="icon"] {
+        mix-blend-mode: darken;
+        filter: 
+          contrast(1.2)
+          saturate(1.3)
+          brightness(1.1);
+      }
+      
+      // Force remove any inline background styles
+      &[style*="background"] {
+        background: transparent !important;
+      }
+    }
+  }
+}

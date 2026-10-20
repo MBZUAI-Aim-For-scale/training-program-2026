@@ -1,0 +1,7 @@
+{
+  "obs": {
+    "era5": "$DEMO3_DATA/era5_arco_6h_surface",
+    "imerg": "$DEMO3_DATA/IMERG"
+  },
+  "models": {}
+}

@@ -1,0 +1,16 @@
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div>
+      &copy; {{ site.time | date: '%Y' }} {{ site.title }}. 
+      {% if site.license %}{{ site.license }}.{% endif %}
+    </div>
+    <div class="footer-links">
+      {% if site.repository %}
+        <a href="https://github.com/{{ site.repository }}/edit/gh-pages/{{ page.path }}" target="_blank" rel="noopener">
+          Edit this page
+        </a>
+      {% endif %}
+      <a href="https://jekyllrb.com" target="_blank" rel="noopener">Built with Jekyll</a>
+    </div>
+  </div>
+</footer>

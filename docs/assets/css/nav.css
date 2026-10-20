@@ -1,0 +1,190 @@
+/* ==========================================================================
+docs/assest/css/nav.css  —  Pinned Top Header Navbar Links Engine
+========================================================================== */
+:root {
+  --nav-text: #ffffff;
+  --nav-text-muted: #BFDBFE;
+  --nav-link-inactive: rgba(255, 255, 255, 0.85);
+  --nav-link-hover-bg: var(--menu-green-hover);
+  --nav-link-active-bg: var(--menu-green);
+  --nav-border: var(--nav-blue-border);
+}
+
+/* ─── MAIN NAVBAR CONTAINER ─────────────────────────────────────────── */
+.st-key-top_navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--nav-blue);
+  padding: 0 2rem;
+  border-bottom: 3px solid var(--nav-border);
+  z-index: 1000;
+  box-sizing: border-box;
+  height: var(--nav-height);
+  transform: none !important;
+}
+
+.st-key-top_navbar > div,
+.st-key-top_navbar [data-testid="stHorizontalBlock"],
+.st-key-top_navbar [data-testid="stVerticalBlock"] {
+  align-items: center;
+  height: 100%;
+}
+
+.st-key-top_navbar [data-testid="stHorizontalBlock"] {
+  display: flex;
+  gap: 0.4rem !important;
+}
+
+.st-key-top_navbar [data-testid="column"] {
+  display: flex;
+  align-items: center;
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+
+/* Shrink-wrap inner nav button columns to their actual text width */
+.st-key-top_navbar [data-testid="stHorizontalBlock"] [data-testid="column"] [data-testid="stHorizontalBlock"] [data-testid="column"] {
+  flex: 0 0 auto !important;
+  width: auto !important;
+}
+
+/* ─── NAV BUTTONS (Pill-style) ──────────────────────────────────────── */
+.st-key-top_navbar .stButton > button {
+  background: transparent !important;
+  color: var(--nav-link-inactive) !important;
+  border: 1px solid transparent !important;
+  border-radius: 6px !important;
+  padding: 0.5rem 1rem !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.01em;
+  box-shadow: none !important;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.st-key-top_navbar .stButton > button:hover {
+  background: var(--nav-link-hover-bg) !important;
+  color: var(--nav-text) !important;
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  transform: none !important;
+}
+
+.st-key-top_navbar .stButton > button:focus-visible {
+  outline: 2px solid var(--nav-text);
+  outline-offset: 2px;
+}
+
+/* Active page button */
+.st-key-top_navbar .stButton > button[kind="primary"] {
+  background: var(--nav-link-active-bg) !important;
+  color: var(--nav-text) !important;
+  font-weight: 600 !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+}
+
+/* ─── BRAND TEXT ────────────────────────────────────────────────────── */
+.brand-text {
+  color: var(--nav-text);
+  font-weight: 700;
+  font-size: 1.2rem;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.brand-text span {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--nav-text-muted);
+}
+
+/* ─── WEATHER BADGE ─────────────────────────────────────────────────── */
+/* Add right margin to prevent overlap with the three-dot menu */
+.weather-badge {
+  display: inline-flex !important;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--nav-text-muted);
+  padding: 0.35rem 1rem;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-family: 'DM Mono', monospace;
+  white-space: nowrap;
+  transition: background 0.2s ease;
+  visibility: visible !important;
+  opacity: 1 !important;
+  margin-right: 2rem !important; /* Space for three-dot menu */
+}
+.weather-badge:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.blink-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  background-color: #00ff00;
+  border-radius: 50%;
+  margin-right: 8px;
+  animation: blink 1.2s infinite;
+  box-shadow: 0 0 4px #00ff00;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+/* ─── ACCESSIBILITY ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .blink-dot {
+    animation: none;
+    opacity: 1;
+  }
+  .st-key-top_navbar .stButton > button,
+  .weather-badge {
+    transition: none;
+  }
+}
+
+/* ─── RESPONSIVE ────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .st-key-top_navbar {
+    padding: 0 1.5rem;
+  }
+  .st-key-top_navbar .stButton > button {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+  .weather-badge {
+    margin-right: 3.5rem !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .st-key-top_navbar {
+    padding: 0 1rem;
+  }
+  .brand-text {
+    font-size: 1rem;
+  }
+  .brand-text span {
+    display: none;
+  }
+  .st-key-top_navbar .stButton > button {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+  }
+  .weather-badge {
+    display: none;
+  }
+}

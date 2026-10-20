@@ -1,0 +1,5 @@
+project:
+  type: website   # or omit if not needed
+  preview:
+    port: 4200
+    browser: true

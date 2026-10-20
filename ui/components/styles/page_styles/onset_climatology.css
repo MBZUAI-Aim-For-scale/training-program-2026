@@ -1,0 +1,245 @@
+/* styles/page_styles/onset_climatology.css */
+
+/* Onset climatology page - Professional Theme */
+
+.climatology-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1.5rem 0;
+}
+@media (max-width: 768px) {
+    .climatology-grid { grid-template-columns: 1fr; }
+}
+
+/* Map Card Styling */
+.map-card {
+    background: #FFFFFF;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: box-shadow 0.2s ease;
+}
+.map-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.map-card .map-title {
+    padding: 0.6rem 0.9rem;
+    background: #F8FAFC;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #1E3A5F;
+    border-bottom: 1px solid #E2E8F0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.map-card .map-image {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Timeline Panel */
+.timeline-panel {
+    background: #FFFFFF;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 1.2rem;
+    margin: 1.5rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.timeline-panel .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    font-size: 0.72rem;
+    color: #64748B;
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid #F1F5F9;
+}
+.timeline-panel .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+}
+.legend-color {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.08);
+}
+
+/* Guardrail Plot */
+.guardrail-plot {
+    background: #FFFFFF;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 0.9rem;
+    margin: 1rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* Guardrail Table */
+.guardrail-table {
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+.guardrail-table .confidence-low {
+    color: #F59E0B;
+    font-weight: 600;
+    background: #FEF3C7;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+.guardrail-table .confidence-high {
+    color: #10B981;
+    font-weight: 600;
+    background: #DCFCE7;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+/* Analytical Summary Block */
+.analytical-summary {
+    background: linear-gradient(135deg, #F8FAFC 0%, #FFFFFF 100%);
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 1.2rem;
+    margin: 1rem 0 1.5rem 0;
+    box-shadow: 0 2px 4px rgba(15,23,42,0.04);
+}
+.analytical-summary h4 {
+    color: #1E3A5F;
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    letter-spacing: -0.2px;
+}
+.analytical-summary p {
+    color: #475569;
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin: 0;
+}
+
+/* Metric Cards Enhancement */
+.metric-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    transition: all 0.15s ease;
+}
+.metric-card:hover {
+    border-color: #10B981;
+    box-shadow: 0 2px 6px rgba(16,185,129,0.12);
+}
+
+/* Section Headers */
+.section-header {
+    color: #1E3A5F;
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 1.5rem 0 0.8rem 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #E2E8F0;
+}
+
+/* Data Table Styling */
+.data-table {
+    font-size: 0.8rem;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #E2E8F0;
+}
+.data-table th {
+    background: #F8FAFC;
+    color: #1E3A5F;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.4px;
+    padding: 0.7rem 0.9rem;
+}
+.data-table td {
+    padding: 0.6rem 0.9rem;
+    border-top: 1px solid #F1F5F9;
+}
+.data-table tr:hover {
+    background: #F8FAFC;
+}
+
+/* Download Button Styling */
+.download-button {
+    background: #10B981;
+    color: white;
+    border: none;
+    padding: 0.5rem 1.2rem;
+    border-radius: 6px;
+    font-weight: 500;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin: 0.8rem 0;
+}
+.download-button:hover {
+    background: #059669;
+    box-shadow: 0 2px 6px rgba(16,185,129,0.3);
+}
+
+/* Warning and Info Messages */
+.warning-message {
+    background: #FEF3C7;
+    border-left: 4px solid #F59E0B;
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    color: #92400E;
+    font-size: 0.85rem;
+    margin: 0.8rem 0;
+}
+.info-message {
+    background: #DBEAFE;
+    border-left: 4px solid #3B82F6;
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    color: #1E40AF;
+    font-size: 0.85rem;
+    margin: 0.8rem 0;
+}
+
+/* Plot Containers */
+.plot-container {
+    background: #FFFFFF;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 1rem;
+    margin: 1rem 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1024px) {
+    .climatology-grid {
+        grid-template-columns: 1fr;
+    }
+    .analytical-summary {
+        padding: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .map-card .map-title {
+        font-size: 0.72rem;
+        padding: 0.5rem 0.7rem;
+    }
+    .timeline-panel .legend {
+        font-size: 0.68rem;
+    }
+    .section-header {
+        font-size: 1rem;
+    }
+}

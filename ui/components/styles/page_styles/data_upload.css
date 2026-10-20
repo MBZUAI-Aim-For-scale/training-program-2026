@@ -1,0 +1,88 @@
+/* styles/page_styles/data_upload.css */
+
+/* Upload area */
+.upload-area {
+    border: 2px dashed #CBD5E1;
+    border-radius: 12px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    background: #F8FAFC;
+    transition: all 0.2s;
+    margin-bottom: 1.5rem;
+}
+.upload-area:hover {
+    border-color: #3B82F6;
+    background: #EFF6FF;
+}
+.upload-area.dragover {
+    border-color: #10B981;
+    background: #F0FDF4;
+}
+.upload-area .icon {
+    font-size: 2.5rem;
+    color: #94A3B8;
+}
+.upload-area .text {
+    font-size: 0.9rem;
+    color: #334155;
+    margin-top: 0.3rem;
+}
+.upload-area .sub {
+    font-size: 0.7rem;
+    color: #94A3B8;
+}
+
+/* Preview table wrapper */
+.preview-wrapper {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+    margin: 1rem 0;
+}
+.preview-wrapper .table-caption {
+    padding: 0.5rem 1rem;
+    background: #F1F5F9;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #1E3A5F;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+/* Validation metrics row */
+.metrics-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+}
+.metric-box {
+    flex: 1;
+    min-width: 120px;
+    background: #fff;
+    border-radius: 8px;
+    padding: 0.7rem 0.9rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 1px solid #E2E8F0;
+}
+.metric-box .label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    color: #64748B;
+}
+.metric-box .value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #0F172A;
+}
+.metric-box .value.good { color: #10B981; }
+.metric-box .value.warn { color: #F59E0B; }
+.metric-box .value.bad { color: #EF4444; }
+
+/* Progress bar (optional) */
+.stProgress > div {
+    background: #E2E8F0 !important;
+}
+.stProgress > div > div {
+    background: #3B82F6 !important;
+}

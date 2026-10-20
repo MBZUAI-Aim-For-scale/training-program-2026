@@ -1,0 +1,78 @@
+/* styles/page_styles/analysis.css */
+
+/* Analysis page: metrics, tabs, results */
+
+.analysis-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin: 1rem 0;
+}
+@media (max-width: 768px) {
+    .analysis-grid { grid-template-columns: 1fr; }
+}
+
+.model-card {
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid #E2E8F0;
+    padding: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    transition: transform 0.15s;
+}
+.model-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+.model-card .name {
+    font-weight: 700;
+    color: #1E3A5F;
+    font-size: 0.9rem;
+}
+.model-card .score {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #0F172A;
+}
+.model-card .score.good { color: #10B981; }
+.model-card .score.medium { color: #F59E0B; }
+.model-card .score.bad { color: #EF4444; }
+
+/* Result tabs (if using custom styling) */
+.tabs-container {
+    margin-top: 1.5rem;
+}
+.tabs-container .tab-header {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid #E2E8F0;
+}
+.tabs-container .tab-btn {
+    padding: 0.5rem 1.2rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #64748B;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+}
+.tabs-container .tab-btn.active {
+    color: #1E3A5F;
+    border-bottom-color: #3B82F6;
+}
+.tabs-container .tab-btn:hover {
+    color: #1E3A5F;
+}
+.tabs-container .tab-content {
+    padding: 1rem 0;
+}
+
+/* Spinner overlay */
+.spinner-overlay {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}

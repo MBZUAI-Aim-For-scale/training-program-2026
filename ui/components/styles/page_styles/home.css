@@ -1,0 +1,282 @@
+/* ==========================================================================
+   home.css  —  Home Page: KPI cards, hero, map, alerts
+   ========================================================================== */
+
+/* 
+   Loaded alongside styles/main.css — reuses its CSS variables (--card,
+   --border, --text, --muted, --success, --warning, --danger, --radius,
+   --shadow, --accent, --primary, --bg) so both files stay on one palette.
+*/
+
+/* ---- Hero Banner ----
+   Renamed .hero -> .home-hero (and children) on purpose: main.css already
+   defines a global `.hero` component (dark gradient banner with
+   .hero-title / .hero-chips / .hero-status), used with different markup.
+   Reusing the same class name here would silently break one or the other
+   depending on load order/specificity, since browsers can't tell them
+   apart. Update your home.py markup to use these `.home-hero*` classes.
+*/
+.home-hero {
+    background: linear-gradient(145deg, #0A1A2F, #1A3A5C);
+    border-radius: var(--radius, 8px);
+    padding: 1.5rem 2rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+}
+
+.home-hero-left h1 {
+    color: #fff;
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.home-hero-left p {
+    color: #CBD5E1;
+    font-size: 0.85rem;
+    margin: 0.2rem 0 0;
+}
+
+.home-hero-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.home-hero-badge {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    color: #E2E8F0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.home-hero-badge:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* ---- KPI row – 4 columns ---- */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* NEW: Stack to 1 column on very small screens */
+@media (max-width: 480px) {
+    .kpi-grid { grid-template-columns: 1fr; }
+}
+
+.kpi-card {
+    background: var(--card, #ffffff);
+    border-radius: var(--radius, 8px);
+    padding: 0.9rem 1rem;
+    box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,0.05));
+    border-left: 4px solid var(--accent, #3b82f6);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.kpi-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.kpi-card .label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted, #64748b);
+}
+
+.kpi-card .value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text, #0f172a);
+    line-height: 1.2;
+}
+
+.kpi-card .delta {
+    font-size: 0.75rem;
+    color: var(--success, #10b981);
+}
+
+.kpi-card.warning { border-left-color: var(--warning, #f59e0b); }
+.kpi-card.danger  { border-left-color: var(--danger, #ef4444); }
+.kpi-card.success { border-left-color: var(--success, #10b981); }
+
+/* ---- Split view – map + alerts ---- */
+/* FIXED: Corrected malformed comment syntax that was hiding these rules */
+.split-panel {
+    display: flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+@media (max-width: 900px) {
+    /* Stack instead of squeezing the map and alert list side by side */
+    .split-panel {
+        flex-direction: column;
+    }
+    .split-panel .alerts-container {
+        max-height: 320px;
+    }
+}
+
+.split-panel .map-container {
+    flex: 2;
+    background: var(--card, #ffffff);
+    border-radius: var(--radius, 8px);
+    border: 1px solid var(--border, #e2e8f0);
+    overflow: hidden;
+}
+
+.split-panel .alerts-container {
+    flex: 1;
+    background: var(--card, #ffffff);
+    border-radius: var(--radius, 8px);
+    border: 1px solid var(--border, #e2e8f0);
+    padding: 1rem;
+    max-height: 500px;
+    overflow-y: auto;
+    /* Custom Scrollbar Styling */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border, #e2e8f0) transparent;
+}
+
+.split-panel .alerts-container::-webkit-scrollbar {
+    width: 6px;
+}
+.split-panel .alerts-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+.split-panel .alerts-container::-webkit-scrollbar-thumb {
+    background: var(--border, #e2e8f0);
+    border-radius: 3px;
+}
+
+.alerts-container h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.85rem;
+    color: var(--primary, #3b82f6);
+}
+
+/* ---- Alert items ---- */
+/* FIXED: Corrected malformed comment syntax */
+.alert-item {
+    /* FIXED: Set base padding to the hover state to prevent layout shift */
+    padding: 0.6rem 0.4rem; 
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 0.78rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.15s ease, border-radius 0.15s ease;
+}
+
+.alert-item:hover {
+    background: var(--bg, #f8fafc);
+    border-radius: 4px;
+    /* Removed padding changes here to stop the text from jumping */
+}
+
+.alert-item .woreda {
+    font-weight: 600;
+    color: var(--text, #0f172a);
+}
+
+.alert-item .status {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 12px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    background: #F1F5F9;
+    color: #475569;
+}
+
+/* These stay as their own saturated tints rather than main.css's *-light
+   tokens — a status pill needs more contrast/punch at this small size
+   than the softer full-card highlight tints do. */
+.alert-item .status.warning {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
+.alert-item .status.danger {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+.alert-item .status.success {
+    background: #D1FAE5;
+    color: #065F46;
+}
+
+/* ---- Expander for upper-air diagnostics ---- */
+.diag-expander {
+    margin-top: 1.5rem;
+}
+
+.diag-expander .streamlit-expanderHeader {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--primary, #3b82f6);
+}
+
+.diag-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+
+@media (max-width: 640px) {
+    .diag-grid { grid-template-columns: 1fr; }
+}
+
+.diag-item {
+    background: var(--bg, #f8fafc);
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    border-left: 3px solid var(--accent, #3b82f6);
+}
+
+.diag-item .title {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: var(--muted, #64748b);
+}
+
+.diag-item .data {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text, #0f172a);
+}
+
+/* ---- Accessibility: Reduced Motion ---- */
+@media (prefers-reduced-motion: reduce) {
+    .kpi-card, 
+    .alert-item, 
+    .home-hero-badge {
+        transition: none !important;
+        transform: none !important;
+    }
+    
+    .kpi-card:hover {
+        transform: none !important;
+    }
+}

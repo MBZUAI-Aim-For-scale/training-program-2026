@@ -1,0 +1,530 @@
+/*-- scss:defaults --*/
+
+// Enhanced color palette - Ethiopian/East African Inspired
+$navy_blue: #003366;
+$golden: #D4AF37;
+$cream: #f8f7f2;
+$warm_gray: #3e2723;
+$light_accent: #6d4c41;
+$medium_brown: #8d6e63;
+$border_light: #d7ccc8;
+
+// Typography
+$font-family-sans-serif: "Palatino Linotype", "Book Antiqua", Palatino, 
+                         "Apple Garamond", "Garamond", "Times New Roman", 
+                         FreeSerif, serif !default;
+$font-family-monospace: "SF Mono", "Monaco", "Inconsolata", "Fira Code", 
+                        "Cascadia Code", monospace !default;
+
+// Core variables
+$body-bg: #f8f7f2 !default;
+$body-color: #2a2a2a !default;
+$link-color: #6d4c41 !default;
+$selection-bg: #8d6e63 !default;
+$border-color: #d7ccc8 !default;
+$progress-color: #8d6e63 !default;
+
+// Presentation specific
+$presentation-heading-font: "Palatino Linotype", "Book Antiqua", Palatino, 
+                            "Apple Garamond", serif !default;
+$presentation-heading-color: #3e2723 !default;
+$presentation-heading-text-transform: none !default;
+$presentation-heading-text-shadow: none !default;
+$presentation-heading-font-weight: 600 !default;
+$presentation-h1-text-shadow: none !default;
+$presentation-font-smaller: 0.9 !default;
+$presentation-font-size-root: 32px !default;
+
+/*-- scss:rules --*/
+
+.reveal {
+  background: linear-gradient(135deg, #f8f7f2 0%, #f0f1eb 50%, #e8e9e3 100%);
+  
+  // TITLE SLIDE UI HIDE: Bulletproof logic to hide numbers/progress
+  &:has(#title-slide.present) .slide-number,
+  &:has(#title-slide.present) .progress {
+    display: none !important;
+  }
+  
+  .slide {
+    background: transparent;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 1em 2em !important;
+    margin: 0 !important;
+    border: none;
+    /* Removed width/height 100% !important so auto-stretch works */
+    position: relative;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    
+    // Custom scrollbar
+    &::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    &::-webkit-scrollbar-track {
+      background: $border_light;
+      border-radius: 4px;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+      background: $medium_brown;
+      border-radius: 4px;
+    }
+    
+    // Subtle bottom accent
+    &::before {
+      content: "";
+      position: absolute;
+      bottom: 30px; /* Shifted up slightly to avoid overlapping the progress bar/slide numbers */
+      left: 10%;
+      right: 10%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0%, $golden 50%, transparent 100%);
+      opacity: 0.4;
+      z-index: 10;
+    }
+    
+    .slide-content {
+      width: 100%;
+      height: auto;
+      min-height: calc(100% - 30px);
+      overflow: visible;
+      padding: 0.5em 0;
+    }
+    
+    h1, h2, h3, h4 {
+      line-height: 1.2;
+      margin: 0.3em 0;
+    }
+    
+    h1 {
+      font-size: 2.2em;
+      color: $warm_gray;
+      padding-bottom: 0.3em;
+      margin: 0.2em 0 0.5em;
+      position: relative;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      
+      &::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100px;
+        height: 2px;
+        background: linear-gradient(90deg, $golden 0%, rgba($golden, 0) 100%);
+        border-radius: 1px;
+      }
+    }
+    
+    h2 {
+      background: linear-gradient(135deg, $navy_blue 0%, darken($navy_blue, 5%) 100%);
+      padding: 0.6em 1em;
+      color: white;
+      border-radius: 8px;
+      margin: 0.5em 0 0.8em;
+      box-shadow: 0 3px 8px rgba(0, 51, 102, 0.12);
+      position: relative;
+      font-weight: 600;
+      font-size: 1.5em;
+      letter-spacing: -0.01em;
+      
+      &::after {
+        content: "";
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 4px;
+        height: 50%;
+        background: $golden;
+        border-radius: 2px 0 0 2px;
+      }
+    }
+    
+    h3 {
+      font-size: 1.3em;
+      color: darken($warm_gray, 5%);
+      border-left: 3px solid $golden;
+      padding: 0.2em 0 0.2em 0.6em;
+      margin: 0.3em 0 0.5em;
+      background: linear-gradient(90deg, rgba($golden, 0.04) 0%, transparent 100%);
+      font-weight: 600;
+    }
+    
+    h4 {
+      font-size: 1.1em;
+      color: $medium_brown;
+      margin: 0.2em 0 0.3em;
+      font-weight: 600;
+      padding-left: 0.3em;
+      border-left: 2px solid rgba($golden, 0.5);
+    }
+  }
+
+  // ADAPTIVE DARK BACKGROUNDS: Standard Reveal.js detection
+  .has-dark-background {
+    h2 {
+      background: transparent !important;
+      box-shadow: none !important;
+      color: #ffffff !important;
+      padding-left: 0 !important;
+      
+      &::after {
+        display: none !important; 
+      }
+    }
+    h1, h3, h4, p, li, div {
+      color: #f8f9fa !important;
+    }
+  }
+
+  // BULLETPROOF DARK SLIDE OVERRIDE (Nuclear Option)
+  // Use .dark-slide in your markdown header attributes: {background-color="#003366" .dark-slide}
+  .slide.dark-slide {
+    h1, h2, h3, h4, p, li, div {
+      color: #ffffff !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      border-color: #ffffff !important;
+    }
+    
+    h2 {
+      padding-left: 0 !important;
+    }
+
+    h2::after {
+      display: none !important;
+    }
+  }
+  
+  .title-slide {
+    background: 
+      linear-gradient(160deg, #fcfbf8 0%, #f5f3ef 100%),
+      radial-gradient(circle at 20% 80%, rgba($golden, 0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba($navy_blue, 0.03) 0%, transparent 50%);
+    
+    border: none !important;
+    box-shadow: none !important;
+    color: #333 !important;
+    text-align: center !important;
+    padding: 2em 2em !important;
+    position: relative;
+    
+    &::before {
+      content: "";
+      position: absolute;
+      top: 1.5em;
+      right: 1.5em;
+      width: 50px;
+      height: 50px;
+      border-top: 2px solid rgba($golden, 0.5);
+      border-right: 2px solid rgba($golden, 0.5);
+    }
+    
+    &::after {
+      content: "";
+      position: absolute;
+      bottom: 1.5em;
+      left: 1.5em;
+      width: 30px;
+      height: 30px;
+      border-bottom: 2px solid rgba($navy_blue, 0.3);
+      border-left: 2px solid rgba($navy_blue, 0.3);
+    }
+
+    h1 {
+      font-size: 2.5em !important;
+      color: $warm_gray !important;
+      margin: 0.3em 0 0.5em;
+      position: relative;
+      font-weight: 700;
+      line-height: 1.1;
+      padding: 0 10%;
+      
+      &::after {
+        content: "";
+        display: block;
+        width: 120px;
+        height: 3px;
+        background: linear-gradient(90deg, rgba($golden, 0) 0%, $golden 50%, rgba($golden, 0) 100%);
+        margin: 0.5em auto 0;
+        border-radius: 1px;
+      }
+    }
+
+    .subtitle {
+      font-size: 1.3em !important;
+      color: $medium_brown !important;
+      margin: 0.8em auto 1.5em;
+      position: relative;
+      font-weight: 400;
+      max-width: 70%;
+      line-height: 1.4;
+      padding: 0.8em 0;
+    }
+
+    .author {
+      font-size: 1.5em !important;
+      color: $warm_gray !important;
+      margin: 1em 0 0.5em;
+      font-weight: 600;
+    }
+
+    .date {
+      font-size: 1em !important;
+      color: $medium_brown !important;
+      margin: 0.5em 0;
+    }
+  }
+  
+  // Code blocks - Light background for readability
+  pre {
+    background: #f4f4f4 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin: 1em 0 !important;
+    padding: 0 !important;
+    overflow-x: auto !important;
+    border: 1px solid $border_light;
+    
+    code {
+      font-family: $font-family-monospace;
+      font-size: 1.5em !important;
+      line-height: 1.5 !important;
+      color: #2d2a24 !important;
+      padding: 1em 1.2em !important;
+      display: block;
+      white-space: pre;
+      overflow-x: auto;
+      background: transparent;
+    }
+  }
+  
+  // Inline code
+  code {
+    background: rgba($medium_brown, 0.12);
+    color: $navy_blue;
+    padding: 0.2em 0.5em;
+    border-radius: 4px;
+    font-family: $font-family-monospace;
+    font-size: 0.95em !important;
+    font-weight: 600;
+  }
+  
+  a {
+    color: $light_accent;
+    text-decoration: none;
+    border-bottom: 1px solid rgba($light_accent, 0.3);
+    transition: all 0.2s ease;
+    
+    &:hover {
+      color: darken($light_accent, 15%);
+      border-bottom: 1px solid $light_accent;
+    }
+  }
+  
+  .progress {
+    height: 3px;
+    background: rgba(141, 110, 99, 0.1);
+    
+    span {
+      background: linear-gradient(90deg, $medium_brown 0%, $golden 100%);
+    }
+  }
+  
+  .controls {
+    button {
+      color: $medium_brown;
+      
+      &:hover {
+        color: $navy_blue;
+      }
+    }
+  }
+  
+  // Callouts
+  .callout, .callout-note, .callout-tip, .callout-warning {
+    padding: 0.8em 1em;
+    margin: 0.8em 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.85em !important;
+    
+    p {
+      margin: 0;
+    }
+  }
+  
+  .callout-note {
+    background: linear-gradient(90deg, rgba($golden, 0.06) 0%, transparent 100%);
+    border-left: 3px solid $golden;
+  }
+  
+  .callout-tip {
+    border-left-color: #2c7a6e;
+    background: linear-gradient(90deg, rgba(#2c7a6e, 0.06) 0%, transparent 100%);
+  }
+  
+  .callout-warning {
+    border-left-color: #d96c4e;
+    background: linear-gradient(90deg, rgba(#d96c4e, 0.06) 0%, transparent 100%);
+  }
+  
+  // Fixed and Merged Lists
+  ul, ol {
+    margin-left: 2em; 
+    padding-left: 0;
+    margin-bottom: 1em; 
+    
+    li {
+      margin-bottom: 0.5em; 
+      line-height: 1.3;
+      
+      &::marker {
+        color: $golden; 
+      }
+    }
+
+    // Sub-bullets
+    ul, ol {
+      margin-left: 1.5em; 
+      margin-top: 0.5em;
+    }
+  }
+  
+  // Blockquotes
+  blockquote {
+    border-left: 2px solid $golden;
+    padding: 0.8em 1em;
+    margin: 0.8em 0;
+    background: linear-gradient(90deg, rgba($golden, 0.04) 0%, transparent 100%);
+    font-style: italic;
+  }
+  
+  // Details/Challenge blocks
+  details {
+    background: rgba($border_light, 0.3);
+    border-radius: 8px;
+    padding: 0.8em 1.2em;
+    margin: 1em 0;
+    
+    summary {
+      font-weight: 600;
+      color: $light_accent;
+      cursor: pointer;
+      
+      &:hover {
+        color: $golden;
+      }
+    }
+  }
+  
+  // Tables
+  table {
+    margin: 1em auto;
+    font-size: 1em; 
+    border-collapse: collapse;
+    width: 100%; 
+    height: 50%; 
+    table-layout: fixed; 
+    
+    th, td {
+      padding: 0.6em 1em;
+      border-bottom: 1px solid $border_light;
+      text-align: left;
+    }
+    
+    th {
+      background: $warm_gray;
+      color: white;
+      font-weight: 600;
+    }
+  }
+  
+  p { margin: 0.5em 0; }
+  
+  // Zoom indicator
+  .slide-number {
+    position: fixed;
+    bottom: 15px;
+    right: 15px;
+    z-index: 100;
+    background: rgba(255,255,255,0.8);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    color: $medium_brown;
+    font-family: $font-family-sans-serif;
+  }
+
+  // Smooth zoom transitions
+  .slides {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  @media (hover: none) and (pointer: coarse) {
+    .slides {
+      touch-action: pan-y pinch-zoom;
+    }
+  }
+}
+
+// Zoom instruction on slides
+.reveal .slide {
+  &::after {
+    content: "Ctrl + / Ctrl - to zoom";
+    position: fixed;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: monospace;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 100;
+  }
+  
+  &:hover::after {
+    opacity: 0.7;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .reveal {
+    .title-slide h1 { font-size: 2.2em !important; }
+    .title-slide .subtitle { font-size: 1.1em !important; max-width: 80%; }
+    .slide h2 { padding: 0.5em 0.8em; font-size: 1.3em; }
+  }
+}
+
+@media (max-width: 768px) {
+  .reveal {
+    .title-slide {
+      padding: 1.5em 1em !important;
+      h1 { font-size: 1.8em !important; padding: 0 5%; }
+      .subtitle { font-size: 1em !important; max-width: 90%; }
+    }
+    .slide {
+      padding: 0.8em 1em !important;
+      h2 { padding: 0.5em 0.7em; font-size: 1.2em; }
+      h1 { font-size: 1.6em; }
+    }
+  }
+}
+
+// Ensure the body also helps hide UI if Reveal logic delays
+body:has(.title-slide.present) .slide-number,
+body:has(.title-slide.present) .progress {
+  display: none !important;
+  opacity: 0 !important;
+}
+
