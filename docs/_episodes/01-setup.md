@@ -27,7 +27,7 @@ keypoints:
 
 # Setting Up the AI Weather Forecasting Lab
 
-This lesson documents the complete environmental setup and configuration for AI weather forecasting on DGX Spark infrastructure. It is the single source of truth for all configuration — covering GPU verification, container configuration, runtime options, model-specific environments, FGN integration, and the ROMP/MOMP benchmarking pipeline. It is required reading before [Demo 3: Running AI Weather Forecasts](/ai_weather/03-forecast) and [Demo 4: AI Weather Model Scorecard](/ai_weather/04-weather-model).
+This lesson documents the complete environmental setup and configuration for AI weather forecasting on DGX Spark infrastructure. It is the single source of truth for all configuration — covering GPU verification, container configuration, runtime options, model-specific environments, FGN integration, and the ROMP/MOMP benchmarking pipeline. It is required reading before [Demo 3: Running AI Weather Forecasts](/training-program-2026/03-forecast) and [Demo 4: AI Weather Model Scorecard](/training-program-2026/04-weather-model).
 
 > #### Prerequisites
 >
@@ -644,6 +644,6 @@ Every benchmark result should document:
 
 After completing this setup, proceed to:
 
-- **[Demo 3: Running AI Weather Forecasts](/ai_weather/03-forecast)** — Learn how to run AI weather models and generate forecasts.
-- **[Demo 4: AI Weather Model Scorecard](/ai_weather/04-weather-model)** — Learn systematic benchmarking with ROMP/MOMP.
+- **[Demo 3: Running AI Weather Forecasts](/training-program-2026/03-forecast)** — Learn how to run AI weather models and generate forecasts.
+- **[Demo 4: AI Weather Model Scorecard](/training-program-2026/04-weather-model)** — Learn systematic benchmarking with ROMP/MOMP.
 
