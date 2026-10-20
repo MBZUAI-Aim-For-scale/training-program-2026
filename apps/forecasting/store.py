@@ -11,6 +11,7 @@ runners/sync_bucket.py pushes this Spark's runs there and pulls others'.
 from __future__ import annotations
 
 import os
+import sys
 import re
 import time
 from dataclasses import dataclass
