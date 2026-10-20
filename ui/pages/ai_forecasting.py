@@ -91,6 +91,23 @@ def obs_window(init: pd.Timestamp, lead_days: int, run_days: int) -> tuple[int, 
 # ═════════════════════════════════════════════════════════════════════════════
 # Event movies (heat / precipitation)
 # ═════════════════════════════════════════════════════════════════════════════
+def threshold_input(where, kind: str, key: str) -> float | None:
+    """Event threshold: automatic, one of the demo thresholds, or one the participant types."""
+    opts = catalog.HEAT_THRESHOLDS if kind == "heat" else catalog.RAIN_THRESHOLDS
+    unit = "°C" if kind == "heat" else "mm/day"
+    auto = "auto (p95)" if kind == "heat" else "auto (p97.5)"
+    pick = where.selectbox(f"Threshold ({unit})", [auto] + opts, key=key, accept_new_options=True,
+                           help="Days above this count as the event. Pick one of the demo thresholds "
+                                "or type your own; auto uses a high percentile of the observations.")
+    if pick == auto:
+        return None
+    try:
+        return float(pick)
+    except (TypeError, ValueError):
+        where.error(f"“{pick}” isn't a number; using auto.")
+        return None
+
+
 def event_movies(paths: dict, keys: list, init, lead_days, box, region_name, use_case) -> None:
     """Obs-vs-forecast event movie and track map, for the models the user picks."""
     kind, var = ("heat", "t2m") if use_case == "Heat" else ("precip", "tp")
@@ -116,11 +133,7 @@ def event_movies(paths: dict, keys: list, init, lead_days, box, region_name, use
                           index=1 if kind == "heat" else 0,
                           format_func={"mean": "area mean", "max": "area maximum",
                                        "p95": "95th percentile", "p99": "99th percentile"}.get)
-    auto = c3.checkbox("Automatic threshold", value=True, key="forecast_movie_auto",
-                       help="High percentile of the observations (p95 heat, p97.5 rain)")
-    threshold = None if auto else c3.number_input(
-        "Threshold (°C)" if kind == "heat" else "Threshold (mm/day)",
-        value=40.0 if kind == "heat" else 50.0, key="forecast_movie_thr")
+    threshold = threshold_input(c3, kind, key="forecast_movie_thr_" + kind)
     if not picked:
         return
     reqs = {k: movie.request_for(paths[k], catalog.BY_KEY[k].name, kind, init, days, box,

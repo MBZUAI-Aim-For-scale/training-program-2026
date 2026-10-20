@@ -67,6 +67,10 @@ def era5_dates() -> tuple[date, date]:
 
 # Forecast variables every run aims to provide, with the names shown to participants.
 VAR_LABELS = {"tp": "rainfall", "t2m": "2 m temperature", "z500": "500 hPa geopotential (z500)"}
+
+# Event thresholds used across the demos (from Docko Sow); participants can type others
+HEAT_THRESHOLDS = [37, 38, 39, 40, 41, 42, 43, 44, 45]                       # °C, daily max
+RAIN_THRESHOLDS = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]         # mm/day
 RUNNERS_DIR = Path(__file__).resolve().parent.parent / "runners"
 # Model environments inside the container: {ENV_ROOT}/{env}/bin/python
 ENV_ROOT = Path(os.environ.get("DEMO3_ENV_ROOT", "/opt/envs"))
