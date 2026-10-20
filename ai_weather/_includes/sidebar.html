@@ -1,0 +1,40 @@
+<aside class="sidebar-aside">
+  <nav aria-label="Lesson navigation">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Getting Started</div>
+      <div class="sidebar-nav">
+        <a href="{{ '/' | relative_url }}" {% if page.url == '/' %}class="active"{% endif %}>
+          <span class="episode-number">🏠</span> Home
+        </a>
+        <a href="{{ '/setup/' | relative_url }}" {% if page.url contains '/setup/' %}class="active"{% endif %}>
+          <span class="episode-number">⚙️</span> Setup
+        </a>
+      </div>
+    </div>
+    
+    <div class="sidebar-section">
+      <div class="sidebar-title">Lessons</div>
+      <div class="sidebar-nav">
+        {% assign sorted_episodes = site.episodes | sort: 'order' %}
+        {% for episode in sorted_episodes %}
+          <a href="{{ episode.url | relative_url }}" {% if page.url == episode.url %}class="active"{% endif %}>
+            <span class="episode-number">{{ episode.order | default: forloop.index }}.</span>
+            {{ episode.title }}
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+    
+    <div class="sidebar-section">
+      <div class="sidebar-title">Resources</div>
+      <div class="sidebar-nav">
+        <a href="{{ '/reference/' | relative_url }}" {% if page.url contains '/reference/' %}class="active"{% endif %}>
+          <span class="episode-number">📖</span> Reference
+        </a>
+        <a href="{{ '/instructor/' | relative_url }}" {% if page.url contains '/instructor/' %}class="active"{% endif %}>
+          <span class="episode-number">👨‍🏫</span> Instructor Notes
+        </a>
+      </div>
+    </div>
+  </nav>
+</aside>

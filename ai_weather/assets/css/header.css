@@ -1,0 +1,163 @@
+/* ==========================================================================
+header.css  —  Streamlit App Header & Navigation Overrides
+========================================================================== */
+:root {
+  --hdr-font:      'Inter', sans-serif;
+  --hdr-green:     #0a9938;
+  --hdr-fern:      #2e7d32;
+  --hdr-blue:      #213b7d;
+  --hdr-white:     #ffffff;
+  --hdr-ice:       #bfdbfe;
+  --hdr-border:    rgba(255, 255, 255, 0.15);
+  --hdr-offwhite:  #fafafa;
+  --hdr-radius:    0px;
+}
+
+/* Base Wrapper Settings */
+.hdr-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 1rem 0;
+  padding: 10px 1.5rem;
+  background: var(--hdr-blue);
+  border: none;
+  border-top: 4px solid var(--hdr-green);
+  border-bottom: 1px solid var(--hdr-border);
+  border-radius: var(--hdr-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Layout Blocks */
+.hdr-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.hdr-left { display: flex; align-items: center; gap: 16px; }
+.hdr-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.hdr-right-inner { display: flex; align-items: center; gap: 14px; }
+
+/* Branding Elements */
+.hdr-logo {
+  width: 48px; height: 48px; border-radius: 14px;
+  border: 1px solid var(--hdr-border); object-fit: contain;
+  background: var(--hdr-offwhite); padding: 4px; flex-shrink: 0;
+}
+
+.hdr-logo-fallback {
+  width: 48px; height: 48px; border-radius: 8px;
+  border: 1px solid var(--hdr-border); background: var(--hdr-offwhite);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem; flex-shrink: 0;
+}
+
+.hdr-logo-f4a {
+  height: 48px; width: auto; max-width: 130px; border-radius: 10px;
+  border: 1px solid rgba(242, 176, 41, 0.35); object-fit: contain;
+  background: var(--hdr-offwhite); padding: 5px 10px; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(242, 176, 41, 0.10);
+}
+
+/* Typography */
+.hdr-titles { display: flex; flex-direction: column; gap: 1px; }
+
+.hdr-org {
+  font-family: var(--hdr-font); font-size: 0.58rem; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--hdr-green); margin: 0;
+}
+
+.hdr-title {
+  font-family: var(--hdr-font); font-size: 1.2rem; font-weight: 700;
+  color: var(--hdr-white); margin: 0; line-height: 1.25;
+}
+.hdr-title span { color: var(--hdr-ice); }
+
+.hdr-subtitle {
+  font-family: var(--hdr-font); font-size: 0.67rem; color: var(--hdr-ice);
+  margin: 3px 0 0 0; line-height: 1.4; opacity: 0.85;
+}
+
+/* Badges & Status Indicators */
+.hdr-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+
+.hdr-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255, 255, 255, 0.1); border: 1px solid var(--hdr-border);
+  border-radius: 999px; padding: 3px 12px; font-family: var(--hdr-font);
+  font-size: 0.62rem; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--hdr-white); white-space: nowrap;
+}
+
+.hdr-badge-warm {
+  background: rgba(10, 153, 56, 0.15); border: 1px solid rgba(10, 153, 56, 0.4); color: #a7f3d0;
+}
+
+.hdr-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  animation: hdr-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes hdr-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.75); }
+}
+
+/* Navigation Inner Header Block */
+.hdr-nav-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  width: 100%; margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12); gap: 4px;
+}
+
+.hdr-nav-row .stButton > button {
+  background: transparent; border: none; border-radius: 6px;
+  padding: 0.4rem 0.9rem; font-family: var(--hdr-font); font-size: 0.78rem;
+  font-weight: 500; color: rgba(255, 255, 255, 0.75);
+  transition: background 0.15s ease, color 0.15s ease; white-space: nowrap;
+  cursor: pointer; width: auto; justify-content: center;
+}
+
+.hdr-nav-row .stButton > button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1); color: var(--hdr-white);
+}
+
+.hdr-nav-row .stButton > button:focus-visible {
+  outline: 2px solid var(--hdr-white); outline-offset: 2px;
+}
+
+.hdr-nav-row .stButton > button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Active Streamlit Page State */
+.hdr-nav-row .stButton > button[data-testid="baseButton-primary"] {
+  background: var(--hdr-white) !important; color: var(--hdr-blue) !important;
+  font-weight: 600; border-radius: 6px;
+}
+
+.hdr-nav-row .stButton > button[data-testid="baseButton-primary"]:hover {
+  background: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Accessibility & Responsive */
+@media (prefers-reduced-motion: reduce) {
+  .hdr-dot { animation: none; opacity: 1; transform: scale(1); }
+  .hdr-nav-row .stButton > button { transition: none; }
+}
+
+@media (max-width: 768px) {
+  .hdr-wrapper { padding: 10px 1rem !important; }
+  .hdr-top-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .hdr-right { align-items: flex-start; width: 100%; }
+  .hdr-badges { flex-direction: row; flex-wrap: wrap; width: 100%; }
+  .hdr-logo, .hdr-logo-fallback, .hdr-logo-f4a { width: 36px; height: 36px; }
+  .hdr-title { font-size: 1rem; }
+  .hdr-org, .hdr-subtitle { font-size: 0.6rem; }
+  .hdr-nav-row .stButton > button { font-size: 0.7rem; padding: 0.3rem 0.6rem; }
+}
