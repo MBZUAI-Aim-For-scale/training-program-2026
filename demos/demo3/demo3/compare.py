@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import xarray as xr
 
-from . import catalog, obs, onset
+from . import catalog, obs, onset, theme
 from .regions import Box
 from .results import crop
 
@@ -81,8 +81,8 @@ def chart(paths, keys, init, lead_days, box, region_name, var):
         fig.add_scatter(x=mean.time.values, y=mean.values, mode="lines+markers", name=name,
                         line=dict(color=color, width=2))
     obs_name = "CHIRPS" if var == "tp" else "ERA5"
-    want_obs = var == "tp" or st.checkbox("Add ERA5 observations (fetched from the cloud; "
-                                          "a minute or two the first time)", key="cmp_obs")
+    want_obs = var == "tp" or st.checkbox("Add ERA5 observations", key="cmp_obs",
+                                          help="Fetched from the cloud: a minute or two the first time.")
     if want_obs:
         o = _obs_series(box_t, init, lead_days, var)
         if o is not None and o.sizes.get("time", 0):
@@ -94,12 +94,10 @@ def chart(paths, keys, init, lead_days, box, region_name, var):
     fig.update_layout(title=f"{region_name}: {what}", yaxis_title=unit, height=420,
                       margin=dict(l=10, r=10, t=50, b=10), legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(fig, width="stretch", key="compare_chart")
-    if var == "tp":
-        st.caption("Each model's rainfall is put on the CHIRPS grid and averaged over land, so it "
-                   "compares like for like with the observations. Shaded: range across members.")
-    else:
-        st.caption("Daily maximum of the 6-hourly values (models and ERA5 alike). Shaded: range "
-                   "across members.")
+    theme.hint("Shaded: range across members",
+               "Each model's rainfall is put on the CHIRPS grid and averaged over land, so it compares "
+               "like for like with the observations." if var == "tp" else
+               "Daily maximum of the 6-hourly values (models and ERA5 alike).")
 
 
 
@@ -130,7 +128,8 @@ def onset_table(paths, keys, init, lead_days, box, region_name, defn, search_fro
         rows.append(obs_row)
     if not rows:
         return
-    st.markdown(f"**Onset during the forecast** ({defn.name}, searching from {search_from:%-d %b %Y})")
+    st.markdown("**Onset during the forecast**",
+                help=f"{defn.name}, searching from {search_from:%-d %b %Y}. Share of land points "
+                     "(averaged over members for ensembles).")
     st.dataframe(pd.DataFrame(rows, columns=["", "Onset (confirmed)", "Possible onset"]),
                  hide_index=True, width="stretch")
-    st.caption("Share of land points (averaged over members for ensembles).")

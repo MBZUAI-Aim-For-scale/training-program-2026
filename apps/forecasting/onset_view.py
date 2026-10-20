@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 import xarray as xr
 
-from . import catalog, obs, onset
+from . import catalog, obs, onset, theme
 from .regions import Box
 from .results import crop
 from .store import OUTPUT_DIR
@@ -29,16 +29,15 @@ def pick_definition(region_name: str, key: str = "onset") -> onset.Definition:
     default = onset.default_definition(region_name)
     c1, c2 = st.columns([2, 3])
     k = c1.selectbox("Onset definition", keys, index=keys.index(default), key=f"{key}_def",
-                     format_func=lambda k: f"{onset.DEFINITIONS[k].name}  ·  {onset.DEFINITIONS[k].home}")
+                     format_func=lambda k: f"{onset.DEFINITIONS[k].name}  ·  {onset.DEFINITIONS[k].home}",
+                     help=f"The usual choice for {region_name} is {onset.DEFINITIONS[default].name}.")
     d = onset.DEFINITIONS[k]
-    if k != default:
-        c2.caption(f"ⓘ The usual choice for {region_name} is "
-                   f"{onset.DEFINITIONS[default].name}.")
     if d.spell_mm is None and region_name not in onset.MR_REGIONS:
         c2.warning(f"{d.name} uses local wet-spell amounts that ROMP provides for India only; "
                    f"points outside that grid get no onset. Set a fixed amount below to use it "
                    f"for {region_name}.")
-    with st.expander("Adjust the definition"):
+    with st.expander("Definition details"):
+        rule = st.empty()
         a, b, c = st.columns(3)
         wet = a.number_input("Wet day: at least (mm)", 0.1, 10.0, d.wet_day_mm, 0.1, key=f"{key}_wet_{k}")
         n = a.number_input("Wet spell length (days)", 1, 10, d.spell_days, key=f"{key}_n_{k}")
@@ -61,7 +60,7 @@ def pick_definition(region_name: str, key: str = "onset") -> onset.Definition:
         out = onset.custom(out, spell_mm=amt)
     if out != d:
         out = onset.custom(out, name=f"{d.name} (adjusted)")
-    st.caption(f"**{out.name}:** {out.describe()} {d.note}")
+    rule.caption(f"**{out.name}:** {out.describe()} {d.note}")
     return out
 
 
@@ -164,48 +163,67 @@ def _prob_figure(f_on, init_day, land, box, n_days):
     return fig
 
 
+OBS_C, FC_C, OBS_LINE = "#9ca3af", "#2563eb", "#111827"
+MEMBER_C = ["#2563eb", "#7c3aed", "#0891b2"]
+
+
 def _series_figure(r, defn, search_from, region_name, point_label):
+    """Area-mean daily rain: observed season so far (grey), forecast (blue), observed during
+    the forecast (black line). Opens on the last 30 days plus the forecast; drag to see more."""
     ser, a_obs = r["a_ser"], r["a_obs"]
-    init_day = r["init_day"]
-    fig = go.Figure()
+    init_day, fc_end = r["init_day"], r["fc_end"]
     times = pd.DatetimeIndex(ser.time.values)
     past = times < init_day
     first = ser.isel(ensemble=0) if "ensemble" in ser.dims else ser
-    fig.add_bar(x=times[past], y=first.values[past], name="Observed (CHIRPS)", marker_color=GREY)
+    fig = go.Figure()
+    fig.add_vrect(x0=init_day - pd.Timedelta(hours=12), x1=fc_end + pd.Timedelta(hours=12),
+                  fillcolor=FC_C, opacity=0.06, line_width=0, layer="below")
+    fig.add_annotation(x=init_day, y=0.98, yref="paper", xanchor="left", yanchor="top", showarrow=False,
+                       text=" Forecast", font=dict(size=11, color="#374151"))
+    fig.add_bar(x=times[past], y=first.values[past], name="Observed (CHIRPS)", marker_color=OBS_C,
+                hovertemplate="%{y:.1f} mm<extra>Observed</extra>")
     if "ensemble" in ser.dims and ser.sizes["ensemble"] > 1:
-        for e in ser.ensemble.values:
-            fig.add_scatter(x=times[~past], y=ser.sel(ensemble=e).values[~past], mode="lines+markers",
-                            name=f"Forecast member {int(e) + 1}", line=dict(width=1.5))
+        for i, e in enumerate(ser.ensemble.values):
+            fig.add_scatter(x=times[~past], y=ser.sel(ensemble=e).values[~past], mode="lines",
+                            name=f"Forecast, member {int(e) + 1}",
+                            line=dict(width=2, color=MEMBER_C[i % len(MEMBER_C)]),
+                            hovertemplate="%{y:.1f} mm<extra>" + f"member {int(e) + 1}</extra>")
     else:
-        fig.add_bar(x=times[~past], y=first.values[~past], name="Forecast", marker_color="#2563eb")
+        fig.add_bar(x=times[~past], y=first.values[~past], name="Forecast", marker_color=FC_C,
+                    hovertemplate="%{y:.1f} mm<extra>Forecast</extra>")
     if a_obs is not None:
-        after = a_obs.sel(time=slice(init_day, None))
-        if after.sizes["time"]:
-            fig.add_scatter(x=after.time.values, y=after.values, mode="markers", name="Observed (after start)",
-                            marker=dict(color="black", symbol="circle-open", size=8))
-    if np.isfinite(r["a_thr"]):
-        fig.add_hline(y=r["a_thr"] / defn.spell_days, line_dash="dot", line_color="#6b7280",
-                      annotation_text=f"wet-spell amount ÷ {defn.spell_days} days", annotation_position="top left")
-    marks = [(search_from, "search starts", "#6b7280"), (init_day, "forecast starts", "#111827")]
-    for name, on, color in (("observed onset", r["a_o"], "black"), ("forecast onset", r["a_f"], "#2563eb")):
+        during = a_obs.sel(time=slice(init_day, fc_end))
+        if during.sizes["time"]:
+            fig.add_scatter(x=during.time.values, y=during.values, mode="lines+markers",
+                            name="Observed during the forecast", line=dict(color=OBS_LINE, width=2),
+                            marker=dict(size=8, color=OBS_LINE),
+                            hovertemplate="%{y:.1f} mm<extra>Observed</extra>")
+    # onset dates: dashed lines on the chart, the dates themselves in the legend
+    for label, on, color in (("Observed onset", r["a_o"], OBS_LINE), ("Forecast onset", r["a_f"], FC_C)):
         if on is None:
             continue
-        vals = on.onset.values.ravel()
-        stats = on.status.values.ravel()
-        for v, s in zip(vals, stats):
-            if s > 0:
-                marks.append((pd.Timestamp(v), name + (" (possible)" if s == onset.POSSIBLE else ""), color))
-    seen = set()
-    for x, text, color in marks:
-        label = text if text not in seen else None
-        seen.add(text)
-        fig.add_vline(x=x, line_dash="dash" if "onset" in text else "solid", line_color=color, line_width=1)
-        if label:
-            fig.add_annotation(x=x, y=1.02, yref="paper", text=label, showarrow=False,
-                               font=dict(size=10, color=color), textangle=-30, xanchor="left")
-    fig.update_layout(title=f"{region_name}: {point_label} daily rainfall", yaxis_title="mm/day",
-                      height=420, barmode="overlay", margin=dict(l=10, r=10, t=70, b=10),
-                      legend=dict(orientation="h", y=-0.15))
+        hits = [(pd.Timestamp(v), st_) for v, st_ in zip(on.onset.values.ravel(), on.status.values.ravel()) if st_ > 0]
+        for x, st_ in hits[:1]:
+            fig.add_vline(x=x, line_dash="dash", line_color=color, line_width=1.5)
+            fig.add_scatter(x=[None], y=[None], mode="lines", line=dict(color=color, dash="dash", width=1.5),
+                            name=f"{label}: {x:%-d %b}" + (" (possible)" if st_ == onset.POSSIBLE else ""))
+        if not hits:
+            fig.add_scatter(x=[None], y=[None], mode="lines", line=dict(color=color, dash="dash", width=1.5),
+                            name=f"{label}: none yet", visible="legendonly")
+    view_start = max(pd.Timestamp(search_from), init_day - pd.Timedelta(days=30))
+    # y range from what's in view (not the whole season), so the forecast isn't squashed
+    shown = [ser.sel(time=slice(view_start, fc_end))]
+    if a_obs is not None:
+        shown.append(a_obs.sel(time=slice(view_start, fc_end)))
+    top = max(float(np.nanmax(x.values)) if x.size and np.isfinite(x.values).any() else 0 for x in shown)
+    fig.update_layout(
+        title=dict(text=f"{region_name}: {point_label} daily rainfall over land", x=0, font=dict(size=15)),
+        yaxis_title="mm/day", height=400, bargap=0.15, barmode="overlay", hovermode="x unified",
+        margin=dict(l=55, r=15, t=80, b=45), plot_bgcolor="white",
+        legend=dict(orientation="h", y=1.02, yanchor="bottom", x=0, font=dict(size=11)),
+        xaxis=dict(range=[view_start - pd.Timedelta(hours=12), fc_end + pd.Timedelta(days=1)],
+                   showgrid=False, linecolor="#d1d5db"),
+        yaxis=dict(gridcolor="#f1f5f9", zeroline=False, range=[0, max(1.0, top * 1.2)]))
     return fig
 
 
@@ -259,11 +277,13 @@ def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, 
     if obs_last is not None and obs_last < init_day - pd.Timedelta(days=1):
         st.warning(f"CHIRPS currently ends on {obs_last:%-d %b %Y}, so the days from then until the "
                    f"forecast starts have no rainfall; an onset in that gap can't be found.")
+    possible_help = "Wet spell during the forecast; its dry-spell check runs past the data."
     if defn.needs_after > n_days:
-        st.caption(f"ⓘ Confirming onset needs {defn.needs_after} days of rain after a wet spell starts "
-                   f"(the {defn.spell_days}-day spell plus the {defn.dry_window}-day dry-spell check); "
-                   f"the forecast covers {n_days}. Wet spells whose check runs past the forecast are "
-                   "shown as **possible onset**.")
+        possible_help += (f" Confirming onset needs {defn.needs_after} days of rain after a wet spell "
+                          f"starts (the {defn.spell_days}-day spell plus the {defn.dry_window}-day "
+                          f"dry-spell check); the forecast covers {n_days}.")
+    share_note = (" Shares are of land points in the plot area"
+                  + (", where the local wet-spell amounts exist." if defn.spell_mm is None else "."))
 
     f_on, o_on, land = r["f_on"], r["o_on"], r["land"]
     ens = "ensemble" in f_on.dims and f_on.sizes["ensemble"] > 1
@@ -278,18 +298,16 @@ def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, 
     during = (fday >= 1) & (one.status == onset.CONFIRMED) & land
     cols = st.columns(4)
     cols[0].metric("Onset before the forecast", f"{_land_share(before, land):.0f}%",
-                   help="Share of land points where observed rain already met the definition")
+                   help="Observed rain already met the definition." + share_note)
     cols[1].metric("Forecast onset (confirmed)", f"{_land_share(during, land):.0f}%",
-                   help="Onset during the forecast with the full dry-spell check passed")
+                   help="Onset during the forecast with the full dry-spell check passed." + share_note)
     cols[2].metric("Possible onset", f"{_land_share(fposs, land):.0f}%",
-                   help="Wet spell during the forecast; its dry-spell check runs past the data")
+                   help=possible_help + share_note)
     if o_on is not None:
         oday, oposs = _day_field(o_on, init_day, land)
         o_during = (oday >= 1) & (oday <= n_days)
         cols[3].metric("Observed onset in these days", f"{_land_share(o_during, land):.0f}%",
-                       help=f"From CHIRPS (up to {obs_last:%-d %b %Y})")
-    st.caption("Shares are of land points in the plot area (the country plus a margin)"
-               + (", where the local wet-spell amounts exist." if defn.spell_mm is None else "."))
+                       help=f"From CHIRPS (up to {obs_last:%-d %b %Y})." + share_note)
 
     if ens and pick == "chance of onset":
         a, b = st.columns(2)
@@ -302,14 +320,16 @@ def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, 
         st.pyplot(_maps_figure((fday, fposs), right, box, n_days,
                                [f"Forecast onset: {m.name}" + (f" ({pick})" if ens else ""),
                                 f"Observed onset (CHIRPS, to {obs_last:%-d %b})"], init_day))
-    st.caption("Grey: onset (or a wet spell still awaiting its dry-spell check) before the forecast "
-               "started. Hatched: possible onset during the forecast (its dry-spell check runs past the "
-               "data). White: no onset yet.")
+    theme.hint("Grey: before the forecast · Hatched: possible onset · White: no onset yet",
+               "Grey: onset (or a wet spell still awaiting its dry-spell check) before the forecast "
+               "started. Hatched: possible onset during the forecast (its dry-spell check runs past "
+               "the data).")
 
     st.plotly_chart(_series_figure(r, defn, search_from, region_name, "area-mean"), width="stretch",
                     key=f"onset_series_{key}")
-    st.caption("Onset on the area-mean rainfall, for illustration; the maps apply the definition "
-               "at every grid point.")
+    theme.hint(f"Drag left to see the season from {search_from:%-d %b}",
+               "Opens on the last 30 days before the forecast. Onset dates here use the area-mean "
+               "rainfall, for illustration; the maps apply the definition at every grid point.")
 
 
 def movie_path(path, box: Box, defn, init, lead_days) -> Path:

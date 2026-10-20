@@ -1,4 +1,8 @@
-"""AIFS Single v2.0 (ECMWF) via Earth2Studio, initialized from IFS analyses (ECMWF open data on AWS)."""
+"""AIFS Single v2.0 (ECMWF) via Earth2Studio.
+
+Starting conditions: ECMWF open data (IFS analyses) from 13 May 2026, when it has every
+input AIFS v2 needs; before that (00Z, 2000-2025), ocean-wave fields from the ECMWF wave
+dataset plus everything else from ARCO ERA5 (see wave_source.py)."""
 from _e2s import run_e2s
 
 
@@ -9,7 +13,6 @@ SOURCE = os.environ.get("DEMO3_IFS_SOURCE", "aws")
 
 
 def run(init, lead_hours, members, report):
-    from earth2studio.data import IFS
     from earth2studio.models.px import AIFS2
-    # ECMWF open-data GRIB downloads can be slow; the default 600 s timeout is too short.
-    return run_e2s(AIFS2, IFS(source=SOURCE, async_timeout=3600), init, lead_hours, 1, report)
+    from wave_source import source_for
+    return run_e2s(AIFS2, source_for(init, SOURCE), init, lead_hours, 1, report)

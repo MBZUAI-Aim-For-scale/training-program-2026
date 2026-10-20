@@ -60,6 +60,7 @@ h1, h2, h3, h4 {{ color: {INK}; }}
 .d3-card .n {{ font-weight: 700; color: {INK}; font-size: 1.02rem; }}
 .d3-card .o {{ color: {MUTED}; font-size: .85rem; margin: 2px 0 8px; }}
 .d3-card .t {{ color: {MUTED}; font-size: .8rem; margin-top: 8px; }}
+.d3-card[title] {{ cursor: help; }}
 
 .d3-tag {{ display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .06em;
   border-radius: 6px; padding: 3px 8px; margin-right: 6px; text-transform: uppercase; }}
@@ -117,16 +118,22 @@ def tag(text: str, kind: str) -> str:
 
 
 def cards(items: list[dict]) -> None:
-    """items: name, org, tags (html), note, color, selected, dim"""
+    """items: name, org, tags (html), note, tip (shown on hover), color, selected, dim"""
     html = ""
     for it in items:
         cls = "d3-card" + (" sel" if it.get("selected") else "") + (" dim" if it.get("dim") else "")
-        html += (f'<div class="{cls}" style="--c:{it["color"]}"><div class="n">{escape(it["name"])}</div>'
-                 f'<div class="o">{escape(it["org"])}</div>{it["tags"]}'
-                 f'<div class="t">{escape(it.get("note", ""))}</div></div>')
+        tip = f' title="{escape(it["tip"])}"' if it.get("tip") else ""
+        note = f'<div class="t">{escape(it["note"])}</div>' if it.get("note") else ""
+        html += (f'<div class="{cls}" style="--c:{it["color"]}"{tip}><div class="n">{escape(it["name"])}</div>'
+                 f'<div class="o">{escape(it["org"])}</div>{it["tags"]}{note}</div>')
     st.markdown(f'<div class="d3-cards">{html}</div>', unsafe_allow_html=True)
 
 
 def pills(items: list[tuple[str, str]]) -> None:
     html = "".join(f'<div class="d3-pill">{escape(k)}: <b>{escape(v)}</b></div>' for k, v in items)
     st.markdown(f'<div class="d3-pills">{html}</div>', unsafe_allow_html=True)
+
+
+def hint(label: str, text: str, where=st) -> None:
+    """A short grey line whose details show when hovering its ⓘ."""
+    where.caption(label, help=text)

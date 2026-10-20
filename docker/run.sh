@@ -1,4 +1,4 @@
-i#!/usr/bin/env bash
+#!/usr/bin/env bash
 # docker build -t ai_weather -f docker/Dockerfile .
 # Start forecasting and benchmarking Demos on a Spark from the image built by docker/Dockerfile.
 #
@@ -25,6 +25,15 @@ container_exists() {
 start_container() {
   code=()
   [ "${DEV:-0}" = 1 ] && code=(-v "$here:/app")
+  # Shared runs (optional): DEMO3_BUCKET=gs://<bucket>/demo3; DEMO3_GCP_KEY=<service-account.json> to push
+  cloud=(-e DEMO3_BUCKET="${DEMO3_BUCKET:-}")
+  # Credentials: a service-account key, else this user's `gcloud auth application-default login`
+  ADC="$HOME/.config/gcloud/application_default_credentials.json"
+  if [ -n "${DEMO3_GCP_KEY:-}" ]; then
+    cloud+=(-v "$DEMO3_GCP_KEY:/run/gcp-key.json:ro" -e GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-key.json)
+  elif [ -f "$ADC" ]; then
+    cloud+=(-v "$ADC:/run/gcp-adc.json:ro" -e GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-adc.json)
+  fi
 
   if container_exists; then
     echo "Removing existing container: ai_weather"
@@ -34,7 +43,7 @@ start_container() {
   docker run -d --name ai_weather --restart unless-stopped \
     --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
     -p 127.0.0.1:8501:8501 \
-    "${code[@]}" -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
+    "${code[@]}" "${cloud[@]}" -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
     -e DEMO_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
     ai_weather
 

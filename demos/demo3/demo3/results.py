@@ -57,9 +57,9 @@ def requirements(m: catalog.Model, timings: dict, output_dir: Path) -> None:
     st.caption(f"**Inputs:** {m.inputs}")
     mem, total, disk = spark_now(output_dir)
     st.caption(f"**This Spark right now:** {mem:.0f} GB of {total or SPARK_MEMORY_GB:.0f} GB memory free · "
-               f"{disk:,.0f} GB disk free. (This changes with whatever else is running or stored; "
-               "the figures above don't.)" if mem is not None else
-               f"**This Spark right now:** {disk:,.0f} GB disk free.")
+               f"{disk:,.0f} GB disk free" if mem is not None else
+               f"**This Spark right now:** {disk:,.0f} GB disk free",
+               help="Changes with whatever else is running or stored; the figures above don't.")
 
 
 def _stages(path: str, m: catalog.Model, timings: dict) -> tuple[dict, bool]:
@@ -87,24 +87,23 @@ def pipeline(path: str, full: xr.Dataset, m: catalog.Model, timings: dict) -> No
     out_mb = s.get("output_mb") or round(Path(path).stat().st_size / 1e6, 1)
     peak = s.get("peak_gpu_gb")
     c = st.columns(4)
-    c[0].metric("1 · Load model weights", fmt(s.get("load_s")))
-    c[0].caption(f"Read {_size(m.weights_gb)} of trained weights from the Spark's disk into GPU "
-                 "memory (downloaded from the developer once, on the first run).")
-    c[1].metric("2 · Get and prepare inputs", fmt(fetch_s) if fetch_s is not None else "in step 3")
-    c[1].caption(f"Download the starting conditions and put them in the exact form the model "
-                 f"expects. {m.inputs}")
-    c[2].metric("3 · Run the model", fmt(run_s))
-    c[2].caption(f"{steps} steps of 6 h" + (f" × {members} members" if members > 1 else "")
-                 + (f", {per_step}" if per_step else "") + "; each step feeds the next."
-                 + (f" Peak GPU memory {peak:g} GB of {SPARK_MEMORY_GB} GB." if peak else "")
-                 + (" The first step includes compiling the model for the GPU (often over a "
-                    "minute), so short forecasts look slower per step." if m.env in JAX_ENVS else ""))
-    c[3].metric("4 · Post-process and save", fmt(s.get("post_s")))
-    c[3].caption(f"Convert units (rain into 6-hour totals in mm, temperature in K, z500 in "
-                 f"m² s⁻²), add metadata and save as NetCDF ({out_mb:g} MB).")
-    if not measured:
-        st.caption("Timings are this model's typical values on the Spark (this saved run was "
-                   "made before per-run timings were recorded).")
+    c[0].metric("1 · Load model weights", fmt(s.get("load_s")),
+                help=f"Read {_size(m.weights_gb)} of trained weights from the Spark's disk into GPU "
+                     "memory (downloaded from the developer once, on the first run).")
+    c[1].metric("2 · Get and prepare inputs", fmt(fetch_s) if fetch_s is not None else "in step 3",
+                help=f"Download the starting conditions and put them in the exact form the model "
+                     f"expects. {m.inputs}")
+    c[2].metric("3 · Run the model", fmt(run_s),
+                help=f"{steps} steps of 6 h" + (f" × {members} members" if members > 1 else "")
+                     + (f", {per_step}" if per_step else "") + "; each step feeds the next."
+                     + (f" Peak GPU memory {peak:g} GB of {SPARK_MEMORY_GB} GB." if peak else "")
+                     + (" The first step includes compiling the model for the GPU (often over a "
+                        "minute), so short forecasts look slower per step." if m.env in JAX_ENVS else ""))
+    c[3].metric("4 · Post-process and save", fmt(s.get("post_s")),
+                help=f"Convert units (rain into 6-hour totals in mm, temperature in K, z500 in "
+                     f"m² s⁻²), add metadata and save as NetCDF ({out_mb:g} MB).")
+    st.caption("Hover over ⓘ for what each step does."
+               + ("" if measured else " Timings are this model's typical values on the Spark."))
 
 
 # ── forecast maps ────────────────────────────────────────────────────────────

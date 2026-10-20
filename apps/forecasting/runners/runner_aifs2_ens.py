@@ -1,4 +1,6 @@
-"""AIFS ENS v2 (ECMWF) via Earth2Studio, initialized from IFS analyses (ECMWF open data).
+"""AIFS ENS v2 (ECMWF) via Earth2Studio, initialized from IFS analyses (ECMWF open data)
+from 13 May 2026, or for 00Z starts in 2000-2025 from the ECMWF wave dataset plus ARCO
+ERA5 (see wave_source.py).
 
 Members come from the model's own noise conditioning: each member is a separate
 rollout from the same initial state, with no initial-condition perturbation."""
@@ -11,7 +13,6 @@ SOURCE = os.environ.get("DEMO3_IFS_SOURCE", "aws")
 
 
 def run(init, lead_hours, members, report):
-    from earth2studio.data import IFS
     from earth2studio.models.px import AIFS2ENS
-    return run_e2s(AIFS2ENS, IFS(source=SOURCE, async_timeout=3600), init, lead_hours, members,
-                   report, ensemble=True)
+    from wave_source import source_for
+    return run_e2s(AIFS2ENS, source_for(init, SOURCE), init, lead_hours, members, report, ensemble=True)

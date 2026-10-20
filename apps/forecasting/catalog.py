@@ -21,6 +21,29 @@ IFS_OPEN = "IFS analysis (ECMWF Open Data)"
 IFS_MIN, IFS_MAX = date(2024, 3, 1), date.today() - timedelta(days=2)
 # ECMWF open data has every input AIFS v2 needs (incl. 10 hPa levels) only from this date.
 AIFS2_MIN = date(2026, 5, 13)
+# Before that, AIFS v2 starts from the ECMWF wave dataset (ocean-wave inputs, 00Z, 2000-2025;
+# copied to the shared bucket) plus ARCO ERA5 for everything else.
+WAVE_MIN, WAVE_MAX = date(2000, 1, 1), date(2025, 12, 31)
+WAVE_BUCKET = os.environ.get("DEMO3_WAVE_BUCKET", "gs://aim4scale_training_2026/wave/n320")
+WAVE_DIR = Path(os.environ.get("DEMO3_WAVE_DIR", Path.home() / ".cache" / "wave"))
+
+
+@functools.lru_cache(maxsize=1)
+def _wave_days(_bucket_minute: int) -> frozenset:
+    """Days whose wave inputs are on this Spark or in the bucket (listing refreshed every 10 min)."""
+    days = {p.name[5:13] for p in WAVE_DIR.glob("wave_*T00.nc")}
+    try:
+        import fsspec
+        fs, root = fsspec.core.url_to_fs(WAVE_BUCKET)
+        days |= {p.rsplit("/", 1)[-1][5:13] for p in fs.ls(root, detail=False) if p.endswith("T00.nc")}
+    except Exception:
+        pass
+    return frozenset(days)
+
+
+def wave_ready(day: date) -> bool:
+    import time as _time
+    return f"{day:%Y%m%d}" in _wave_days(int(_time.time() // 600))
 # Google's ARCO ERA5 copy: Earth2Studio serves it up to `valid_time_stop` (final ERA5, about
 # 3 months behind); the preliminary ERA5T part runs to `valid_time_stop_era5t` (about a week
 # behind) and is what the event movie's observations can use. Both move forward over time.
@@ -90,17 +113,18 @@ class Model:
             return (f"{self.name} starts from ERA5 (Google's copy), which is available up to "
                     f"{hi:%-d %b %Y} (it runs about 3 months behind real time).")
         if self.key.startswith("aifs2"):
-            return (f"ECMWF's open data has every input AIFS v2 needs only from {lo:%-d %b %Y}, "
-                    "and it is current to 2 days ago.")
+            return ("AIFS v2 needs ocean-wave inputs: for 00Z starts from 2000 to 2025 they come from "
+                    "the ECMWF wave dataset (the rest from ERA5); from 13 May 2026, everything comes "
+                    "from ECMWF's open data (current to 2 days ago). 1 Jan – 12 May 2026 isn't covered.")
         return (f"{self.name} starts from ECMWF open data, available from {lo:%-d %b %Y} "
                 "to 2 days ago.")
 
 
 MODELS: list[Model] = [
     Model("aifs2_single", "AIFS Single v2.0", "ECMWF", "deterministic", IFS_OPEN, "e2s018",
-          max_lead_days=15, init_min=AIFS2_MIN, init_max=IFS_MAX,
-          notes="Starts from ECMWF's IFS analyses. ECMWF's open data has every input AIFS v2 "
-                "needs only from 13 May 2026, so earlier start dates aren't available.",
+          max_lead_days=15, init_min=WAVE_MIN, init_max=IFS_MAX,
+          notes="From 13 May 2026 it starts from ECMWF's IFS analyses (open data). For 00Z starts "
+                "in 2000–2025 it starts from the ECMWF wave dataset plus ERA5.",
           weights_gb=1.0, output_mb_10d=262,
           inputs="ECMWF's IFS analysis at the start time and 6 h before: surface, soil and 14 pressure-level fields, interpolated from the 0.25° grid onto the model's own (N320) grid."),
     Model("graphcast", "GraphCast", "Google DeepMind", "deterministic", ARCO_ERA5, "graphcast",
@@ -113,9 +137,9 @@ MODELS: list[Model] = [
           inputs='ERA5 at the start time and 6 h before: 5 atmospheric variables on 13 pressure levels plus 4 surface fields, on the 0.25° grid. The model steps one hour at a time.'),
     Model("aifs2_ens", "AIFS ENS v2", "ECMWF", "ensemble", IFS_OPEN, "e2s018ens",
           max_lead_days=15, max_members=3, default_members=2, slow=True,
-          init_min=AIFS2_MIN, init_max=IFS_MAX,
-          notes="Starts from ECMWF's IFS analyses. ECMWF's open data has every input AIFS v2 "
-                "needs only from 13 May 2026, so earlier start dates aren't available.",
+          init_min=WAVE_MIN, init_max=IFS_MAX,
+          notes="From 13 May 2026 it starts from ECMWF's IFS analyses (open data). For 00Z starts "
+                "in 2000–2025 it starts from the ECMWF wave dataset plus ERA5.",
           weights_gb=2.4, output_mb_10d=795,
           inputs="ECMWF's IFS analysis at the start time and 6 h before: surface, soil and 14 pressure-level fields, interpolated onto the model's own (N320) grid. Each member adds its own random noise."),
     Model("atlas_crps", "Atlas CRPS", "NVIDIA", "ensemble", ARCO_ERA5, "e2s018",
@@ -169,6 +193,17 @@ def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
                              f"{lo:%-d %b %Y} to {hi:%-d %b %Y}. {m.date_reason()}"))
     if init.hour not in (0, 12):
         out.append(("error", "Forecasts start at 00Z or 12Z."))
+    if m.key.startswith("aifs2") and lo <= init.date() < AIFS2_MIN:
+        if init.date() > WAVE_MAX:
+            out.append(("error", f"{m.name} can't start between 1 Jan and 12 May 2026: the ECMWF wave "
+                                 "dataset ends in 2025 and ECMWF's open data has every input only "
+                                 "from 13 May 2026."))
+        elif init.hour != 0:
+            out.append(("error", f"Before 13 May 2026, {m.name} starts from the ECMWF wave dataset, "
+                                 "which has 00Z starts only. Choose 00Z."))
+        elif not wave_ready(init.date()):
+            out.append(("error", f"The ocean-wave inputs {m.name} needs for {init:%-d %b %Y} aren't in "
+                                 "the shared bucket yet (they are being copied from DSI)."))
     if lead_days > m.max_lead_days:
         out.append(("error", f"{m.name} forecasts at most {m.max_lead_days} days ahead."))
     if m.kind == "deterministic" and members != 1:
