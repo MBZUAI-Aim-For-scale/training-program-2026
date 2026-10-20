@@ -10,11 +10,11 @@ author: "HCWF"
 
 # --- URLs ---
 # Update these for your actual deployment
-url: "https://mesfindiro.github.io"
-baseurl: "/ai_weather"  
+url: "https://mbzuai-aim-for-scale.github.io"
+baseurl: "/training-program-2026"  
 
 # --- Repository ---
-repository: "mesfindiro/ai_weather"
+repository: "MBZUAI-Aim-For-scale/training-program-2026"
 
 # --- Build Settings ---
 markdown: kramdown
