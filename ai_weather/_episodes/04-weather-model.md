@@ -570,11 +570,20 @@ A reliability diagram plots the forecast probability (x) against how often the e
 - **Skill Degradation with Lead Time**: AUC falls from 0.85 (Days 1–5) to 0.53 (Days 11–15) and sits at `0.50` throughout Days 16–30, indicating no discrimination skill beyond random chance at longer lead times.
 - **Reliability Bias**: The ensemble is overconfident. It assigns near-zero probabilities to events that occur ~8 % of the time and gives high probabilities (~0.96) to events that occur only ~80 % of the time.
 
-**Recommended Next Steps:**
 
-1. Apply ensemble calibration (e.g., Isotonic Distributional Regression (IDR), or EMOS) to correct the under-forecasting bias.
-2. Review onset detection thresholds and rainfall accumulation logic in the AIFS-ENS post-processing pipeline.
-3. Investigate whether specific initialization dates or sub-regions are driving the bulk of the negative skill.
+## Composite Metric Plots
+
+Composite plots condense many runs into one figure so models, windows and metrics can be compared at a glance:
+
+- **Portrait panel (Figure 6)**: Δ MAE, Δ FAR and Δ MR for each deterministic model and window, relative to climatology.
+- **Skill heatmaps (Figure 7)**: BSS and AUC per 5-day lead bin for probabilistic models.
+- **Extension**: the same layout can be repeated across wet-spell thresholds, dry-spell thresholds or regions, which is how the package supports the goal of comparing models across location, thresholds and lead time.
+
+> #### Reading Composite Plots
+> 
+> Read composite plots with care. They hide the spatial detail in the maps and the sample size behind each cell.
+{: .tip}
+
 
 ## Preliminary Model Results
 
