@@ -59,7 +59,6 @@ By the end of this lesson, you will be able to:
 | Running ROMP Benchmarks | Command-line execution and output structure |
 | Deterministic Evaluation | Worked example with maps and skill vs. climatology |
 | Probabilistic Evaluation | Worked example with skill scores and reliability |
-| Calibration with IDR | Diagnosing and improving probabilities |
 | Composite Metric Plots | Summarising many results at once |
 | Preliminary Model Results | Reference results to replicate and investigate |
 | Best Practices and Troubleshooting | Making benchmarks defensible and fixing failures |
@@ -576,51 +575,6 @@ A reliability diagram plots the forecast probability (x) against how often the e
 1. Apply ensemble calibration (e.g., Isotonic Distributional Regression (IDR), or EMOS) to correct the under-forecasting bias.
 2. Review onset detection thresholds and rainfall accumulation logic in the AIFS-ENS post-processing pipeline.
 3. Investigate whether specific initialization dates or sub-regions are driving the bulk of the negative skill.
-
-## Calibration with IDR
-
-Isotonic Distributional Regression (IDR) is a non-parametric post-processing method. It learns a monotone mapping from the raw ensemble forecast to a calibrated predictive distribution, using past forecast-observation pairs. Because the mapping is monotone, a higher raw signal never produces a lower probability.
-
-### What IDR Can and Cannot Do
-
-| IDR can | IDR cannot |
-| --- | --- |
-| Correct systematic overconfidence and bias in probabilities | Create discrimination that the raw ensemble does not have |
-| Improve reliability, and often BSS and RPSS | Rescue a lead time where AUC is already ≈ 0.5 |
-| Work without assuming a fixed distribution shape | Work well with very few training samples |
-
-### How to Diagnose Its Effect
-
-Compare raw and calibrated forecasts on the same verification data:
-
-- **Reliability diagram**: the curve should move toward the 1:1 line.
-- **BSS and RPSS**: these should increase where the raw forecasts were overconfident.
-- **AUC**: this should change little. A large change suggests a problem in the workflow.
-- **Sample size**: check error bars and the number of forecasts per bin.
-
-### Avoiding Over-Optimistic Results
-
-- Train and test on different years (e.g., leave-one-year-out cross-validation). Calibrating and scoring on the same years overstates skill.
-- Calibrate per lead-time bin, since the error structure changes with lead time.
-- Report both raw and calibrated scores.
-
-> #### Apply to This Lesson
-> 
-> In Days 1–15 the raw AIFS-ENS is overconfident but has real discrimination (AUC 0.85 in Days 1–5), so calibration is likely to help. In Days 16–30, AUC is 0.5, so calibration should not be expected to add skill.
-{: .tip}
-
-## Composite Metric Plots
-
-Composite plots condense many runs into one figure so models, windows and metrics can be compared at a glance:
-
-- **Portrait panel (Figure 6)**: Δ MAE, Δ FAR and Δ MR for each deterministic model and window, relative to climatology.
-- **Skill heatmaps (Figure 7)**: BSS and AUC per 5-day lead bin for probabilistic models.
-- **Extension**: the same layout can be repeated across wet-spell thresholds, dry-spell thresholds or regions, which is how the package supports the goal of comparing models across location, thresholds and lead time.
-
-> #### Reading Composite Plots
-> 
-> Read composite plots with care. They hide the spatial detail in the maps and the sample size behind each cell.
-{: .tip}
 
 ## Preliminary Model Results
 
