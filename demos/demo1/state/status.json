@@ -1,0 +1,85 @@
+{
+ "pid": 1210606,
+ "args": [
+  "run",
+  "--host-only",
+  "--no-dashboard"
+ ],
+ "started": 1792601293.184149,
+ "finished": 1792601293.3878357,
+ "state": "failed",
+ "steps": [
+  {
+   "id": "host.gpu",
+   "group": "demo1",
+   "title": "GPU visible to the host",
+   "status": "ok",
+   "started": 1792601293.1843243,
+   "finished": 1792601293.206748,
+   "detail": "GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)",
+   "hint": "",
+   "progress": 1.0,
+   "log": "host.gpu.log"
+  },
+  {
+   "id": "host.docker",
+   "group": "demo1",
+   "title": "Docker daemon running",
+   "status": "ok",
+   "started": 1792601293.2072155,
+   "finished": 1792601293.2412207,
+   "detail": "Docker 29.6.2 (rootless)",
+   "hint": "",
+   "progress": 1.0,
+   "log": "host.docker.log"
+  },
+  {
+   "id": "host.cdi",
+   "group": "demo1",
+   "title": "Containers can use the GPU",
+   "status": "failed",
+   "started": 1792601293.2414567,
+   "finished": 1792601293.3575532,
+   "detail": "containers can't see the GPU: failed to fulfil mount request: open /usr/lib/aarch64-linux-gnu/libnvidia-egl-wayland.so.1.1.21: no such file or directory",
+   "hint": "The GPU list (/var/run/cdi/nvidia.yaml) is out of date after an NVIDIA update: `sudo systemctl start nvidia-cdi-refresh.service`, then `systemctl --user restart docker`.",
+   "progress": null,
+   "log": "host.cdi.log"
+  },
+  {
+   "id": "host.gpu_wait",
+   "group": "demo1",
+   "title": "Docker waits for GPU after reboot",
+   "status": "ok",
+   "started": 1792601293.357811,
+   "finished": 1792601293.3579812,
+   "detail": "already installed",
+   "hint": "",
+   "progress": 1.0,
+   "log": "host.gpu_wait.log"
+  },
+  {
+   "id": "host.disk",
+   "group": "demo1",
+   "title": "Disk space",
+   "status": "ok",
+   "started": 1792601293.358065,
+   "finished": 1792601293.3874862,
+   "detail": "3,560 GB free",
+   "hint": "",
+   "progress": 1.0,
+   "log": "host.disk.log"
+  },
+  {
+   "id": "host.smoke",
+   "group": "demo1",
+   "title": "PyTorch GPU smoke test",
+   "status": "skipped",
+   "started": null,
+   "finished": null,
+   "detail": "containers can't see the GPU",
+   "hint": "",
+   "progress": null,
+   "log": null
+  }
+ ]
+}

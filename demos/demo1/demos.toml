@@ -1,0 +1,33 @@
+# What demo1 sets up on a Spark: host checks first, then one Docker container per demo.
+# Paths are relative to the ai_weather repo root. Add a [[demo]] block to track a new demo.
+#
+# Each demo gets three steps: build its image (skipped if the image exists, unless
+# `spark_setup.py run --rebuild`), start its container with `run`, and wait for its
+# Streamlit health endpoint on 127.0.0.1:<port>. Every demo needs its own port.
+
+[dashboard]
+port = 8500
+
+# Smoke test from Untitled.ipynb: CUDA matmul + flash-attention inside an NGC container
+[smoke_test]
+image = "nvcr.io/nvidia/pytorch:25.03-py3"
+
+[[demo]]
+id = "demo3"
+title = "Demo 3 · AI forecast lab"
+image = "demo3"
+container = "demo3"
+context = "demos/demo3"
+dockerfile = "demos/demo3/docker/Dockerfile"
+run = ["bash", "demos/demo3/docker/run.sh"]
+port = 8501
+
+[[demo]]
+id = "demo4"
+title = "Demo 4 · Forecasting & benchmarking"
+image = "ai_weather"
+container = "ai_weather"
+context = "."
+dockerfile = "docker/Dockerfile"
+run = ["bash", "docker/run.sh", "start"]
+port = 8501

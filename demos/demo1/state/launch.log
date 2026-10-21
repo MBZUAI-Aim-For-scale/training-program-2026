@@ -1,0 +1,134 @@
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  ok     Containers can use the GPU: containers see the GPU
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  …      PyTorch GPU smoke test
+  ok     PyTorch GPU smoke test: CUDA matmul + flash-attention ok
+
+Setup finished.
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  ok     Containers can use the GPU: containers see the GPU
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  …      PyTorch GPU smoke test
+  ok     PyTorch GPU smoke test: CUDA matmul + flash-attention ok
+
+Setup finished.
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: Run 'docker run --help' for more information
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Demo 3 · AI forecast lab
+  …      Build image demo3
+  ok     Build image demo3: image present (built 2026-10-12, 16 GB)
+  skip   Start container demo3: containers can't see the GPU (see host checks)
+  skip   Page answers on :8501: container not started
+
+Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: Run 'docker run --help' for more information
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Demo 3 · AI forecast lab
+  …      Build image demo3
+  ok     Build image demo3: image present (built 2026-10-12, 16 GB)
+  skip   Start container demo3: containers can't see the GPU (see host checks)
+  skip   Page answers on :8501: container not started
+
+Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: Run 'docker run --help' for more information
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: Run 'docker run --help' for more information
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Demo 3 · AI forecast lab
+  …      Build image demo3
+  ok     Build image demo3: image present (built 2026-10-12, 16 GB)
+  skip   Start container demo3: containers can't see the GPU (see host checks)
+  skip   Page answers on :8501: container not started
+
+Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: failed to fulfil mount request: open /usr/lib/aarch64-linux-gnu/libnvidia-egl-wayland.so.1.1.21: no such file or directory
+         fix: The GPU list (/var/run/cdi/nvidia.yaml) is out of date after an NVIDIA update: `sudo systemctl start nvidia-cdi-refresh.service`, then `systemctl --user restart docker`.
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: failed to fulfil mount request: open /usr/lib/aarch64-linux-gnu/libnvidia-egl-wayland.so.1.1.21: no such file or directory
+         fix: The GPU list (/var/run/cdi/nvidia.yaml) is out of date after an NVIDIA update: `sudo systemctl start nvidia-cdi-refresh.service`, then `systemctl --user restart docker`.
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,560 GB free
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Setup finished with errors (see above, or the dashboard).

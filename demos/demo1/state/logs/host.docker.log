@@ -1,0 +1,4 @@
+$ docker info --format {{.ServerVersion}}|{{.SecurityOptions}}
+29.6.2|[name=seccomp,profile=builtin name=rootless name=cgroupns]
+
+[ok] Docker 29.6.2 (rootless)

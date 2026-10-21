@@ -1,0 +1,4 @@
+$ nvidia-smi -L
+GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
+
+[ok] GPU 0: NVIDIA GB10 (UUID: GPU-64b0ed13-21d0-0a67-2f91-d5cb8daca873)
