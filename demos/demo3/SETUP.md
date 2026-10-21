@@ -42,8 +42,8 @@ systemctl --user daemon-reload
 ## 2. Get the code
 
 ```bash
-git clone https://github.com/mesfind/ai_weather.git
-cd ai_weather/demos/demo3
+git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026/demos/demo3
 ```
 
 ## 3. Build the image (once, ~1 hour)
@@ -75,7 +75,7 @@ This starts a container named `demo3` that restarts by itself after reboots, and
 
 | What | Where on the Spark | Size |
 |---|---|---|
-| Saved forecasts, event movies, job logs | `ai_weather/demos/demo3/outputs/` | grows with use |
+| Saved forecasts, event movies, job logs | `training-program-2026/demos/demo3/outputs/` | grows with use |
 | Model weights (downloaded on each model's first run) | `~/.cache/demo3/` | up to ~75 GB |
 
 Options (put them before `bash docker/run.sh`):
