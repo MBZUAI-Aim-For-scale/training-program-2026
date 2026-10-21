@@ -18,7 +18,7 @@ A Streamlit app, running on the DGX Spark, for running AI weather models. Partic
 **On the Spark** (aarch64; build once, about an hour, mostly compiling two libraries):
 
 ```bash
-cd ~/raining-program-2026/demos/demo3
+cd ~/training-program-2026/demos/demo3
 docker build -t demo3 -f docker/Dockerfile .
 bash docker/run.sh            # or DEV=1 bash docker/run.sh to use this folder's code live
 ```
