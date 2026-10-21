@@ -26,7 +26,7 @@ This module provides a comprehensive guide to executing and benchmarking modern 
 
 > #### Prerequisites
 > 
-> Complete the environment setup in [Demo 1: Setting Up AI Weather Forecasting Lab](/ai_weather/01-setup) before proceeding. All configuration options (runtime flags, model environments, FGN setup, troubleshooting) are documented there.
+> Complete the environment setup in [Demo 1: Setting Up AI Weather Forecasting Lab](/training-program-2026/01-setup) before proceeding. All configuration options (runtime flags, model environments, FGN setup, troubleshooting) are documented there.
 {: .prereq}
 
 ## Learning Objectives
@@ -94,21 +94,21 @@ The Demo 3 application consists of:
 
 > #### Complete Setup Guide
 > 
-> For detailed setup instructions including GPU verification, container building, runtime configuration flags, model environments, and troubleshooting, see [Demo 1: Setting Up AI Weather Forecasting Lab](01-setup.md).
+> For detailed setup instructions including GPU verification, container building, runtime configuration flags, model environments, and troubleshooting, see [Demo 1: Setting Up AI Weather Forecasting Lab](training-program-2026/01-setup).
 {: .tip}
 
 ### 1.1 Core Commands
 
 ```bash
 # 1. Clone and navigate to the demo
-git clone https://github.com/mesfind/ai_weather.git
-cd ai_weather/demos/demo3
+git git@github.com:MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026
 
 # 2. Build the container (first time only, ~1 hour)
-docker build -t demo3 -f docker/Dockerfile .
+docker build -t ai_weather -f docker/Dockerfile .
 
 # 3. Start the container
-bash docker/run.sh
+bash docker/run.sh rebuild
 
 # 4. Access from your laptop (on Tailscale)
 ssh -L 8501:localhost:8501 <user>@<spark>
@@ -117,7 +117,7 @@ ssh -L 8501:localhost:8501 <user>@<spark>
 
 ### 1.2 Runtime Options
 
-Common configuration flags (see [Demo 1](/ai_weather/01-setup) for the complete list):
+Common configuration flags (see [Demo 1](/training-program-2026/01-setup) for the complete list):
 
 ```bash
 # Development mode (live code updates without rebuild)
@@ -261,7 +261,7 @@ Focus: Seasonal transition markers and agricultural climate indices.
 
 **Key parameters:**
 - Variable: `tp` (precipitation)
-- Metric: Wet-spell and dry-spell detection (see [Demo 4](04-weather-model.md) for full ROMP details)
+- Metric: Wet-spell and dry-spell detection (see [Demo 4](training-program-2026/04-weather-model) for full ROMP details)
 - Application: Rainy season onset timing
 
 > #### Use-Case Flags
@@ -284,7 +284,7 @@ To integrate a new AI weather model into the framework:
        pass
    ```
 
-2. **Provision environment**: Ensure the model's Python environment exists at `/opt/envs/<env>/bin/python` inside the container (see [Demo 1](/ai_weather/01-setup) for environment details).
+2. **Provision environment**: Ensure the model's Python environment exists at `/opt/envs/<env>/bin/python` inside the container (see [Demo 1](/training-program-2026/01-setup) for environment details).
 
 3. **Register model**: Set `status="ready"` for that model in `demo3/catalog.py`.
 
@@ -297,7 +297,7 @@ To integrate a new AI weather model into the framework:
 
 ### 5.2 Core Directory Layout
 
-*(Paths are relative to `ai_weather/demos/demo3/`)*
+*(Paths are relative to `training-program-2026/demos/demo3/`)*
 
 ```text
 app.py                 # Main Streamlit application: orchestration and results display
@@ -342,11 +342,11 @@ outputs/               # Persistent storage: outputs/{model}/{YYYYMMDDTHH}_{lead
 
 ### 6.2 Initialization Overhead
 
-First-time executions include weight downloads (see [Demo 1](/ai_weather/01-setup) for download times per model). Subsequent runs start in seconds.
+First-time executions include weight downloads (see [Demo 1](/training-program-2026/01-setup) for download times per model). Subsequent runs start in seconds.
 
 ### 6.3 FGN (WeatherNext 2) Notes
 
-FGN is Google DeepMind's Functional Generative Network for probabilistic forecasting. It requires special handling due to its unique data requirements. Detailed configuration is in [Demo 1, Section 6](/ai_weather/01-setup).
+FGN is Google DeepMind's Functional Generative Network for probabilistic forecasting. It requires special handling due to its unique data requirements. Detailed configuration is in [Demo 1, Section 6](/training-program-2026/01-setup).
 
 - **Model variant**: `WeatherNextCyclones_Mini` (1° resolution, the only Mini weights published)
 - **Starting conditions**: Google's sample file for 2024-10-07 (up to 7.5 days); converter for all other dates
@@ -361,7 +361,7 @@ FGN is Google DeepMind's Functional Generative Network for probabilistic forecas
 - Use-case flags tailor outputs for temperature, precipitation, and onset forecasting.
 - All models produce standardized NetCDF outputs for consistent analysis.
 - Performance varies from 2 minutes (AIFS) to 26 minutes (Aurora) for 10-day forecasts.
-- All configuration options are documented in [Demo 1](/ai_weather/01-setup).
+- All configuration options are documented in [Demo 1](/training-program-2026/01-setup).
 
 ## Exercises
 
@@ -444,7 +444,7 @@ FGN is Google DeepMind's Functional Generative Network for probabilistic forecas
 
 > #### Complete Troubleshooting Guide
 > 
-> For comprehensive troubleshooting including GPU access, container conflicts, network issues, and model-specific problems, see [Demo 1: Troubleshooting Section](/ai_weather/01-setup).
+> For comprehensive troubleshooting including GPU access, container conflicts, network issues, and model-specific problems, see [Demo 1: Troubleshooting Section](/training-program-2026/01-setup).
 {: .tip}
 
 | Symptom | Quick Resolution |
