@@ -5,9 +5,10 @@
 
 The bucket comes from --bucket or $DEMO3_BUCKET (e.g. gs://<bucket>/demo3), laid out
 like outputs/: <model>/<YYYYMMDDTHH>_<lead>h_m<members>.nc plus its .json timings.
-push uploads runs the bucket doesn't have yet (needs write credentials, e.g.
-GOOGLE_APPLICATION_CREDENTIALS); pull downloads runs this Spark doesn't have (a
-public bucket needs no credentials). Synthetic runs are never pushed.
+pull downloads runs this Spark doesn't have (a public bucket needs no credentials).
+push uploads runs the bucket doesn't have yet. It needs a key that can write to the
+bucket: the Sparks' own key is read-only, so their runs stay on them. Synthetic runs
+are never pushed.
 """
 from __future__ import annotations
 
