@@ -31,7 +31,7 @@ This lesson documents the complete environmental setup and configuration for AI 
 
 > #### Prerequisites
 >
-> - Access to a DGX Spark node (e.g., `hcwfpgx`) via Tailscale.
+> - Access to a DGX Spark node (e.g., `country-spark`) via Tailscale.
 > - A user account on the Spark with sudo privileges for Docker configuration.
 > - Familiarity with the Linux command line and basic Docker concepts.
 {: .prereq}
@@ -160,7 +160,7 @@ When running AI weather models, Docker manages two primary storage locations:
 The container image includes all dependencies for running AI weather models:
 
 ```bash
-docker build -t demo3 -f docker/Dockerfile .
+docker build -t ai_weather -f docker/Dockerfile .
 ```
 
 **Build characteristics:**
@@ -186,18 +186,18 @@ To avoid rebuilding on every Spark node, transfer a pre-built image:
 
 ```bash
 # On the source Spark:
-docker save demo3 | gzip > demo3-image.tar.gz
+docker save ai_weather | gzip > ai_weather_image.tar.gz
 
 # Transfer via scp/rsync over Tailscale:
 scp demo3-image.tar.gz <user>@<target-spark>:~/
 
 # On the target Spark:
-docker load < demo3-image.tar.gz
+docker load < ai_weather_image.tar.gz
 ```
 
 > #### Exercise 1: Image Transfer (5 min)
 >
-> You have a pre-built image on Spark `hcwfpgx` and need to deploy it to a new Spark `hcwfpgy`. Write the complete sequence of commands to:
+> You have a pre-built image on Spark `country-spark` and need to deploy it to a new Spark `country-spark`. Write the complete sequence of commands to:
 >
 > 1. Export the image from the source Spark.
 > 2. Transfer it to the target Spark.
@@ -209,12 +209,12 @@ docker load < demo3-image.tar.gz
 > #### Solution
 >
 > ```bash
-> # On hcwfpgx:
-> docker save demo3 | gzip > demo3-image.tar.gz
-> scp demo3-image.tar.gz <user>@hcwfpgy:~/
+> # On your country-spark:
+> docker save ai_weather | gzip > ai_weather_image.tar.gz
+> scp ai_weather_image.tar.gz <user>@country-spark:~/
 >
-> # On hcwfpgy:
-> docker load < demo3-image.tar.gz
+> # On : your country-spark
+> docker load < ai_weather_image.tar.gz
 > ```
 {: .solution}
 
@@ -225,16 +225,14 @@ docker load < demo3-image.tar.gz
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/mesfind/ai_weather.git
-cd ai_weather/demos/demo3
+git clone git@github.com:MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026
 
 # 2. Build the container image (~1 hour first time)
-docker build -t demo3 -f docker/Dockerfile .
+bash docker/run.sh  rebuild
 
-# 3. Start the container
-bash docker/run.sh
 
-# 4. Access the UI from your laptop (on Tailscale)
+# 3. Access the UI from your laptop (on Tailscale)
 ssh -L 8501:localhost:8501 <user>@<spark>
 # Then browse to http://localhost:8501
 ```
@@ -413,7 +411,7 @@ Models are registered centrally in `BENCHMARK_MODEL_CATALOG` within `config.py`:
 
 > #### Next Steps
 >
-> ROMP installation is complete. For detailed instructions on running benchmarks, configuring experiments, and interpreting results, see [Demo 4: AI Weather Model Scorecard](04-weather-model.md).
+> ROMP installation is complete. For detailed instructions on running benchmarks, configuring experiments, and interpreting results, see [Demo 4: AI Weather Model Scorecard](/training-program-2026/04-weather-model).
 {: .tip}
 
 ## 8. Essential Libraries
@@ -486,22 +484,22 @@ df -h ~/.cache/demo3/
 
 ```bash
 # Monitor real-time application logs
-docker logs -f demo3
+docker logs -f ai_weather
 
 # Gracefully restart the application container
-docker restart demo3
+docker restart ai_
 
 # Fetch latest code (takes effect immediately if DEV=1; otherwise requires rebuild)
 git pull
 
 # Full rebuild and restart cycle
-docker build -t demo3 -f docker/Dockerfile . && docker rm -f demo3 && bash docker/run.sh
+docker build -t ai_weather -f docker/Dockerfile . && docker rm -f ai_weather && bash docker/run.sh
 
 # Clean up old containers
 docker system prune -f
 
 # Check container resource usage
-docker stats demo3
+docker stats ai_weather
 ```
 
 ## 11. Best Practices

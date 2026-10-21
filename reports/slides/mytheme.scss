@@ -1,530 +1,874 @@
 /*-- scss:defaults --*/
 
-// Enhanced color palette - Ethiopian/East African Inspired
+/* ================================================================
+   COLOUR PALETTE
+   ================================================================ */
+
 $navy_blue: #003366;
 $golden: #D4AF37;
-$cream: #f8f7f2;
-$warm_gray: #3e2723;
-$light_accent: #6d4c41;
-$medium_brown: #8d6e63;
-$border_light: #d7ccc8;
+$cream: #F8F7F2;
+$warm_gray: #3E2723;
+$light_accent: #6D4C41;
+$medium_brown: #8D6E63;
+$border_light: #D7CCC8;
 
-// Typography
-$font-family-sans-serif: "Palatino Linotype", "Book Antiqua", Palatino, 
-                         "Apple Garamond", "Garamond", "Times New Roman", 
-                         FreeSerif, serif !default;
-$font-family-monospace: "SF Mono", "Monaco", "Inconsolata", "Fira Code", 
-                        "Cascadia Code", monospace !default;
 
-// Core variables
-$body-bg: #f8f7f2 !default;
-$body-color: #2a2a2a !default;
-$link-color: #6d4c41 !default;
-$selection-bg: #8d6e63 !default;
-$border-color: #d7ccc8 !default;
-$progress-color: #8d6e63 !default;
+/* ================================================================
+   TYPOGRAPHY
+   ================================================================ */
 
-// Presentation specific
-$presentation-heading-font: "Palatino Linotype", "Book Antiqua", Palatino, 
-                            "Apple Garamond", serif !default;
-$presentation-heading-color: #3e2723 !default;
-$presentation-heading-text-transform: none !default;
-$presentation-heading-text-shadow: none !default;
+$font-family-sans-serif:
+  "Palatino Linotype",
+  "Book Antiqua",
+  Palatino,
+  "Apple Garamond",
+  "Garamond",
+  "Times New Roman",
+  FreeSerif,
+  serif !default;
+
+$font-family-monospace:
+  "SF Mono",
+  "Monaco",
+  "Inconsolata",
+  "Fira Code",
+  monospace !default;
+
+
+/* ================================================================
+   CORE VARIABLES
+   ================================================================ */
+
+$body-bg: #F8F7F2 !default;
+$body-color: #2A2A2A !default;
+$link-color: #6D4C41 !default;
+$selection-bg: #8D6E63 !default;
+$border-color: #D7CCC8 !default;
+$progress-color: #8D6E63 !default;
+
+$presentation-heading-font:
+  "Palatino Linotype",
+  "Book Antiqua",
+  Palatino,
+  serif !default;
+
+$presentation-heading-color: #3E2723 !default;
 $presentation-heading-font-weight: 600 !default;
-$presentation-h1-text-shadow: none !default;
-$presentation-font-smaller: 0.9 !default;
 $presentation-font-size-root: 32px !default;
+
 
 /*-- scss:rules --*/
 
+
+/* ================================================================
+   MAIN REVEAL CONTAINER
+   ================================================================ */
+
 .reveal {
-  background: linear-gradient(135deg, #f8f7f2 0%, #f0f1eb 50%, #e8e9e3 100%);
-  
-  // TITLE SLIDE UI HIDE: Bulletproof logic to hide numbers/progress
-  &:has(#title-slide.present) .slide-number,
-  &:has(#title-slide.present) .progress {
-    display: none !important;
-  }
-  
-  .slide {
-    background: transparent;
-    border-radius: 0;
-    box-shadow: none;
-    padding: 1em 2em !important;
-    margin: 0 !important;
-    border: none;
-    /* Removed width/height 100% !important so auto-stretch works */
-    position: relative;
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    
-    // Custom scrollbar
-    &::-webkit-scrollbar {
-      width: 8px;
-    }
-    
-    &::-webkit-scrollbar-track {
-      background: $border_light;
-      border-radius: 4px;
-    }
-    
-    &::-webkit-scrollbar-thumb {
-      background: $medium_brown;
-      border-radius: 4px;
-    }
-    
-    // Subtle bottom accent
-    &::before {
-      content: "";
-      position: absolute;
-      bottom: 30px; /* Shifted up slightly to avoid overlapping the progress bar/slide numbers */
-      left: 10%;
-      right: 10%;
-      height: 2px;
-      background: linear-gradient(90deg, transparent 0%, $golden 50%, transparent 100%);
-      opacity: 0.4;
-      z-index: 10;
-    }
-    
-    .slide-content {
-      width: 100%;
-      height: auto;
-      min-height: calc(100% - 30px);
-      overflow: visible;
-      padding: 0.5em 0;
-    }
-    
-    h1, h2, h3, h4 {
-      line-height: 1.2;
-      margin: 0.3em 0;
-    }
-    
-    h1 {
-      font-size: 2.2em;
-      color: $warm_gray;
-      padding-bottom: 0.3em;
-      margin: 0.2em 0 0.5em;
-      position: relative;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      
-      &::after {
-        content: "";
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100px;
-        height: 2px;
-        background: linear-gradient(90deg, $golden 0%, rgba($golden, 0) 100%);
-        border-radius: 1px;
-      }
-    }
-    
-    h2 {
-      background: linear-gradient(135deg, $navy_blue 0%, darken($navy_blue, 5%) 100%);
-      padding: 0.6em 1em;
-      color: white;
-      border-radius: 8px;
-      margin: 0.5em 0 0.8em;
-      box-shadow: 0 3px 8px rgba(0, 51, 102, 0.12);
-      position: relative;
-      font-weight: 600;
-      font-size: 1.5em;
-      letter-spacing: -0.01em;
-      
-      &::after {
-        content: "";
-        position: absolute;
-        right: 0;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 4px;
-        height: 50%;
-        background: $golden;
-        border-radius: 2px 0 0 2px;
-      }
-    }
-    
-    h3 {
-      font-size: 1.3em;
-      color: darken($warm_gray, 5%);
-      border-left: 3px solid $golden;
-      padding: 0.2em 0 0.2em 0.6em;
-      margin: 0.3em 0 0.5em;
-      background: linear-gradient(90deg, rgba($golden, 0.04) 0%, transparent 100%);
-      font-weight: 600;
-    }
-    
-    h4 {
-      font-size: 1.1em;
-      color: $medium_brown;
-      margin: 0.2em 0 0.3em;
-      font-weight: 600;
-      padding-left: 0.3em;
-      border-left: 2px solid rgba($golden, 0.5);
-    }
-  }
 
-  // ADAPTIVE DARK BACKGROUNDS: Standard Reveal.js detection
-  .has-dark-background {
-    h2 {
-      background: transparent !important;
-      box-shadow: none !important;
-      color: #ffffff !important;
-      padding-left: 0 !important;
-      
-      &::after {
-        display: none !important; 
-      }
-    }
-    h1, h3, h4, p, li, div {
-      color: #f8f9fa !important;
-    }
-  }
+  background:
+    linear-gradient(
+      135deg,
+      #F8F7F2 0%,
+      #F0F1EB 50%,
+      #E8E9E3 100%
+    );
 
-  // BULLETPROOF DARK SLIDE OVERRIDE (Nuclear Option)
-  // Use .dark-slide in your markdown header attributes: {background-color="#003366" .dark-slide}
-  .slide.dark-slide {
-    h1, h2, h3, h4, p, li, div {
-      color: #ffffff !important;
-      background: transparent !important;
-      box-shadow: none !important;
-      border-color: #ffffff !important;
-    }
-    
-    h2 {
-      padding-left: 0 !important;
-    }
+  /* ==============================================================
+     STANDARD SLIDE LOGO
+     ============================================================== */
 
-    h2::after {
-      display: none !important;
-    }
-  }
-  
-  .title-slide {
-    background: 
-      linear-gradient(160deg, #fcfbf8 0%, #f5f3ef 100%),
-      radial-gradient(circle at 20% 80%, rgba($golden, 0.03) 0%, transparent 50%),
-      radial-gradient(circle at 80% 20%, rgba($navy_blue, 0.03) 0%, transparent 50%);
-    
+  .slide-logo {
+
+    display: block !important;
+
+    position: fixed !important;
+
+    top: 1.2em !important;
+    right: 2em !important;
+
+    bottom: auto !important;
+    left: auto !important;
+
+    max-height: 60px !important;
+    width: auto !important;
+
+    z-index: 30 !important;
+
+    background: transparent !important;
     border: none !important;
+    padding: 0 !important;
     box-shadow: none !important;
-    color: #333 !important;
-    text-align: center !important;
-    padding: 2em 2em !important;
-    position: relative;
-    
-    &::before {
-      content: "";
-      position: absolute;
-      top: 1.5em;
-      right: 1.5em;
-      width: 50px;
-      height: 50px;
-      border-top: 2px solid rgba($golden, 0.5);
-      border-right: 2px solid rgba($golden, 0.5);
-    }
-    
-    &::after {
-      content: "";
-      position: absolute;
-      bottom: 1.5em;
-      left: 1.5em;
-      width: 30px;
-      height: 30px;
-      border-bottom: 2px solid rgba($navy_blue, 0.3);
-      border-left: 2px solid rgba($navy_blue, 0.3);
-    }
+  }
 
-    h1 {
-      font-size: 2.5em !important;
-      color: $warm_gray !important;
-      margin: 0.3em 0 0.5em;
-      position: relative;
-      font-weight: 700;
-      line-height: 1.1;
-      padding: 0 10%;
-      
+
+  /* ==============================================================
+     TITLE SLIDE LOGO
+     ============================================================== */
+
+  &:has(#title-slide.present) .slide-logo,
+  &:has(.title-slide.present) .slide-logo {
+
+    top: auto !important;
+    right: auto !important;
+
+    bottom: 2.2em !important;
+    left: 50% !important;
+
+    transform: translateX(-50%) !important;
+
+    max-height: 80px !important;
+
+    background: #FFFFFF !important;
+
+    padding: 10px 28px !important;
+
+    border-radius: 12px !important;
+
+    border: 1.5px solid rgba($golden, 0.6) !important;
+
+    box-shadow:
+      0 4px 15px rgba(0, 0, 0, 0.08),
+      0 1px 3px rgba(0, 0, 0, 0.05),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.8) !important;
+
+    transition: all 0.3s ease !important;
+
+    position: fixed !important;
+
+    &::before {
+
+      content: "";
+
+      position: absolute;
+
+      top: 0;
+      left: 15%;
+      right: 15%;
+
+      height: 2px;
+
+      background:
+        linear-gradient(
+          90deg,
+          transparent 0%,
+          $golden 50%,
+          transparent 100%
+        );
+    }
+  }
+
+
+  /* ==============================================================
+     TITLE SLIDE
+     ============================================================== */
+
+  #title-slide,
+  .title-slide {
+
+    background:
+      linear-gradient(
+        160deg,
+        #FCFBF8 0%,
+        #F5F3EF 100%
+      ) !important;
+
+    display: flex !important;
+
+    flex-direction: column !important;
+
+    justify-content: center !important;
+
+    align-items: center !important;
+
+    text-align: center !important;
+
+    padding: 2em 2em 7.5em 2em !important;
+
+    box-sizing: border-box !important;
+
+
+    /* ------------------------------------------------------------
+       Main Title
+       ------------------------------------------------------------ */
+
+    h1,
+    .title {
+
+      font-size: 2.6em !important;
+
+      color: $navy_blue !important;
+
+      font-weight: 700 !important;
+
+      line-height: 1.2 !important;
+
+      margin: 0 !important;
+
+      padding: 0 !important;
+
+      border: none !important;
+
+
       &::after {
-        content: "";
-        display: block;
-        width: 120px;
-        height: 3px;
-        background: linear-gradient(90deg, rgba($golden, 0) 0%, $golden 50%, rgba($golden, 0) 100%);
-        margin: 0.5em auto 0;
-        border-radius: 1px;
+
+        content: "" !important;
+
+        display: block !important;
+
+        width: 220px !important;
+
+        height: 4px !important;
+
+        background:
+          linear-gradient(
+            90deg,
+            transparent 0%,
+            $golden 30%,
+            $navy_blue 50%,
+            $golden 70%,
+            transparent 100%
+          ) !important;
+
+        margin: 0.6em auto 0.8em auto !important;
+
+        border-radius: 2px !important;
+
+        box-shadow:
+          0 1px 3px rgba(0, 0, 0, 0.12) !important;
       }
     }
+
+
+    /* ------------------------------------------------------------
+       Subtitle
+       ------------------------------------------------------------ */
 
     .subtitle {
-      font-size: 1.3em !important;
-      color: $medium_brown !important;
-      margin: 0.8em auto 1.5em;
-      position: relative;
-      font-weight: 400;
-      max-width: 70%;
-      line-height: 1.4;
-      padding: 0.8em 0;
+
+      font-size: 1.2em !important;
+
+      color: $light_accent !important;
+
+      font-weight: 500 !important;
+
+      max-width: 80% !important;
+
+      line-height: 1.4 !important;
+
+      margin: 0 auto 1.5em auto !important;
     }
 
+
+    /* ------------------------------------------------------------
+       Author
+       ------------------------------------------------------------ */
+
+    .quarto-title-authors,
     .author {
-      font-size: 1.5em !important;
-      color: $warm_gray !important;
-      margin: 1em 0 0.5em;
-      font-weight: 600;
+
+      margin-top: 0.5em !important;
     }
+
+
+    .author,
+    .quarto-title-author-name {
+
+      font-size: 1.3em !important;
+
+      color: $warm_gray !important;
+
+      font-weight: 700 !important;
+
+      letter-spacing: 0.5px !important;
+
+      margin: 0 !important;
+    }
+
+
+    /* ------------------------------------------------------------
+       Institute
+       ------------------------------------------------------------ */
+
+    .institute {
+
+      font-size: 1.05em !important;
+
+      color: $medium_brown !important;
+
+      font-style: italic !important;
+
+      margin-top: 0.2em !important;
+    }
+
+
+    /* ------------------------------------------------------------
+       Date
+       ------------------------------------------------------------ */
 
     .date {
-      font-size: 1em !important;
-      color: $medium_brown !important;
-      margin: 0.5em 0;
+
+      font-size: 0.9em !important;
+
+      color: #666666 !important;
+
+      margin-top: 0.8em !important;
+
+      font-weight: 500 !important;
     }
   }
-  
-  // Code blocks - Light background for readability
+
+
+  /* ==============================================================
+     HIDE TITLE SLIDE FOOTER AND NUMBER
+     ============================================================== */
+
+  &:has(#title-slide.present) .footer,
+  &:has(#title-slide.present) .slide-number,
+  &:has(.title-slide.present) .footer,
+  &:has(.title-slide.present) .slide-number {
+
+    display: none !important;
+
+    opacity: 0 !important;
+
+    visibility: hidden !important;
+  }
+
+
+  /* ==============================================================
+     STANDARD SLIDE CONTENT
+     ============================================================== */
+
+  .slide {
+
+    background: transparent;
+
+    padding: 1em 2em 3.5em 2em !important;
+
+    margin: 0 !important;
+
+    border: none;
+
+    position: relative;
+
+    overflow-y: auto !important;
+
+
+    /* ------------------------------------------------------------
+       H1
+       ------------------------------------------------------------ */
+
+    h1 {
+
+      font-size: 2.2em;
+
+      color: $warm_gray;
+
+      padding-bottom: 0.3em;
+
+      margin: 0.2em 0 0.5em;
+
+      position: relative;
+
+      font-weight: 700;
+
+
+      &::after {
+
+        content: "";
+
+        position: absolute;
+
+        bottom: 0;
+
+        left: 0;
+
+        width: 120px;
+
+        height: 3px;
+
+        background:
+          linear-gradient(
+            90deg,
+            $golden 0%,
+            transparent 100%
+          );
+      }
+    }
+
+
+    /* ------------------------------------------------------------
+       H2
+       ------------------------------------------------------------ */
+
+    h2 {
+
+      background:
+        linear-gradient(
+          135deg,
+          $navy_blue 0%,
+          darken($navy_blue, 5%) 100%
+        );
+
+      padding: 0.5em 1em;
+
+      color: white;
+
+      border-radius: 6px;
+
+      margin: 0.5em 0 0.8em;
+
+      box-shadow:
+        0 3px 8px rgba(0, 51, 102, 0.12);
+
+      font-size: 1.4em;
+    }
+
+
+    /* ------------------------------------------------------------
+       H3
+       ------------------------------------------------------------ */
+
+    h3 {
+
+      font-size: 1.25em;
+
+      color: $warm_gray;
+
+      border-left: 4px solid $golden;
+
+      padding-left: 0.6em;
+
+      margin: 0.4em 0;
+    }
+  }
+
+
+  /* ================================================================
+     CODE BLOCKS
+     ================================================================ */
+
   pre {
-    background: #f4f4f4 !important;
-    border-radius: 10px !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+    background: #F4F4F4 !important;
+
+    border-radius: 8px !important;
+
+    border: 1px solid $border_light !important;
+
     margin: 1em 0 !important;
+
     padding: 0 !important;
-    overflow-x: auto !important;
-    border: 1px solid $border_light;
-    
+
+    width: 100% !important;
+
+    box-shadow:
+      0 4px 10px rgba(0, 0, 0, 0.10);
+
+
     code {
+
       font-family: $font-family-monospace;
-      font-size: 1.5em !important;
+
+      font-size: 1.1em !important;
+
       line-height: 1.5 !important;
-      color: #2d2a24 !important;
+
+      color: #2D2A24 !important;
+
       padding: 1em 1.2em !important;
+
       display: block;
-      white-space: pre;
-      overflow-x: auto;
-      background: transparent;
+
+      max-height: 600px !important;
+
+      overflow: auto;
     }
   }
-  
-  // Inline code
+
+
+  /* ================================================================
+     INLINE CODE
+     ================================================================ */
+
   code {
+
     background: rgba($medium_brown, 0.12);
+
     color: $navy_blue;
+
     padding: 0.2em 0.5em;
+
     border-radius: 4px;
-    font-family: $font-family-monospace;
-    font-size: 0.95em !important;
+
+    font-size: 1.05em !important;
+
     font-weight: 600;
   }
-  
-  a {
-    color: $light_accent;
-    text-decoration: none;
-    border-bottom: 1px solid rgba($light_accent, 0.3);
-    transition: all 0.2s ease;
-    
-    &:hover {
-      color: darken($light_accent, 15%);
-      border-bottom: 1px solid $light_accent;
-    }
-  }
-  
-  .progress {
-    height: 3px;
-    background: rgba(141, 110, 99, 0.1);
-    
-    span {
-      background: linear-gradient(90deg, $medium_brown 0%, $golden 100%);
-    }
-  }
-  
-  .controls {
-    button {
-      color: $medium_brown;
-      
-      &:hover {
-        color: $navy_blue;
-      }
-    }
-  }
-  
-  // Callouts
-  .callout, .callout-note, .callout-tip, .callout-warning {
-    padding: 0.8em 1em;
-    margin: 0.8em 0;
-    border-radius: 0 6px 6px 0;
-    font-size: 0.85em !important;
-    
-    p {
-      margin: 0;
-    }
-  }
-  
-  .callout-note {
-    background: linear-gradient(90deg, rgba($golden, 0.06) 0%, transparent 100%);
-    border-left: 3px solid $golden;
-  }
-  
-  .callout-tip {
-    border-left-color: #2c7a6e;
-    background: linear-gradient(90deg, rgba(#2c7a6e, 0.06) 0%, transparent 100%);
-  }
-  
-  .callout-warning {
-    border-left-color: #d96c4e;
-    background: linear-gradient(90deg, rgba(#d96c4e, 0.06) 0%, transparent 100%);
-  }
-  
-  // Fixed and Merged Lists
-  ul, ol {
-    margin-left: 2em; 
-    padding-left: 0;
-    margin-bottom: 1em; 
-    
-    li {
-      margin-bottom: 0.5em; 
-      line-height: 1.3;
-      
-      &::marker {
-        color: $golden; 
-      }
-    }
 
-    // Sub-bullets
-    ul, ol {
-      margin-left: 1.5em; 
-      margin-top: 0.5em;
-    }
-  }
-  
-  // Blockquotes
-  blockquote {
-    border-left: 2px solid $golden;
-    padding: 0.8em 1em;
-    margin: 0.8em 0;
-    background: linear-gradient(90deg, rgba($golden, 0.04) 0%, transparent 100%);
-    font-style: italic;
-  }
-  
-  // Details/Challenge blocks
-  details {
-    background: rgba($border_light, 0.3);
-    border-radius: 8px;
-    padding: 0.8em 1.2em;
-    margin: 1em 0;
-    
-    summary {
-      font-weight: 600;
-      color: $light_accent;
-      cursor: pointer;
-      
-      &:hover {
-        color: $golden;
-      }
-    }
-  }
-  
-  // Tables
-  table {
-    margin: 1em auto;
-    font-size: 1em; 
-    border-collapse: collapse;
-    width: 100%; 
-    height: 50%; 
-    table-layout: fixed; 
-    
-    th, td {
-      padding: 0.6em 1em;
-      border-bottom: 1px solid $border_light;
-      text-align: left;
-    }
-    
-    th {
-      background: $warm_gray;
-      color: white;
-      font-weight: 600;
-    }
-  }
-  
-  p { margin: 0.5em 0; }
-  
-  // Zoom indicator
-  .slide-number {
-    position: fixed;
-    bottom: 15px;
-    right: 15px;
-    z-index: 100;
-    background: rgba(255,255,255,0.8);
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    color: $medium_brown;
-    font-family: $font-family-sans-serif;
-  }
 
-  // Smooth zoom transitions
-  .slides {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  @media (hover: none) and (pointer: coarse) {
-    .slides {
-      touch-action: pan-y pinch-zoom;
-    }
-  }
-}
+  /* ================================================================
+     FOOTER BAR
+     ================================================================ */
 
-// Zoom instruction on slides
-.reveal .slide {
-  &::after {
-    content: "Ctrl + / Ctrl - to zoom";
-    position: fixed;
-    bottom: 15px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0,0,0,0.6);
-    color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-family: monospace;
-    opacity: 0;
-    transition: opacity 0.3s;
+  .footer {
+
+    position: fixed !important;
+
+    bottom: 0 !important;
+
+    left: 0 !important;
+
+    right: 0 !important;
+
+    height: 2.2em !important;
+
+    margin: 0 !important;
+
+    padding: 0 2em !important;
+
+    display: flex !important;
+
+    justify-content: center !important;
+
+    align-items: center !important;
+
+    background: $navy_blue !important;
+
+    border-top: 2px solid $golden !important;
+
+    font-size: 0.6em !important;
+
+    color: #FFFFFF !important;
+
+    font-weight: 600;
+
+    text-transform: uppercase;
+
+    letter-spacing: 0.5px;
+
+    z-index: 20 !important;
+
     pointer-events: none;
-    z-index: 100;
   }
-  
-  &:hover::after {
-    opacity: 0.7;
+
+
+  /* ================================================================
+     PAGE NUMBER
+     ================================================================ */
+
+  .slide-number {
+
+    position: fixed !important;
+
+    bottom: 0 !important;
+
+    right: 1.5em !important;
+
+    top: auto !important;
+
+    left: auto !important;
+
+    z-index: 99 !important;
+
+    background: transparent !important;
+
+    font-size: 0.75em !important;
+
+    color: $golden !important;
+
+    font-weight: 700 !important;
+
+    display: flex !important;
+
+    align-items: center !important;
+
+    height: 2.2em !important;
+
+    margin: 0 !important;
+
+    padding: 0 !important;
+
+    pointer-events: none !important;
   }
 }
 
-/* Responsive Design */
-@media (max-width: 1200px) {
-  .reveal {
-    .title-slide h1 { font-size: 2.2em !important; }
-    .title-slide .subtitle { font-size: 1.1em !important; max-width: 80%; }
-    .slide h2 { padding: 0.5em 0.8em; font-size: 1.3em; }
+
+/* ================================================================
+   DARK BACKGROUND SLIDES
+   ================================================================ */
+
+.reveal .has-dark-background {
+
+  --r-heading-color: #FFFFFF !important;
+
+  --r-main-color: #F8F9FA !important;
+
+  color: #F8F9FA !important;
+}
+
+
+.reveal .has-dark-background h1,
+.reveal .has-dark-background h2,
+.reveal .has-dark-background h3,
+.reveal .has-dark-background h4,
+.reveal .has-dark-background h5,
+.reveal .has-dark-background h6 {
+
+  color: #FFFFFF !important;
+
+  border-bottom-color: #FFFFFF !important;
+}
+
+
+.reveal .has-dark-background p,
+.reveal .has-dark-background li,
+.reveal .has-dark-background div {
+
+  color: #F8F9FA !important;
+}
+
+
+/* ================================================================
+   NAVIGATION CONTROLS
+   ================================================================ */
+
+.reveal .controls .navigate-up .controls-arrow,
+.reveal .controls .navigate-down .controls-arrow {
+
+  font-size: 8px;
+
+  color: $golden;
+}
+
+
+/* ================================================================
+   TABLES
+   ================================================================ */
+
+.reveal table {
+
+  margin: 20px auto;
+
+  border-collapse: collapse;
+}
+
+
+.reveal table th {
+
+  background-color: $navy_blue;
+
+  color: white;
+
+  padding: 10px 15px;
+}
+
+
+.reveal table td {
+
+  padding: 8px 15px;
+
+  border-bottom: 1px solid #DDDDDD;
+}
+
+
+/* ================================================================
+   FIGURES AND IMAGES
+   ================================================================ */
+
+.reveal img {
+
+  max-height: 700px;
+
+  margin: 20px auto;
+
+  display: block;
+
+  box-shadow:
+    0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+
+.reveal figcaption {
+
+  font-size: 0.7em;
+
+  color: #7F8C8D;
+
+  text-align: center;
+
+  margin-top: 10px;
+}
+
+
+/* ================================================================
+   SPECIAL ELEMENTS
+   ================================================================ */
+
+.reveal .callout {
+
+  background-color: #E3F2FD;
+
+  border-left: 5px solid #2196F3;
+
+  padding: 15px;
+
+  margin: 20px 0;
+
+  border-radius: 0 5px 5px 0;
+}
+
+
+.reveal .important {
+
+  background-color: #FFEBEE;
+
+  border-left: 5px solid #F44336;
+}
+
+
+.reveal .tip {
+
+  background-color: #E8F5E9;
+
+  border-left: 5px solid #4CAF50;
+}
+
+
+/* ================================================================
+   TRANSITIONS
+   ================================================================ */
+
+.reveal .slide-background {
+
+  transition: all 0.8s ease-in-out;
+}
+
+
+/* ================================================================
+   PROGRESS BAR
+   ================================================================ */
+
+.reveal .progress {
+
+  height: 6px;
+
+  background: rgba(0, 0, 0, 0.1);
+}
+
+
+.reveal .progress span {
+
+  background: $golden;
+
+  transition: width 0.8s ease;
+}
+
+
+/* ================================================================
+   BOXED COLUMNS
+   ================================================================ */
+
+.boxed-col {
+
+  border: 1px solid #D1D5DB;
+
+  border-radius: 8px;
+
+  padding: 20px 20px 16px 20px;
+
+  background-color: #F8FAFC;
+
+  height: 100%;
+
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.08);
+
+  display: flex;
+
+  flex-direction: column;
+}
+
+
+.boxed-col h3 {
+
+  margin: 0 0 0.75rem 0;
+
+  font-weight: 700;
+
+  color: #2C3E50;
+
+  border-bottom: 3px solid #CBD5E1;
+
+  padding-bottom: 0.6rem;
+
+  font-size: 1.2rem;
+}
+
+
+.boxed-col ul {
+
+  margin: 0;
+
+  padding-left: 1.2rem;
+}
+
+
+.boxed-col li {
+
+  margin-bottom: 0.4rem;
+}
+
+
+/* ================================================================
+   EQUAL HEIGHT COLUMNS
+   ================================================================ */
+
+.columns.equal-height {
+
+  display: flex;
+
+  align-items: stretch;
+
+  gap: 0.75rem;
+}
+
+
+.columns.equal-height > .column {
+
+  display: flex;
+
+  flex-direction: column;
+
+  flex: 1;
+
+  gap: 0.5rem;
+}
+
+
+.columns.equal-height .boxed-col {
+
+  flex: 1;
+}
+
+
+/* ================================================================
+   PRINT STYLES
+   ================================================================ */
+
+@media print {
+
+  .reveal .slide {
+
+    page-break-after: always !important;
+
+    padding: 20px !important;
+  }
+
+
+  .reveal .slide h1 {
+
+    font-size: 2em !important;
   }
 }
-
-@media (max-width: 768px) {
-  .reveal {
-    .title-slide {
-      padding: 1.5em 1em !important;
-      h1 { font-size: 1.8em !important; padding: 0 5%; }
-      .subtitle { font-size: 1em !important; max-width: 90%; }
-    }
-    .slide {
-      padding: 0.8em 1em !important;
-      h2 { padding: 0.5em 0.7em; font-size: 1.2em; }
-      h1 { font-size: 1.6em; }
-    }
-  }
-}
-
-// Ensure the body also helps hide UI if Reveal logic delays
-body:has(.title-slide.present) .slide-number,
-body:has(.title-slide.present) .progress {
-  display: none !important;
-  opacity: 0 !important;
-}
-
