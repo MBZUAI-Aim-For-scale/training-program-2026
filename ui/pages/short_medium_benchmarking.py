@@ -1346,10 +1346,10 @@ def _get_onset_base_kwargs():
         "obs": "CHIRPS",
         "obs_dir": str(CHIRPS_DIR),
         "obs_file_pattern": ("{}.nc",),
-        "obs_var": "precip",
+        "obs_var": "RAINFALL",
         "ref_model_dir": str(CHIRPS_DIR),
         "ref_model_file_pattern": "{}.nc",
-        "ref_model_var": "precip",
+        "ref_model_var": "RAINFALL",
     }
     base_kwargs = {**_onset_config_kwargs(), **base_kwargs}
     if OTS_AVAILABLE:
@@ -1820,6 +1820,26 @@ def run_momp_benchmark(
             env["ROMP_GROUND_TRUTH"] = str(run_config["ground_truth"])
         if run_config.get("benchmark_coverage"):
             env["ROMP_BENCHMARK_COVERAGE"] = str(run_config["benchmark_coverage"])
+
+        # Advanced temporal & verification parameters (read by run_momp.apply_env_vars_to_cfg)
+        if run_config.get("init_type"):
+            env["ROMP_INIT_TYPE"] = str(run_config["init_type"])
+        if run_config.get("date_filter_year"):
+            env["ROMP_DATE_FILTER_YEAR"] = str(run_config["date_filter_year"])
+        if run_config.get("verification_window_list"):
+            env["ROMP_VERIFICATION_WINDOW_LIST"] = str(run_config["verification_window_list"])
+        if run_config.get("tolerance_days_list"):
+            env["ROMP_TOLERANCE_DAYS_LIST"] = str(run_config["tolerance_days_list"])
+        if run_config.get("max_forecast_day"):
+            env["ROMP_MAX_FORECAST_DAY"] = str(run_config["max_forecast_day"])
+        if run_config.get("mok"):
+            env["ROMP_MOK"] = str(run_config["mok"])
+        if run_config.get("years"):
+            env["ROMP_YEARS"] = str(run_config["years"])
+        if run_config.get("years_clim"):
+            env["ROMP_YEARS_CLIM"] = str(run_config["years_clim"])
+        if run_config.get("fallback_date"):
+            env["ROMP_FALLBACK_DATE"] = str(run_config["fallback_date"])
 
     cmd = [sys.executable, str(rmp), "--mode", mode]
     if model_key:
@@ -2764,12 +2784,87 @@ def page() -> None:
                     default=[0, 3],
                     key=f"id_{rk}",
                 )
+                # Advanced temporal & verification parameters
+                with st.expander("Advanced Temporal & Verification Settings"):
+                    st.markdown("**Temporal Settings**")
+                    c5, c6 = st.columns(2)
+                    init_type = c5.selectbox(
+                        "Init Type",
+                        ["weekly", "daily", "monthly"],
+                        index=0,
+                        key=f"init_type_{rk}",
+                    )
+                    date_filter_year = c6.number_input(
+                        "Date Filter Year",
+                        min_value=2000,
+                        max_value=2030,
+                        value=2024,
+                        key=f"date_filter_year_{rk}",
+                    )
+                    
+                    st.markdown("**Evaluation & Verification Parameters**")
+                    c7, c8 = st.columns(2)
+                    verification_window_list = c7.text_input(
+                        "Verification Window List",
+                        value="((1, 15), (16, 30))",
+                        help="Format: tuple of tuples, e.g., ((1, 15), (16, 30))",
+                        key=f"vwl_{rk}",
+                    )
+                    tolerance_days_list = c8.text_input(
+                        "Tolerance Days List",
+                        value="(3, 5)",
+                        help="Format: tuple of ints, e.g., (3, 5)",
+                        key=f"tdl_{rk}",
+                    )
+                    
+                    c9, c10 = st.columns(2)
+                    max_forecast_day = c9.number_input(
+                        "Max Forecast Day",
+                        min_value=1,
+                        max_value=60,
+                        value=30,
+                        key=f"max_forecast_day_{rk}",
+                    )
+                    
+                    st.markdown("**Reserved for Future Versions**")
+                    c11, c12 = st.columns(2)
+                    mok = c11.text_input(
+                        "MOK",
+                        value="(5, 15)",
+                        key=f"mok_{rk}",
+                    )
+                    years = c12.text_input(
+                        "Years",
+                        value="None",
+                        key=f"years_{rk}",
+                    )
+                    
+                    c13, c14 = st.columns(2)
+                    years_clim = c13.text_input(
+                        "Years Clim",
+                        value="None",
+                        key=f"years_clim_{rk}",
+                    )
+                    fallback_date = c14.text_input(
+                        "Fallback Date",
+                        value="None",
+                        key=f"fallback_date_{rk}",
+                    )
                 model_run_windows[rk] = {
                     "eval_start": eval_start,
                     "eval_end": eval_end,
                     "baseline_start_year": int(bsy),
                     "baseline_end_year": int(bey),
                     "initialization_days": sorted(init_days),
+                    "init_type": init_type,
+                    "date_filter_year": int(date_filter_year),
+                    "verification_window_list": verification_window_list,
+                    "tolerance_days_list": tolerance_days_list,
+                    "max_forecast_day": int(max_forecast_day),
+                    "mok": mok,
+                    "years": years,
+                    "years_clim": years_clim,
+                    "fallback_date": fallback_date,
                 }
 
     # Shared settings
