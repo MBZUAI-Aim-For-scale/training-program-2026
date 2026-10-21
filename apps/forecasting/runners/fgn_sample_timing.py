@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -27,6 +28,7 @@ import pandas as pd
 import xarray as xr
 
 APP_ROOT = Path(__file__).resolve().parent.parent
+OUTPUTS = Path(os.environ.get("DEMO3_OUTPUT_DIR", APP_ROOT.parents[1] / "outputs"))  # <repo>/outputs
 sys.path.insert(0, str(APP_ROOT))
 from apps.forecasting import contract  # noqa: E402
 
@@ -125,7 +127,7 @@ def main() -> int:
     out["tp"] = out.tp.clip(min=0).where(out.lead_time > 0)
     out = contract.finalize(out, model_key="fgn", model_name="FGN (WeatherNext 2)", init=init,
                             init_source=f"HRES analysis (Google sample case; {a.config} checkpoint)")
-    dest = APP_ROOT / "outputs" / "fgn" / f"{init:%Y%m%dT%H}_{n_steps * 6}h_m{a.members}.nc"
+    dest = OUTPUTS / "fgn" / f"{init:%Y%m%dT%H}_{n_steps * 6}h_m{a.members}.nc"
     dest.parent.mkdir(parents=True, exist_ok=True)
     contract.write(out, dest)
 
@@ -134,7 +136,7 @@ def main() -> int:
                first_step_s=round(first_step_s, 1), per_step_s=round(per_step_s, 2),
                est_10day_run_s=round(first_step_s + per_step_s * (40 * a.members - 1), 1), peak_gpu_gb=round(peak_gb, 1),
                output_mb=round(dest.stat().st_size / 1e6, 1), when=time.strftime("%Y-%m-%dT%H:%M"))
-    with open(APP_ROOT / "outputs" / "_timings_log.jsonl", "a") as f:
+    with open(OUTPUTS / "_timings_log.jsonl", "a") as f:
         f.write(json.dumps(rec) + "\n")
     print(json.dumps(rec, indent=1))
     return 0

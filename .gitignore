@@ -32,3 +32,7 @@ notebooks/*.ipynb
 ai_weather.egg-info/
 anaconda_projects/db/
 .env
+
+# saved forecasts, movies and job logs (mounted from the host)
+/outputs/
+apps/outputs/

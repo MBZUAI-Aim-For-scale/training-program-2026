@@ -21,7 +21,8 @@ import pandas as pd
 APP_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_ROOT))
 
-OUTPUT_DIR = Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().parent.parent / "outputs"))
+# <repo>/outputs, which docker/run.sh mounts at /app/outputs (so runs survive a new container)
+OUTPUT_DIR = Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().parents[2] / "outputs"))
 JOBS_DIR = OUTPUT_DIR / "_jobs"
 BUCKET = os.environ.get("DEMO3_BUCKET", "").rstrip("/")
 
