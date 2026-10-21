@@ -3,3 +3,4 @@ outputs/
 *.pyc
 .DS_Store
 .venv/
+.env
