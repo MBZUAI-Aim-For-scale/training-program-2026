@@ -4,8 +4,6 @@ don't compete for memory). State lives in st.session_state["runs"].
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
@@ -70,8 +68,6 @@ def tick(s: dict) -> None:
         js = jobs.status(s["job"])
         if js["state"] == "done":
             s["paths"][s["running"]] = js["output"]
-            if store.BUCKET and not s["plan"][s["running"]][2].synthetic:
-                store.upload_in_background(Path(js["output"]))  # share it with the other Sparks
             s["running"] = s["job"] = None
         elif js["state"] not in ("queued", "running", "unknown"):
             s["failed"][s["running"]] = js.get("message", "see the job log")

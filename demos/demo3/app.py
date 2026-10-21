@@ -436,13 +436,8 @@ if loaded:
         results.field_maps(ds, m, box, region_name)
     data = results.netcdf_bytes(paths[k], p.stat().st_mtime,
                                 (box.lat_min, box.lat_max, box.lon_min, box.lon_max), lead_days * 24)
-    if store.BUCKET and not full.attrs.get("synthetic"):
-        if store.in_bucket(p):
-            theme.hint("✓ In the shared bucket", f"Other Sparks can load this {m.name} run.")
-        elif st.button(f"Upload this {m.name} run to the shared bucket", key=f"upload_{k}"):
-            with st.spinner("Uploading to the shared bucket…"):
-                store.upload(p)
-            st.rerun()
+    if store.BUCKET and not full.attrs.get("synthetic") and store.in_bucket(p):
+        theme.hint("✓ In the shared bucket", f"Other Sparks can load this {m.name} run.")
     st.download_button(f"Download this {m.name} forecast for {region_name} (NetCDF, "
                        f"{len(data) / 1e6:.1f} MB)", data, mime="application/x-netcdf",
                        file_name=f"{m.key}_{init:%Y%m%dT%H}_{lead_days}d_"
