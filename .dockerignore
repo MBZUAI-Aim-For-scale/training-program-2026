@@ -1,0 +1,6 @@
+# .env files hold passwords; docker/run.sh mounts them into the container instead
+**/.env
+# mounted or recreated at run time
+outputs/
+.venv/
+**/__pycache__/

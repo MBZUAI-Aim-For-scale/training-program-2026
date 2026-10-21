@@ -9,7 +9,7 @@ A Streamlit app, running on the DGX Spark, for running AI weather models. Partic
 - Each model card lists what it needs on the Spark: weight size, peak GPU memory, output size, grid and inputs.
 - **Onset** use case: onset maps (forecast vs observed), the rainfall series and an onset movie, by a choice of definitions (ICPAC, Moron–Robertson, Moron–Robertson with MOK filter), each adjustable.
 - **Several models at once:** pick up to 4 models at the start. Saved runs load (or download from the shared bucket) and the rest run one after another. Results: how each forecast was made, event movies (or onset maps and movies) for the models you choose, a time-series comparison of all of them, and forecast maps.
-- Sharing saved runs through a bucket (`runners/sync_bucket.py`, `DEMO3_BUCKET`).
+- Loading saved runs from a bucket (`runners/sync_bucket.py`, `DEMO3_BUCKET`).
 
 ## Run it
 
@@ -137,22 +137,25 @@ the CHIRPS grid with CHIRPS, or daily maximum 2 m temperature with ERA5 on reque
 each model's onset share next to the observed one); forecast maps and the NetCDF download (pick
 the model).
 
-## Sharing saved runs through the bucket
+## Saved runs from the bucket
 
-Saved runs are shared between Sparks through the program's bucket,
-`gs://aim4scale_training_2026/demo3/<model>/` (same file names as `outputs/`).
+Saved runs can be loaded from the program's bucket,
+`gs://aim4scale_training_2026/demo3/<model>/` (same file names as `outputs/`). The Sparks can only
+read it, so runs made on a Spark stay on it.
 
-- **Start the container with it:** `DEMO3_BUCKET=gs://aim4scale_training_2026/demo3 bash docker/run.sh`
-  (add `DEV=1`, `DEMO3_CACHE`, `DEMO3_OUTPUTS` as usual).
-- **Credentials:** the bucket is private. On the Spark, as an account with access:
+- **Start the container:** `bash docker/run.sh` uses that bucket by itself (add `DEV=1`,
+  `DEMO3_CACHE`, `DEMO3_OUTPUTS` as usual). `DEMO3_BUCKET=gs://...` uses another one, and
+  `DEMO3_BUCKET=` none.
+- **Credentials:** the bucket is private. On a Spark there is nothing to set up: `run.sh` passes the
+  machine's read-only key (`/etc/fleet-gcs-key.json`) into the container. Elsewhere:
   `gcloud auth application-default login --no-launch-browser` (tick every permission on Google's
-  consent page). `run.sh` passes the resulting `~/.config/gcloud/application_default_credentials.json`
-  into the container. A service-account key instead: `DEMO3_GCP_KEY=<key.json>`.
-- **On the page:** a run in the bucket but not on this Spark shows **Download saved run**; a run
-  made on the page uploads itself when it finishes; the results say whether the run is in the
-  bucket and offer **Upload this run to the shared bucket** if not.
-- **In bulk:** `runners/sync_bucket.py push|pull [--models ...] [--files ...] [--dry-run]`
-  (inside the container), or `gcloud storage rsync` on the Spark.
+  consent page), and `run.sh` passes the resulting
+  `~/.config/gcloud/application_default_credentials.json` into the container. A service-account key
+  instead: `DEMO3_GCP_KEY=<key.json>`.
+- **On the page:** a run in the bucket but not on this Spark shows **Download saved run**; the
+  results say whether the run is in the bucket.
+- **In bulk:** `runners/sync_bucket.py pull [--models ...] [--dry-run]` (inside the container), or
+  `gcloud storage rsync` on the Spark. `push` needs a key that can write to the bucket.
 
 ## FGN (WeatherNext 2): starting conditions from ECMWF open data
 
