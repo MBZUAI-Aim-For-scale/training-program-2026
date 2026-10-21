@@ -32,3 +32,4 @@ notebooks/*.ipynb
 .streamlit
 ai_weather.egg-info/
 anaconda_projects/db/
+.env
