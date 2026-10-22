@@ -8,7 +8,7 @@
 /ai_weather/.github/workflows
 /ai_weather/.mplcache/
 /ai_weather/
-/ai_weather/anaconda_projects/
+/ai_weather/anaconda_projects/db
 reports/slides/.quarto/
 # macOS
 .DS_Store
