@@ -100,10 +100,10 @@ On `rwanda-spark` the weights cache is `~/e2s-spark/root_cache`.
 From your laptop (on Tailscale):
 
 ```bash
-ssh -L 8501:localhost:8501 <user>@<spark>
+ssh -L 8502:localhost:8502 <user>@<spark>
 ```
 
-Leave that terminal open and browse to **http://localhost:8501**.
+Leave that terminal open and browse to **http://localhost:8502**.
 
 ### Trying it
 
@@ -136,6 +136,6 @@ docker build -t demo3 -f docker/Dockerfile . && docker rm -f demo3 && bash docke
 |---|---|
 | `docker run` fails: `unresolvable CDI devices` | `systemctl --user restart docker`, then `docker start demo3` (see step 1 to prevent it) |
 | `docker: Conflict ... name "/demo3" is already in use` | a container exists already: `docker start demo3`, or `docker rm -f demo3` and run again |
-| Browser can't reach localhost:8501 | the SSH tunnel isn't open, or port 8501 is busy on your laptop: use `-L 8502:localhost:8501` and open :8502 |
+| Browser can't reach localhost:8502 | the SSH tunnel isn't open, or port 8502 is busy on your laptop: use `-L 8503:localhost:8502` and open :8503 |
 | A run fails while downloading starting conditions | ECMWF/Google mirror busy: try again, or start with `DEMO3_IFS_SOURCE=azure` |
 | First run of a model is slow | it is downloading the weights once (Atlas CRPS ~30 min); later runs start in seconds |
