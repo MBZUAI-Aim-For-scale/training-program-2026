@@ -54,7 +54,7 @@ start_container() {
     --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
     -p 127.0.0.1:8501:8501 \
     "${code[@]}" "${envs[@]}" "${cloud[@]}" -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
-    -e DEMO_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
+    -e DEMO3_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
     ai_weather
 
   echo "AI Forecasting starting: http://localhost:8501"
