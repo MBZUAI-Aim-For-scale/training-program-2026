@@ -3,7 +3,12 @@
 **/__pycache__/
 *.pyc
 *.pyo
-
+/ai_weather/.claude/
+/ai_weather/.agents/
+/ai_weather/.github/workflows
+/ai_weather/
+/ai_weather/anaconda_projects/
+reports/slides/.quarto/
 # macOS
 .DS_Store
 
