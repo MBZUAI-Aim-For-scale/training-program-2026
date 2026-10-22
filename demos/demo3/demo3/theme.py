@@ -60,7 +60,13 @@ h1, h2, h3, h4 {{ color: {INK}; }}
 .d3-card .n {{ font-weight: 700; color: {INK}; font-size: 1.02rem; }}
 .d3-card .o {{ color: {MUTED}; font-size: .85rem; margin: 2px 0 8px; }}
 .d3-card .t {{ color: {MUTED}; font-size: .8rem; margin-top: 8px; }}
-.d3-card[title] {{ cursor: help; }}
+.d3-card {{ position: relative; }}
+.d3-card.has-tip {{ cursor: help; }}
+.d3-card:hover {{ z-index: 20; }}
+.d3-card .tip {{ display: none; position: absolute; left: 10px; right: 10px; top: calc(100% + 6px);
+  background: {INK}; color: #fff; font-size: .78rem; line-height: 1.45; padding: 10px 12px;
+  border-radius: 8px; white-space: pre-line; box-shadow: 0 6px 18px rgba(0,0,0,.18); }}
+.d3-card:hover .tip {{ display: block; }}
 
 .d3-tag {{ display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .06em;
   border-radius: 6px; padding: 3px 8px; margin-right: 6px; text-transform: uppercase; }}
@@ -122,10 +128,14 @@ def cards(items: list[dict]) -> None:
     html = ""
     for it in items:
         cls = "d3-card" + (" sel" if it.get("selected") else "") + (" dim" if it.get("dim") else "")
-        tip = f' title="{escape(it["tip"])}"' if it.get("tip") else ""
+        # shown on hover by CSS (browsers' own title tooltips are slow or missing in some);
+        # line breaks as &#10;: a blank line inside st.markdown HTML ends the HTML block
+        tip = (f'<div class="tip">{escape(it["tip"]).replace(chr(10), "&#10;")}</div>'
+               if it.get("tip") else "")
+        cls += " has-tip" if tip else ""
         note = f'<div class="t">{escape(it["note"])}</div>' if it.get("note") else ""
-        html += (f'<div class="{cls}" style="--c:{it["color"]}"{tip}><div class="n">{escape(it["name"])}</div>'
-                 f'<div class="o">{escape(it["org"])}</div>{it["tags"]}{note}</div>')
+        html += (f'<div class="{cls}" style="--c:{it["color"]}"><div class="n">{escape(it["name"])}</div>'
+                 f'<div class="o">{escape(it["org"])}</div>{it["tags"]}{note}{tip}</div>')
     st.markdown(f'<div class="d3-cards">{html}</div>', unsafe_allow_html=True)
 
 

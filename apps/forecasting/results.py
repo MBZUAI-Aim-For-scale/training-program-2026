@@ -120,13 +120,14 @@ def daily_precip(ds: xr.Dataset) -> xr.DataArray:
     return tp.groupby(day).sum("lead_time", min_count=4).rename("tp_daily")
 
 
-def _map(da: xr.DataArray, box: Box, title: str, cmap: str, units: str, contours=None):
+def _map(da: xr.DataArray, box: Box, title: str, cmap: str, units: str, contours=None, vlim=None):
     import cartopy.crs as ccrs
     import cartopy.feature as cf
     fig, ax = plt.subplots(figsize=(7, 5), subplot_kw=dict(projection=ccrs.PlateCarree()))
     ax.set_extent([box.lon_min, box.lon_max, box.lat_min, box.lat_max], crs=ccrs.PlateCarree())
     pc = dict(transform=ccrs.PlateCarree())
-    mesh = ax.pcolormesh(da.lon, da.lat, da, cmap=cmap, shading="auto", **pc)
+    vmin, vmax = vlim or (None, None)
+    mesh = ax.pcolormesh(da.lon, da.lat, da, cmap=cmap, shading="auto", vmin=vmin, vmax=vmax, **pc)
     if contours is not None:
         cs = ax.contour(da.lon, da.lat, contours, colors="k", linewidths=0.6, **pc)
         ax.clabel(cs, fontsize=7, fmt="%.0f")
@@ -164,28 +165,60 @@ def field_maps(ds: xr.Dataset, m: catalog.Model, box: Box, region_name: str) -> 
     members = [int(e) for e in ds.ensemble.values]
     pick = (c2.selectbox("Ensemble", ["mean"] + [f"member {e + 1}" for e in members],
                          key="map_member") if len(members) > 1 else "mean")
-    sel = (lambda da: da.mean("ensemble")) if pick == "mean" else \
-        (lambda da: da.sel(ensemble=int(pick.split()[1]) - 1))
     which = "ensemble mean" if pick == "mean" and len(members) > 1 else pick if len(members) > 1 else ""
 
+    st.fragment(_frames, run_every=PLAY_S if st.session_state.get("map_play") else None)(
+        ds, m, box, region_name, var, pick, members, which)
+
+
+PLAY_S = 1.5  # seconds per frame while playing
+
+
+def _vlim(da: xr.DataArray) -> tuple[float, float]:
+    """One colour range for every frame, so colours mean the same while playing."""
+    return float(da.quantile(0.01)), float(da.quantile(0.99))
+
+
+def _pause() -> None:
+    st.session_state["map_play"] = False
+
+
+def _frames(ds, m, box, region_name, var, pick, members, which) -> None:
+    """The map for one day (or hour), with Play/Pause and a slider to scrub through them."""
+    ss = st.session_state
+    sel = (lambda da: da.mean("ensemble")) if pick == "mean" else \
+        (lambda da: da.sel(ensemble=int(pick.split()[1]) - 1))
     if var == "tp":
         daily = daily_precip(ds)
-        days = [int(d) for d in daily.day.values]
-        if not days:
+        frames, key = [int(d) for d in daily.day.values], "map_day"
+        if not frames:
             st.info("The forecast is too short for a full day of rainfall.")
             return
-        d = st.select_slider("Forecast day", days, value=days[0], key="map_day")
+    else:
+        frames, key = [int(h) for h in ds.lead_time.values], "map_lead"
+    if ss.get(key) not in frames:
+        ss[key] = frames[0] if var == "tp" else frames[min(len(frames) - 1, 4)]
+    ss[key] = ss[key]  # keep the frame when a Play/Pause rerun skips drawing the slider
+    playing = bool(ss.get("map_play"))
+    if playing and not ss.get("map_play_btn"):  # advance a frame (not on the Pause click), looping
+        ss[key] = frames[(frames.index(ss[key]) + 1) % len(frames)]
+    b, s = st.columns([1, 7], vertical_alignment="bottom")
+    if b.button("⏸ Pause" if playing else "▶ Play", key="map_play_btn", width="stretch",
+                help="Play through the days; pause to stop on one, or drag the slider."):
+        ss["map_play"] = not playing
+        st.rerun()  # a full rerun starts or stops the timer
+    if var == "tp":
+        d = s.select_slider("Forecast day", frames, key=key, on_change=_pause)
         field = sel(daily.sel(day=d))
         title = f"Daily rainfall, day {d}" + (f" ({which})" if which else "")
-        fig = _map(field, box, title, "YlGnBu", "mm/day")
+        fig = _map(field, box, title, "YlGnBu", "mm/day", vlim=(0, _vlim(sel(daily))[1]))
         area = daily.weighted(np.cos(np.deg2rad(daily.lat))).mean(["lat", "lon"])
         series = _series(area.day.values, {f"member {e + 1}": area.sel(ensemble=e).values
                                            for e in members},
                          f"{region_name}: area-mean daily rainfall", "mm/day", "bars")
     else:
-        leads = [int(h) for h in ds.lead_time.values]
-        h = st.select_slider("Forecast hour", leads, value=leads[min(len(leads) - 1, 4)],
-                             key="map_lead", format_func=lambda h: f"+{h} h (day {h / 24:g})")
+        h = s.select_slider("Forecast hour", frames, key=key, on_change=_pause,
+                            format_func=lambda h: f"+{h} h (day {h / 24:g})")
         if var == "t2m":
             da = ds.t2m - 273.15
             field, cmap, unit, contours = sel(da.sel(lead_time=h)), "RdYlBu_r", "°C", None
@@ -195,14 +228,15 @@ def field_maps(ds: xr.Dataset, m: catalog.Model, box: Box, region_name: str) -> 
             field, cmap, unit = sel(da.sel(lead_time=h)), "viridis", "m"
             contours, name = field, "500 hPa geopotential height"
         fig = _map(field, box, f"{name}, +{h} h" + (f" ({which})" if which else ""),
-                   cmap, unit, contours)
+                   cmap, unit, contours, vlim=_vlim(sel(da)))
         area = da.weighted(np.cos(np.deg2rad(da.lat))).mean(["lat", "lon"])
         series = _series(area.valid_time.values, {f"member {e + 1}": area.sel(ensemble=e).values
                                                   for e in members},
                          f"{region_name}: area mean", unit)
-    a, b = st.columns([3, 2])
+    a, c = st.columns([3, 2])
     a.pyplot(fig)
-    b.plotly_chart(series, width="stretch")
+    plt.close(fig)
+    c.plotly_chart(series, width="stretch", key="map_series")
     st.caption(f"Shown on {m.name}'s own {m.grid_deg:g}° grid.")
 
 

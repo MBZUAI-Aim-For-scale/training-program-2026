@@ -265,11 +265,11 @@ def _model_card_html(m, selected: bool, timings, synthetic: bool) -> str:
               if selected else "0 1px 3px rgba(0,0,0,0.05)")
     tip = escape(f"{catalog.timing_label(m, timings)}\nStarts from {m.init_source}"
                  + "".join(f"\nNo {catalog.VAR_LABELS[v]}" for v in m.missing)
-                 + (f"\n\n{m.notes}" if m.notes else ""))
+                 + (f"\n\n{m.notes}" if m.notes else "")).replace("\n", "&#10;")
     dim = not m.live and not synthetic
     badge = f"{'ENS' if m.kind == 'ensemble' else 'DET'} · {'LIVE' if m.live else 'SAVED ONLY'}"
     return f'''
-    <div title="{tip}" style="cursor:help;background:#ffffff;border:1px solid {border};border-top:4px solid {accent};
+    <div class="fc-card" style="cursor:help;background:#ffffff;border:1px solid {border};border-top:4px solid {accent};
                 border-radius:12px;padding:1.1rem 1.25rem;box-shadow:{shadow};height:100%;
                 box-sizing:border-box;opacity:{0.55 if dim else 1};margin-bottom:0.75rem;">
         <div style="font-size:1rem;font-weight:700;color:#0F172A;margin-bottom:0.15rem;">{m.name}</div>
@@ -277,6 +277,7 @@ def _model_card_html(m, selected: bool, timings, synthetic: bool) -> str:
         <div style="display:inline-block;padding:0.15rem 0.55rem;background:{accent_bg};color:{accent};
                     border-radius:999px;font-size:0.7rem;font-weight:600;letter-spacing:0.03em;
                     text-transform:uppercase;">{badge}</div>
+        <div class="fc-tip">{tip}</div>
     </div>'''
 
 
@@ -325,6 +326,12 @@ def render():
         help="Hover over a card below for its details.")
     models = [catalog.BY_KEY[k] for k in model_keys]
 
+    # card details pop up on hover (browsers' own title tooltips are slow or missing in some)
+    st.markdown("<style>.fc-card{position:relative}.fc-card:hover{z-index:20}"
+                ".fc-tip{display:none;position:absolute;left:10px;right:10px;top:calc(100% + 6px);"
+                "background:#0F172A;color:#fff;font-size:.78rem;line-height:1.45;padding:10px 12px;"
+                "border-radius:8px;white-space:pre-line;box-shadow:0 6px 18px rgba(0,0,0,.18)}"
+                ".fc-card:hover .fc-tip{display:block}</style>", unsafe_allow_html=True)
     per_row = 3
     for i in range(0, len(catalog.MODELS), per_row):
         row = catalog.MODELS[i:i + per_row]
