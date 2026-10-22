@@ -1,0 +1,6 @@
+$ docker run --rm --device nvidia.com/gpu=all ubuntu nvidia-smi -L
+docker: Error response from daemon: CDI device injection failed: unresolvable CDI devices nvidia.com/gpu=all
+
+Run 'docker run --help' for more information
+
+[failed] containers can't see the GPU: docker: Error response from daemon: CDI device injection failed: unresolvable CDI devices nvidia.com/gpu=all

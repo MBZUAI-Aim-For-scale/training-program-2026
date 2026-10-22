@@ -1,0 +1,151 @@
+/* ==========================================================================
+   AI Lab Setup (Demo 1 / Spark status dashboard)
+   Uses tokens.css variables for brand consistency.
+   ========================================================================== */
+
+.ai-header {
+  background: linear-gradient(90deg, var(--romp-green-dark), var(--romp-green));
+  color: #fff;
+  border-radius: 0 0 var(--romp-radius-lg) var(--romp-radius-lg);
+  border-bottom: 3px solid var(--romp-blue);
+  padding: 18px 28px;
+  margin: 0 -1rem 1.4rem -1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ai-header .title { font-size: 1.35rem; font-weight: 700; }
+.ai-header .title small { font-weight: 400; opacity: .75; font-size: .8rem; margin-left: 8px; }
+
+.ai-live {
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-family: var(--romp-mono);
+  font-size: .8rem;
+}
+.ai-live .dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 8px; background: var(--romp-green);
+}
+.ai-live .dot.off { background: var(--romp-warn); }
+
+.ai-page-title { font-size: 1.9rem; font-weight: 800; color: var(--romp-ink); margin: .2rem 0 .1rem; }
+.ai-page-sub   { color: var(--romp-muted); margin-bottom: 1.2rem; }
+
+/* Stats grid */
+.ai-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 1.6rem; }
+.ai-stat {
+  background: var(--romp-surface);
+  border: 1px solid var(--romp-line);
+  border-left: 3px solid var(--romp-blue-light);
+  border-radius: var(--romp-radius);
+  padding: 14px 18px;
+  min-width: 0;
+}
+.ai-stat[data-tone="blue"]  { border-left-color: var(--romp-blue-light); }
+.ai-stat[data-tone="green"] { border-left-color: var(--romp-green); }
+.ai-stat[data-tone="amber"] { border-left-color: var(--romp-warn); }
+.ai-stat .k { font-size: .72rem; letter-spacing: .08em; color: var(--romp-muted); text-transform: uppercase; }
+.ai-stat .v {
+  font-size: 1.35rem; font-weight: 700; color: var(--romp-ink); margin-top: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.ai-section {
+  font-size: 1.2rem; font-weight: 700; color: var(--romp-ink);
+  border-left: 4px solid var(--romp-green);
+  padding-left: 10px; margin: 1.6rem 0 .8rem;
+}
+.ai-rule { border-bottom: 1px solid var(--romp-line); margin: -.3rem 0 1rem; }
+
+/* Demo cards — accent driven by data-status attribute, no per-card <style> */
+div[class*="st-key-aicard-"] {
+  background: var(--romp-surface);
+  border: 1px solid var(--romp-line);
+  border-left: 4px solid var(--romp-line);
+  border-radius: var(--romp-radius);
+  padding: 20px 18px;
+  gap: 1rem;
+  margin-bottom: 12px;
+}
+div[class*="st-key-aicard-"]:has(.ai-demo[data-status="running"]) { border-left-color: var(--romp-green); }
+div[class*="st-key-aicard-"]:has(.ai-demo[data-status="ready"])   { border-left-color: var(--romp-blue-light); }
+div[class*="st-key-aicard-"]:has(.ai-demo[data-status="stopped"]),
+div[class*="st-key-aicard-"]:has(.ai-demo[data-status="unavail"]) { border-left-color: var(--romp-warn); }
+
+.ai-demo { display: flex; align-items: center; gap: 16px; margin-bottom: 1rem; }
+.ai-demo .num {
+  flex: none; width: 2.2rem; height: 2.2rem; border-radius: 50%;
+  background: var(--romp-page); color: var(--romp-green-dark); font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+.ai-demo .body { flex: 1; min-width: 0; }
+.ai-demo .n { font-weight: 700; color: var(--romp-ink); font-size: 1.02rem; }
+.ai-demo .o { color: var(--romp-muted); font-size: .88rem; margin-top: 2px; }
+.ai-demo .side { flex: none; text-align: right; }
+.ai-demo .side a { display: block; font-size: .82rem; margin-top: 6px; color: var(--romp-blue); }
+
+.ai-tag {
+  display: inline-block; font-size: .68rem; font-weight: 700;
+  letter-spacing: .06em; border-radius: var(--romp-radius-sm);
+  padding: 3px 8px; text-transform: uppercase; white-space: nowrap;
+}
+.ai-tag.ok      { background: var(--romp-green-soft); color: #2f6f57; }
+.ai-tag.ready   { background: var(--romp-blue-soft);  color: #34509e; }
+.ai-tag.warn    { background: var(--romp-warn-soft);  color: #9a5b12; }
+.ai-tag.off     { background: #f1f2f4;               color: var(--romp-muted); }
+.ai-tag.unavail { background: var(--romp-error-soft); color: #a0522d; }
+
+/* Launch button styling */
+div[class*="st-key-launch-"] button { border-radius: 8px; }
+
+/* Progress bar */
+.ai-prog { margin-left: calc(2.2rem + 16px); margin-bottom: 1rem; }
+.ai-prog .bar {
+  height: 8px; background: var(--romp-page); border: 1px solid var(--romp-line);
+  border-radius: 999px; overflow: hidden;
+}
+.ai-prog .bar span {
+  display: block; height: 100%; background: var(--romp-blue-light);
+  border-radius: 999px; transition: width .6s ease;
+}
+.ai-prog[data-tone="ok"]    .bar span { background: var(--romp-green); }
+.ai-prog[data-tone="warn"]  .bar span { background: var(--romp-warn); }
+.ai-prog[data-tone="error"] .bar span { background: var(--romp-error); }
+.ai-prog .txt {
+  color: var(--romp-muted); font-size: .82rem; margin-top: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ai-prog .txt b { color: var(--romp-ink); }
+.ai-prog .fix { color: #9a5b12; font-size: .82rem; margin-top: 4px; }
+
+/* Expander / log alignment inside a card */
+div[class*="st-key-aicard-"] div[data-testid="stExpander"] {
+  margin-left: calc(2.2rem + 16px);
+  width: calc(100% - 2.2rem - 16px);
+}
+div[class*="st-key-aicard-"] div[data-testid="stExpander"] summary p { font-size: .85rem; }
+div[class*="st-key-aicard-"] div[data-testid="stCode"] pre,
+div[class*="st-key-aicard-"] div[data-testid="stCode"] code {
+  font-size: .72rem !important; line-height: 1.45;
+}
+
+.ai-unavail-banner {
+  background: var(--romp-error-soft);
+  border-left: 4px solid var(--romp-warn);
+  padding: 14px 18px;
+  border-radius: var(--romp-radius-sm);
+  margin-bottom: 1.2rem;
+  color: #7a3e0f;
+  font-size: .92rem;
+}
+
+@media (max-width: 700px) { .ai-stats { grid-template-columns: 1fr; } }
+@media (max-width: 600px) {
+  .ai-demo { flex-wrap: wrap; }
+  .ai-demo .side { text-align: left; }
+}

@@ -1,5 +1,5 @@
 """
-Landing page – platform introduction and quick navigation.
+Landing page – platform introduction
 """
 import os
 import sys
@@ -69,7 +69,7 @@ def page():
               letter-spacing:0.2em;text-transform:uppercase;color:#0a9938;'> AI-Powered Weather Forecasting </p>
           <h1 style='font-family:Inter,sans-serif;font-size:2.4rem;font-weight:600;
               color:#171d1a;line-height:1.2;margin:0 0 12px;'>
-            <span style='color:#213b7d;'> A Benchmarking &  Forecasting  Platform </span>
+            <span style='color:#213b7d;'> A  Forecasting and Benchmarking Platform </span>
           </h1>
           <p style='font-family:Inter,sans-serif;font-size:1.1rem;color:#4B5563;
               max-width:600px;margin:0 auto 32px;'>

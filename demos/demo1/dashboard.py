@@ -28,10 +28,10 @@ DEMOS = [
      "container": "ai_weather", "setup": "demo4"},
     {"n": 5, "title": "Putting your forecast to the test",
      "about": "Evaluate the forecasts you ran in Demo 3 against different metrics."},
-    {"n": 6, "title": "Ground truth challenge",
-     "about": "Compare model performance against different observational datasets."},
-    {"n": 7, "title": "Feasibility assessment",
-     "about": "Decide which models, data and thresholds to take forward into a pilot."},
+    # {"n": 6, "title": "Ground truth challenge",
+    #  "about": "Compare model performance against different observational datasets."},
+    # {"n": 7, "title": "Feasibility assessment",
+    #  "about": "Decide which models, data and thresholds to take forward into a pilot."},
 ]
 
 # Same palette as Demo 3

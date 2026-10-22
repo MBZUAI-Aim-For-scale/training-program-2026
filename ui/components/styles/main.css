@@ -1,6 +1,9 @@
 /* ui/components/styles/main.css */
 @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=DM+Mono:wght@400;500&display=swap');
 
+/* ============================================================================
+   DESIGN TOKENS
+   ============================================================================ */
 :root {
     --bg: #F8FAFC;
     --bg-alt: #F1F5F9;
@@ -23,6 +26,7 @@
     --menu-green: #10B981;
     --menu-green-hover: rgba(16, 185, 129, 0.15);
     --nav-height: 4.5rem;
+    --content-padding: 1.5rem;
     --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
     --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.06), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
     --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04);
@@ -38,24 +42,151 @@ html, body {
     background-color: var(--bg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    color: var(--text);
     overflow-x: hidden;
 }
 
-/* APP FRAME */
-.stApp {
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-    transform: none;
+/* ============================================================================
+   BASE FONT SIZE — Original generous scale preserved
+   ============================================================================ */
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--text);
 }
 
-/* STREAMLIT HEADER (Transparent Overlay) */
+/* ============================================================================
+   APP FRAME & FLEX LAYOUT
+   Zero out container margins & paddings to allow full-bleed components
+   ============================================================================ */
+.stApp,
+[data-testid="stAppViewContainer"],
+section.main,
+[data-testid="stMain"] {
+    background: var(--bg);
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Outer block container - zero horizontal/bottom padding so children can go edge-to-edge */
+.block-container,
+section.main .block-container,
+[data-testid="stAppViewBlockContainer"] {
+    position: relative;
+    padding-top: calc(var(--nav-height) + 1rem) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-bottom: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 0 auto !important;
+    box-sizing: border-box;
+    background: var(--bg);
+}
+
+/* Streamlit inner vertical block container */
+[data-testid="stVerticalBlock"],
+[data-testid="stVerticalBlockBorderWrapper"] {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 0 auto !important;
+    width: 100% !important;
+    padding-bottom: 0 !important;
+    margin-bottom: 0 !important;
+    gap: 1rem !important;
+}
+
+/* Add horizontal padding to standard content blocks, but exclude full-bleed navbar & footer */
+[data-testid="stVerticalBlock"] > div {
+    padding-left: var(--content-padding);
+    padding-right: var(--content-padding);
+}
+
+[data-testid="stVerticalBlock"] > div:has(.st-key-top_navbar),
+[data-testid="stVerticalBlock"] > div:has(.green-footer),
+div:has(> .st-key-top_navbar),
+div:has(> .green-footer) {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+/* ============================================================================
+   FULL-BLEED TOP NAVBAR (PINS FLUSH TO TOP/LEFT/RIGHT EDGES)
+   ============================================================================ */
+.st-key-top_navbar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    z-index: 1001 !important;
+    background: #0A2F6C !important;
+    padding: 0.75rem var(--content-padding) !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.st-key-top_navbar .brand-text {
+    color: #ffffff !important;
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em !important;
+}
+
+.st-key-top_navbar .brand-text span {
+    color: rgba(255, 255, 255, 0.7) !important;
+    font-weight: 400 !important;
+}
+
+.st-key-top_navbar .weather-badge {
+    color: #ffffff !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 999px !important;
+    padding: 0.4rem 1rem !important;
+}
+
+.st-key-top_navbar .weather-badge .blink-dot {
+    background: #10B981 !important;
+}
+
+.st-key-top_navbar .stButton > button {
+    color: #ffffff !important;
+    background: transparent !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+.st-key-top_navbar .stButton > button:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.st-key-top_navbar .stButton > button[kind="primary"] {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    box-shadow: none !important;
+}
+
+.st-key-top_navbar .stButton > button[kind="primary"]:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* ============================================================================
+   STREAMLIT HEADER (Transparent Overlay)
+   ============================================================================ */
 [data-testid="stDecoration"] { display: none; }
 
 header[data-testid="stHeader"] {
@@ -71,7 +202,7 @@ header[data-testid="stHeader"] {
     overflow: visible;
     z-index: 1002;
     margin: 0;
-    padding: 0 2rem !important; /* FIXED: Synced with navbar padding (was 1.5rem) */
+    padding: 0 var(--content-padding) !important;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -105,7 +236,7 @@ header[data-testid="stHeader"] [role="button"] {
     align-items: center;
     justify-content: center;
     position: relative !important;
-    z-index: 1003 !important; /* FIXED: Above navbar */
+    z-index: 1003 !important;
 }
 
 header[data-testid="stHeader"] button svg,
@@ -126,7 +257,7 @@ header[data-testid="stHeader"] [role="button"]:hover {
     opacity: 1;
 }
 
-/* HIDE DEPLOY BUTTON & DRAGGABLE ELEMENTS BELOW FOOTER */
+/* Hide deploy button & system drag-drop elements */
 .stDeployButton,
 button[data-testid="stDeployButton"],
 [data-testid="stDeployButton"],
@@ -138,35 +269,56 @@ button[data-testid="stDeployButton"],
     display: none !important;
 }
 
-/* MAIN CONTAINER */
-.block-container {
-    position: relative;
-    padding-top: calc(var(--nav-height) + 1.5rem);
-    padding-left: 2.5rem;
-    padding-right: 2.5rem;
-    padding-bottom: 2rem;
-    max-width: 1600px;
-    margin: 0 auto;
-    flex: 1 0 auto;
-    box-sizing: border-box;
-    background: var(--bg);
-    width: 100%;
-}
-
-/* TYPOGRAPHY */
-h1, h2, h3, h4 {
+/* ============================================================================
+   TYPOGRAPHY — Original Prominent Scale
+   ============================================================================ */
+h1, h2, h3, h4, h5, h6 {
     font-weight: 600;
     color: var(--primary);
     margin-top: 0.5rem;
     margin-bottom: 0.75rem;
     letter-spacing: -0.02em;
+    line-height: 1.25;
 }
 
-h1 { font-size: 1.85rem; }
-h2 { font-size: 1.45rem; }
-h3 { font-size: 1.15rem; }
+h1 { font-size: 2rem; }
+h2 { font-size: 1.55rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
 
-/* COMPONENT CARDS */
+.page-title {
+    font-size: 2.2rem !important;
+    font-weight: 800 !important;
+    color: var(--primary) !important;
+    line-height: 1.2 !important;
+    margin: 0.2rem 0 0.3rem !important;
+}
+
+.page-subtitle {
+    font-size: 1.1rem !important;
+    color: var(--muted) !important;
+    line-height: 1.5 !important;
+    margin-bottom: 1.4rem !important;
+}
+
+.sec-hd {
+    font-size: 1.3rem !important;
+    font-weight: 700 !important;
+}
+
+p, li {
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.stCaption, [data-testid="stCaptionContainer"] {
+    font-size: 0.95rem !important;
+    color: var(--muted) !important;
+}
+
+/* ============================================================================
+   COMPONENT CARDS
+   ============================================================================ */
 .card, .weather-card, .bench-card {
     background: var(--card);
     border-radius: var(--radius);
@@ -175,6 +327,7 @@ h3 { font-size: 1.15rem; }
     border: 1px solid var(--border);
     margin-bottom: 1rem;
     transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+    font-size: 1rem;
 }
 
 .card:hover, .weather-card:hover, .bench-card:hover {
@@ -183,14 +336,16 @@ h3 { font-size: 1.15rem; }
     border-color: var(--accent);
 }
 
-/* STREAMLIT UI ELEMENTS */
+/* ============================================================================
+   STREAMLIT UI ELEMENTS
+   ============================================================================ */
 .stButton > button {
     border-radius: 8px;
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     transition: all 0.2s ease-in-out;
     border: 1px solid var(--border);
-    padding: 0.5rem 1.25rem;
+    padding: 0.6rem 1.5rem;
     box-shadow: var(--shadow-sm);
 }
 
@@ -211,6 +366,7 @@ h3 { font-size: 1.15rem; }
     background: var(--primary);
     color: #ffffff;
     border-color: var(--primary);
+    font-size: 1rem;
 }
 
 .stButton > button[kind="primary"]:hover {
@@ -219,13 +375,34 @@ h3 { font-size: 1.15rem; }
     color: #ffffff;
 }
 
-/* SIDEBAR BUTTONS (WHITE) */
+.stTextInput input,
+.stNumberInput input,
+.stSelectbox select,
+.stDateInput input,
+.stMultiSelect input {
+    font-size: 1rem !important;
+}
+
+.stTextInput label,
+.stNumberInput label,
+.stSelectbox label,
+.stDateInput label,
+.stMultiSelect label,
+.stRadio label,
+.stCheckbox label {
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    color: var(--text) !important;
+}
+
+/* Sidebar buttons */
 .stSidebar .stButton > button {
     background: #FFFFFF;
     color: var(--primary);
     border: 1px solid var(--border);
     box-shadow: var(--shadow-sm);
     opacity: 0.85;
+    font-size: 0.95rem;
 }
 
 .stSidebar .stButton > button:hover {
@@ -236,6 +413,9 @@ h3 { font-size: 1.15rem; }
     box-shadow: var(--shadow-md);
 }
 
+/* ============================================================================
+   METRICS & KPI CARDS
+   ============================================================================ */
 .stMetric {
     background: var(--card);
     border-radius: var(--radius);
@@ -245,7 +425,7 @@ h3 { font-size: 1.15rem; }
 }
 
 .stMetric .stMetricLabel {
-    font-size: 0.7rem;
+    font-size: 0.85rem !important;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--muted);
@@ -253,25 +433,102 @@ h3 { font-size: 1.15rem; }
 }
 
 .stMetric .stMetricValue {
-    font-size: 1.65rem;
+    font-size: 1.85rem !important;
     font-weight: 700;
     color: var(--primary);
 }
 
+.kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 14px;
+    margin: 0.4rem 0 1.4rem;
+}
+
+.kpi {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 18px;
+    min-width: 0;
+}
+
+.kpi-label {
+    font-size: 0.8rem !important;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.kpi-value {
+    font-size: 1.5rem !important;
+    font-weight: 700;
+    color: var(--text);
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+}
+
+.ibox {
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--muted);
+    border-radius: 6px;
+    background: var(--card);
+    font-size: 0.95rem;
+    margin: 0.6rem 0 1rem;
+    line-height: 1.5;
+}
+
+/* ============================================================================
+   DATAFRAMES & TABLES
+   ============================================================================ */
 .stDataFrame {
     border-radius: var(--radius);
     border: 1px solid var(--border);
     overflow: hidden;
     box-shadow: var(--shadow-sm);
+    font-size: 0.95rem;
 }
 
-/* SCROLLBARS */
+.all-metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+    min-width: 700px;
+}
+
+.all-metrics-table th,
+.all-metrics-table td {
+    border: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: right;
+    font-size: 0.95rem;
+}
+
+.all-metrics-table th {
+    background: var(--bg-alt);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.all-metrics-table td:first-child,
+.all-metrics-table th:first-child {
+    text-align: left;
+}
+
+/* ============================================================================
+   SCROLLBARS
+   ============================================================================ */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
-/* SIDEBAR POSITIONING */
+/* ============================================================================
+   SIDEBAR POSITIONING
+   ============================================================================ */
 [data-testid="stSidebar"] {
     position: fixed;
     top: var(--nav-height);
@@ -281,42 +538,144 @@ h3 { font-size: 1.15rem; }
     z-index: 900;
     background-color: var(--bg-alt);
     border-right: 1px solid var(--border);
-    display: none; 
+    display: none;
 }
 
-/* RESPONSIVE */
+/* ============================================================================
+   FULL-BLEED FLUSH FOOTER (0px GAPS BOTTOM/LEFT/RIGHT)
+   ============================================================================ */
+div:has(> .green-footer),
+[data-testid="element-container"]:has(.green-footer),
+[data-testid="stElementContainer"]:has(.green-footer),
+.stMarkdown:has(.green-footer) {
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+    width: 100% !important;
+}
+
+.green-footer {
+    flex-shrink: 0 !important;
+    margin-top: auto !important;
+    margin-bottom: 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100% !important;
+
+    background: var(--footer-bg) !important;
+    color: #ffffff !important;
+    padding: 2rem var(--content-padding) !important;
+    box-shadow: none !important;
+    box-sizing: border-box !important;
+}
+
+.green-footer p {
+    margin-bottom: 0 !important;
+}
+
+.green-footer .footer-content {
+    max-width: 100% !important;
+    margin: 0 auto !important;
+}
+
+.green-footer .brand-group {
+    color: #ffffff !important;
+    font-size: 1rem !important;
+}
+
+.green-footer .brand {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+}
+
+.green-footer .sep {
+    color: rgba(255, 255, 255, 0.5) !important;
+    margin: 0 0.75rem !important;
+}
+
+.green-footer .meta {
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-size: 0.95rem !important;
+    margin-top: 1rem !important;
+    padding-top: 1rem !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.green-footer .footer-logo-wrapper {
+    filter: brightness(0) invert(1) !important;
+    opacity: 0.9 !important;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
 @media (max-width: 1024px) {
-    .block-container {
-        padding-left: 1.5rem;
-        padding-right: 1.5rem;
+    :root {
+        --content-padding: 1rem;
     }
+
     .st-key-top_navbar {
-        padding: 0 1.5rem;
+        padding: 0.75rem 1rem !important;
     }
+
     .st-key-top_navbar .stButton > button {
         padding: 0.5rem 1rem;
-        font-size: 0.85rem;
+        font-size: 0.9rem !important;
     }
-    .weather-badge {
-        margin-right: 3rem;
+
+    .st-key-top_navbar .weather-badge {
+        margin-right: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.8rem !important;
+    }
+
+    .kpi-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
 @media (max-width: 768px) {
+    :root {
+        --content-padding: 0.75rem;
+    }
+
     .st-key-top_navbar {
-        padding: 0 1rem;
+        padding: 0.5rem 0.75rem !important;
     }
-    .brand-text {
-        font-size: 1rem;
+
+    .st-key-top_navbar .brand-text {
+        font-size: 1rem !important;
     }
-    .brand-text span {
+
+    .st-key-top_navbar .brand-text span {
         display: none;
     }
+
     .st-key-top_navbar .stButton > button {
         padding: 0.4rem 0.75rem;
-        font-size: 0.8rem;
+        font-size: 0.85rem !important;
     }
-    .weather-badge {
+
+    .st-key-top_navbar .weather-badge {
         display: none;
+    }
+
+    .page-title {
+        font-size: 1.5rem !important;
+    }
+
+    .page-subtitle {
+        font-size: 1rem !important;
+    }
+
+    .kpi-row {
+        grid-template-columns: 1fr;
+    }
+
+    .green-footer {
+        padding: 1.5rem 0.75rem !important;
     }
 }

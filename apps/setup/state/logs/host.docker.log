@@ -1,0 +1,4 @@
+$ docker info --format {{.ServerVersion}}|{{.SecurityOptions}}
+28.4.0|[name=apparmor name=seccomp,profile=builtin name=cgroupns]
+
+[ok] Docker 28.4.0

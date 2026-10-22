@@ -1,0 +1,122 @@
+{
+ "pid": 45089,
+ "args": [
+  "run",
+  "--only",
+  "demo3",
+  "--no-dashboard"
+ ],
+ "started": 1792690060.150091,
+ "finished": null,
+ "state": "running",
+ "steps": [
+  {
+   "id": "host.gpu",
+   "group": "demo1",
+   "title": "GPU visible to the host",
+   "status": "failed",
+   "started": 1792690060.1504488,
+   "finished": 1792690060.1550632,
+   "detail": "FileNotFoundError: [Errno 2] No such file or directory: 'nvidia-smi'",
+   "hint": "",
+   "progress": null,
+   "log": "host.gpu.log"
+  },
+  {
+   "id": "host.docker",
+   "group": "demo1",
+   "title": "Docker daemon running",
+   "status": "ok",
+   "started": 1792690060.155505,
+   "finished": 1792690060.197685,
+   "detail": "Docker 28.4.0",
+   "hint": "",
+   "progress": 1.0,
+   "log": "host.docker.log"
+  },
+  {
+   "id": "host.cdi",
+   "group": "demo1",
+   "title": "Containers can use the GPU",
+   "status": "failed",
+   "started": 1792690060.1983519,
+   "finished": 1792690060.263754,
+   "detail": "containers can't see the GPU: docker: Error response from daemon: CDI device injection failed: unresolvable CDI devices nvidia.com/gpu=all",
+   "hint": "Docker started before the GPU list existed (common after a reboot): `systemctl --user restart docker`, then retry.",
+   "progress": null,
+   "log": "host.cdi.log"
+  },
+  {
+   "id": "host.gpu_wait",
+   "group": "demo1",
+   "title": "Docker waits for GPU after reboot",
+   "status": "warn",
+   "started": 1792690060.264268,
+   "finished": 1792690060.309278,
+   "detail": "Docker isn't rootless; skipped (only the Sparks' rootless setup needs this)",
+   "hint": "",
+   "progress": null,
+   "log": "host.gpu_wait.log"
+  },
+  {
+   "id": "host.disk",
+   "group": "demo1",
+   "title": "Disk space",
+   "status": "failed",
+   "started": 1792690060.309798,
+   "finished": 1792690060.354723,
+   "detail": "FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/docker'",
+   "hint": "",
+   "progress": null,
+   "log": "host.disk.log"
+  },
+  {
+   "id": "host.smoke",
+   "group": "demo1",
+   "title": "PyTorch GPU smoke test",
+   "status": "skipped",
+   "started": null,
+   "finished": null,
+   "detail": "containers can't see the GPU",
+   "hint": "",
+   "progress": null,
+   "log": null
+  },
+  {
+   "id": "demo3.build",
+   "group": "demo3",
+   "title": "Build image `demo3`",
+   "status": "running",
+   "started": 1792690060.355514,
+   "finished": null,
+   "detail": "layer 1/11: FROM nvcr.io/nvidia/pytorch:25.10-py3@sha256:42263b2424fc237b34c4fc4a91c30d603c57eed36e37d31ff6d9a4f1f801edee",
+   "hint": "",
+   "progress": 0.0,
+   "log": "demo3.build.log"
+  },
+  {
+   "id": "demo3.start",
+   "group": "demo3",
+   "title": "Start container `demo3`",
+   "status": "pending",
+   "started": null,
+   "finished": null,
+   "detail": "",
+   "hint": "",
+   "progress": null,
+   "log": null
+  },
+  {
+   "id": "demo3.health",
+   "group": "demo3",
+   "title": "Page answers on :8502",
+   "status": "pending",
+   "started": null,
+   "finished": null,
+   "detail": "",
+   "hint": "",
+   "progress": null,
+   "log": null
+  }
+ ]
+}

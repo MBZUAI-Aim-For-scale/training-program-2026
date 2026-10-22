@@ -407,8 +407,25 @@ def format_figure_label(path_str: str) -> str:
 
 
 def render_benchmark_figure(path_str: str) -> None:
-    st.image(path_str, width="stretch")
-    st.caption(format_figure_label(path_str))
+    """Safely render a benchmark figure, skipping corrupt or empty files."""
+    path = Path(path_str)
+    
+    # Check file exists
+    if not path.exists():
+        st.warning(f"Figure not found: {path.name}")
+        return
+    
+    # Check file has content
+    if path.stat().st_size == 0:
+        st.warning(f"Figure is empty (0 bytes): {path.name}")
+        return
+    
+    try:
+        st.image(path_str, width="stretch")
+        st.caption(format_figure_label(path_str))
+    except Exception as e:
+        # PIL couldn't identify the image format (corrupt file)
+        st.warning(f"Could not display figure {path.name}: {type(e).__name__}")
 
 
 # ======================================================================

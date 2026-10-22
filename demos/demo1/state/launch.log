@@ -132,3 +132,39 @@ Spark host (demo1)
   skip   PyTorch GPU smoke test: containers can't see the GPU
 
 Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  FAILED GPU visible to the host: FileNotFoundError: [Errno 2] No such file or directory: 'nvidia-smi'
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 28.4.0
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: docker: Error response from daemon: CDI device injection failed: unresolvable CDI devices nvidia.com/gpu=all
+         fix: Docker started before the GPU list existed (common after a reboot): `systemctl --user restart docker`, then retry.
+  …      Docker waits for GPU after reboot
+  WARN   Docker waits for GPU after reboot: Docker isn't rootless; skipped (only the Sparks' rootless setup needs this)
+  …      Disk space
+  FAILED Disk space: FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/docker'
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  FAILED GPU visible to the host: FileNotFoundError: [Errno 2] No such file or directory: 'nvidia-smi'
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 28.4.0
+  …      Containers can use the GPU
+  FAILED Containers can use the GPU: containers can't see the GPU: docker: Error response from daemon: CDI device injection failed: unresolvable CDI devices nvidia.com/gpu=all
+         fix: Docker started before the GPU list existed (common after a reboot): `systemctl --user restart docker`, then retry.
+  …      Docker waits for GPU after reboot
+  WARN   Docker waits for GPU after reboot: Docker isn't rootless; skipped (only the Sparks' rootless setup needs this)
+  …      Disk space
+  FAILED Disk space: FileNotFoundError: [Errno 2] No such file or directory: '/var/lib/docker'
+  skip   PyTorch GPU smoke test: containers can't see the GPU
+
+Demo 3 · AI forecast lab
+  …      Build image demo3
+  FAILED Build image demo3: docker build failed: ERROR: failed to build: failed to solve: failed to compute cache key: failed commit on ref "layer-sha256:ccd30aa8d19107b63e4826e2da0155f2a049a854859d50c7f869fe73d92b03d0": commit failed: rename /var/lib/containerd/io.containerd.content.v1.content/ingest/61a0b3705dc165dbdb35f28c80a852f687da780b101c6c
+  skip   Start container demo3: image build failed
+  skip   Page answers on :8502: image build failed
+
+Setup finished with errors (see above, or the dashboard).

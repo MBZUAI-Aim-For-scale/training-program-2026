@@ -99,9 +99,7 @@ Understanding the data is critical for trusting the output.
   Global atmospheric reanalysis (0.25°). The foundational "truth" the AI models learned from.
 2. **CHIRPS** | *PRIMARY VERIFICATION*  
   Satellite- and station-blended precipitation dataset. The benchmark for this training and the dashboard.
-3. **IMERG** | *SECONDARY VERIFICATION*  
-  Global precipitation estimates from the GPM mission. Used for independent cross-validation.
-4. **ENACTS** | *NATIONAL VERIFICATION*(Ethiopia, Kenya, Rwanda etcc)  
+3. **ENACTS** | *NATIONAL VERIFICATION*(Ethiopia, Kenya, Rwanda etcc)  
   Station-blended national product. Used in the earlier reference test runs, but **not** set up in the dashboard.
 :::
 
@@ -406,59 +404,8 @@ Tabs 4–6 appear only when their optional modules are installed. Results from t
 
 ---
 
-## Reading the Metric Map Correctly
 
-::: {.callout-warning}
-## Two different meanings of "skill"
 
-The **Skill** sub-tab is only a pass/fail map: green where the metric is below a fixed threshold (FAR 35 %, Miss Rate 60 %, MAE 7 days). It is **not** the skill score $SS$.
-:::
-
-- **Difference** = selected map minus comparison map. Red means the selected map is higher, which is *worse* for FAR, MR and MAE.
-- **All Metrics** colours are relative to **climatology**, so a model can be green on MAE and red on Miss Rate.
-- A model that rarely predicts onset has few false alarms and few cells for MAE: read all three together.
-
----
-
-## When Something Goes Wrong
-
-| You see | Likely cause | Do this |
-|:---|:---|:---|
-| Empty Models table | No `.nc` files found | `bash docker/run.sh check`, fix the `MISSING` line |
-| "No data is configured for ... yet", Run disabled | Country not set up | Select Ethiopia |
-| 401 / "credentials" error | A `[bucket]` input and no Google login | `gcloud auth login`, or use local data |
-| Exit code **-15** | The page was touched during a run | Wait, then rerun |
-| Exit code **-9** | Out of memory | Fewer models, shorter period |
-| Exit code **124** | Longer than 30 minutes | Shorter period, one model at a time |
-| "container is not running" | Not started | `bash docker/run.sh`, then `logs` |
-| Start fails on `nvidia.com/gpu` | No GPU for Docker | `GPU=0 bash docker/run.sh` |
-| Changing a Shared setting does nothing | Not sent to the run yet | Use a spec file |
-
----
-
-## Knowledge Check: Quick Review
-
-Let's test our understanding. Think first, then reveal the answer.
-
-1. What dataset serves as our primary observational benchmark for verification?
-
-   ::: {.fragment}
-   *CHIRPS.*
-   :::
-
-2. Why must we apply the exact same wet/dry spell rules to both observations and forecasts?
-
-   ::: {.fragment}
-   *To ensure genuine comparability: onset is a derived event, not a raw variable.*
-   :::
-
-3. A model has a Brier Skill Score of −0.15. What does that mean?
-
-   ::: {.fragment}
-   *Its Brier score is about 15 % higher (worse) than the climatological reference.*
-   :::
-
----
 
 ## Knowledge Check: Hands-On
 
@@ -486,7 +433,7 @@ Let's test our understanding. Think first, then reveal the answer.
 
 # Worksheet  for AI Weather Model Benchmarking
 
-### Data Readiness Check
+## Data Readiness Check
 
 **Action:** Run `python ai_weather/config.py sync` in your terminal.
 
@@ -496,7 +443,7 @@ Let's test our understanding. Think first, then reveal the answer.
 
 
 
-### Track Rule Check
+## Track Rule Check
 
 ::: {.callout-warning}
 **Question 1.2:** Why must deterministic (MAE, FAR, MR) and probabilistic (BSS, AUC) evaluation tracks remain strictly separated?

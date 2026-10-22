@@ -75,12 +75,14 @@ ensure_light_theme_config()
 # ─── EXTENDED SYSTEM MODULE CONFIGURATION MATRIX ───────────────────────────
 PAGE_MODULE_MAPPING = {
     "Home": "ui.pages.home",
+    "AI_Setup": "ui.pages.ai_setup", 
     "AI Forecast": "ui.pages.ai_forecasting", 
     "SM_Benchmarking": "ui.pages.short_medium_benchmarking",
 }
 
 PRIMARY_MENU_CONFIG = {
     "Home": {"target": "Home", "label": "Home"},
+    "AI Lab Setup": {"target": "AI_Setup", "label": "Demo1"},
     "AI Forecast": {"target": "AI Forecast", "label": "Demo3"},
     "AI Benchmarking": {"target": "SM_Benchmarking", "label": "Demo4"},
 }
@@ -143,43 +145,113 @@ def collect_config_problems():
 
 
 def load_css():
-    styles_dir = os.path.join(os.path.dirname(__file__), "components", "styles")
-    decoupled_sheets = [
-        "main.css", "nav.css", "header.css", "control_center.css", "tabs.css",
-        "filters.css", "footer.css", "loader.css", "forecast.css", "page_stuyles/benchmarking.css",
-    ]
-    compiled_bundle = ""
-    for sheet in decoupled_sheets:
-        full_path = os.path.join(styles_dir, sheet)
-        if os.path.exists(full_path):
-            with open(full_path, "r", encoding="utf-8") as f:
-                compiled_bundle += f"\n/* --- {sheet} --- */\n" + f.read()
-                
-    compiled_bundle += """
-/* Force Light Theme Variables & Backgrounds */
-[data-testid="stApp"], .stApp, [data-theme="dark"] {
-    --primary-color: #0a9938 !important;
-    --background-color: #ffffff !important;
-    --secondary-background-color: #f0f2f6 !important;
-    --text-color: #262730 !important;
-    --secondary-text-color: #555555 !important;
-    --font: 'Inter', sans-serif !important;
-    background-color: #ffffff !important;
-    color: #262730 !important;
-}
-[data-testid="stSidebar"] {
-    background-color: #f0f2f6 !important;
-    color: #262730 !important;
-}
+    """
+    Inject the global stylesheet bundle into the Streamlit app.
+    """
+    styles_dir = Path(os.path.dirname(__file__)) / "components" / "styles"
 
-/* OVERRIDE: Force navbar buttons to stretch and fill the remaining white space evenly */
-[data-testid="stApp"] .stButton > button {
+    # Order matters: tokens → shared widgets → shell chrome → pages
+    decoupled_sheets = [
+        # Design system (MUST come first — everything else uses these variables)
+        "tokens.css",
+        "components.css",
+        # Shell chrome
+        "main.css",
+        "nav.css",
+        "header.css",
+        "control_center.css",
+        "tabs.css",
+        "filters.css",
+        "footer.css",
+        "loader.css",
+        "forecast.css",
+        # Page stylesheets (warm-up injection; pages also self-load)
+        "page_styles/home.css",
+        "page_styles/benchmarking.css",
+        "page_styles/ai_setup.css",
+    ]
+
+    compiled_bundle = ""
+    seen = set()
+    for sheet in decoupled_sheets:
+        if sheet in seen:
+            continue
+        seen.add(sheet)
+
+        full_path = styles_dir / sheet
+        if full_path.exists():
+            try:
+                compiled_bundle += f"\n/* --- {sheet} --- */\n" + full_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                compiled_bundle += f"\n/* [MISSING] {sheet}: {exc} */\n"
+
+    # Streamlit-specific theme overrides (these don't belong in a shared stylesheet
+    # because they target Streamlit's internal data-testid attributes)
+    compiled_bundle += """
+    /* ── Force Light Theme Variables & Backgrounds ───────────────────── */
+    [data-testid="stApp"], .stApp, [data-theme="dark"] {
+        --primary-color: #0a9938 !important;
+        --background-color: #ffffff !important;
+        --secondary-background-color: #f0f2f6 !important;
+        --text-color: #262730 !important;
+        --secondary-text-color: #555555 !important;
+        --font: 'Inter', sans-serif !important;
+        background-color: #ffffff !important;
+        color: #262730 !important;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #f0f2f6 !important;
+        color: #262730 !important;
+    }
+
+    [data-testid="stApp"] .stButton > button {
     width: 100% !important;
     max-width: 100% !important;
-}
-"""
-    st.markdown(f"<style>{compiled_bundle}</style>", unsafe_allow_html=True)
+    }
 
+    /* ── Navbar button stretch ───────────────────────────────────────── */
+    [data-testid="stApp"] .stButton > button {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* ── Remove horizontal white space on left and right ─────────────── */
+    /* Streamlit adds default padding (~1rem on mobile, ~3rem on desktop)
+       around the main content block. Reset it so content reaches the edges. */
+    section.main .block-container,
+    [data-testid="stAppViewBlockContainer"],
+    .main .block-container {
+        max-width: 100% !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+
+    /* Remove the gap between columns so navbar buttons touch seamlessly */
+    [data-testid="column"] {
+        padding: 0 !important;
+    }
+    [data-testid="stHorizontalBlock"] {
+        gap: 0 !important;
+        align-items: stretch !important;
+    }
+
+    /* Make the top navbar banner stretch edge-to-edge */
+    .st-key-top_navbar {
+        margin-left: -0.5rem !important;
+        margin-right: -0.5rem !important;
+        width: calc(100% + 1rem) !important;
+    }
+
+    /* Footer should also span full width */
+    .green-footer {
+        margin-left: -0.5rem !important;
+        margin-right: -0.5rem !important;
+        width: calc(100% + 1rem) !important;
+    }
+    """
+    st.markdown(f"<style>{compiled_bundle}</style>", unsafe_allow_html=True)
 def _inject_heartbeat():
     """Inject heartbeat script using st.iframe (replacing deprecated components.iframe)."""
     html_content = """
@@ -326,13 +398,28 @@ def main():
             )
 
     # ─── SUB-NAVIGATION LOGIC ────────────────────────────────────────────────
-    if active_primary == "Verification":
-        sub_cols = st.columns([1, 1, 2])
-        sm_actions = {
-            "SM_Verification": "Verification Metrics",
-            "SM_Threshold": "Threshold Engine",
+    if active_primary == "AI Lab Setup":
+        sub_cols = st.columns([1, 3])
+        setup_actions = {
+            "AI_Setup": "Demo Status",
         }
-        for s_idx, (m_route, label) in enumerate(sm_actions.items()):
+        for s_idx, (m_route, label) in enumerate(setup_actions.items()):
+            with sub_cols[s_idx]:
+                if st.button(
+                    label,
+                    type="primary" if query_page == m_route else "secondary",
+                    width="stretch",
+                    key=f"s_btn_{m_route}",
+                ):
+                    st.query_params["page"] = m_route
+                    st.rerun()               
+                    
+    elif active_primary == "Onset Benchmarking":
+        sub_cols = st.columns([1, 3])
+        bm_actions = {
+            "SM_Benchmarking": "Performance Benchmarks",
+        }
+        for s_idx, (m_route, label) in enumerate(bm_actions.items()):
             with sub_cols[s_idx]:
                 if st.button(
                     label,
@@ -342,13 +429,13 @@ def main():
                 ):
                     st.query_params["page"] = m_route
                     st.rerun()
-                    
-    elif active_primary == "Onset Benchmarking":
-        sub_cols = st.columns([1, 3])
-        bm_actions = {
-            "SM_Benchmarking": "Performance Benchmarks",
+    if active_primary == "Verification":
+        sub_cols = st.columns([1, 1, 2])
+        sm_actions = {
+            "SM_Verification": "Verification Metrics",
+            "SM_Threshold": "Threshold Engine",
         }
-        for s_idx, (m_route, label) in enumerate(bm_actions.items()):
+        for s_idx, (m_route, label) in enumerate(sm_actions.items()):
             with sub_cols[s_idx]:
                 if st.button(
                     label,
@@ -378,7 +465,7 @@ def main():
                 ):
                     st.query_params["page"] = m_route
                     st.rerun()
-
+    
     st.markdown("<br>", unsafe_allow_html=True)
 
     config_problems = collect_config_problems()
