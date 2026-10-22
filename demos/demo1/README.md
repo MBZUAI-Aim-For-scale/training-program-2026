@@ -18,6 +18,7 @@ python3 spark_setup.py --rebuild          # rebuild images even if they exist
 python3 spark_setup.py --host-only        # host checks only
 python3 spark_setup.py status             # last run, with suggested fixes
 python3 spark_setup.py dashboard [--stop] # start or stop just the dashboard
+bash shutdown.sh                          # stop any setup run, the dashboard and all containers
 ```
 
 **Host checks:** GPU, Docker, GPU access from containers, the after-reboot GPU wait
