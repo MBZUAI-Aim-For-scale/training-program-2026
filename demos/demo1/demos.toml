@@ -20,7 +20,7 @@ container = "demo3"
 context = "demos/demo3"
 dockerfile = "demos/demo3/docker/Dockerfile"
 run = ["bash", "demos/demo3/docker/run.sh"]
-port = 8501
+port = 8502
 
 [[demo]]
 id = "demo4"
