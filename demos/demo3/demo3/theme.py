@@ -122,7 +122,7 @@ def cards(items: list[dict]) -> None:
     html = ""
     for it in items:
         cls = "d3-card" + (" sel" if it.get("selected") else "") + (" dim" if it.get("dim") else "")
-        tip = f' title="{escape(it["tip"])}"' if it.get("tip") else ""
+        tip = f' title="{escape(it["tip"]).replace(chr(10), "&#10;")}"' if it.get("tip") else ""
         note = f'<div class="t">{escape(it["note"])}</div>' if it.get("note") else ""
         html += (f'<div class="{cls}" style="--c:{it["color"]}"{tip}><div class="n">{escape(it["name"])}</div>'
                  f'<div class="o">{escape(it["org"])}</div>{it["tags"]}{note}</div>')

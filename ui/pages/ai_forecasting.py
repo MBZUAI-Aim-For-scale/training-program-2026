@@ -265,7 +265,7 @@ def _model_card_html(m, selected: bool, timings, synthetic: bool) -> str:
               if selected else "0 1px 3px rgba(0,0,0,0.05)")
     tip = escape(f"{catalog.timing_label(m, timings)}\nStarts from {m.init_source}"
                  + "".join(f"\nNo {catalog.VAR_LABELS[v]}" for v in m.missing)
-                 + (f"\n\n{m.notes}" if m.notes else ""))
+                 + (f"\n\n{m.notes}" if m.notes else "")).replace("\n", "&#10;")
     dim = not m.live and not synthetic
     badge = f"{'ENS' if m.kind == 'ensemble' else 'DET'} · {'LIVE' if m.live else 'SAVED ONLY'}"
     return f'''
