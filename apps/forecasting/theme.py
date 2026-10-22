@@ -20,6 +20,8 @@ PAGE = "#f6f7f9"
 CSS = f"""
 <style>
 #MainMenu, footer, header[data-testid="stHeader"] {{ visibility: hidden; height: 0; }}
+/* the header is hidden, but keep its button for reopening a collapsed sidebar */
+[data-testid="stExpandSidebarButton"] {{ visibility: visible; }}
 .stApp {{ background: {PAGE}; }}
 .block-container {{ padding-top: 0.5rem; max-width: 1200px; }}
 h1, h2, h3, h4 {{ color: {INK}; }}
