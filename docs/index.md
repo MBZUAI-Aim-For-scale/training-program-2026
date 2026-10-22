@@ -18,9 +18,3 @@ More details about the files we'll use and where to download them are available 
 > 
 > Learners need to understand the concepts of files and directories (including the working directory) and how to start a Python interpreter before tackling this lesson. This lesson references the Jupyter notebook, although it can be taught through any Python interpreter. The commands in this lesson pertain to **Python 3**.
 {: .callout .prereq }
-
-## Getting Started
-
-To get started with installing Python, follow the directions given in the [ Lesson section of the course page](https://mbzuai-aim-for-scale.github.io/training-program-2026/).
-
-In addition to installing Python on your own computer, you will also need to download the data files used in the tutorials. Details for doing this are found in the [Setup]({{ '/01-setup/' | relative_url }}) page.
