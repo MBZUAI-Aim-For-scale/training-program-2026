@@ -4,7 +4,7 @@ Prepares a DGX Spark for the other demos: checks the machine, then builds and st
 a Docker container for each demo listed in `demos.toml`.
 
 ```bash
-python3 demos/demo1-setup/spark_setup.py
+python3 demos/demo1/spark_setup.py
 ```
 
 It first starts a progress dashboard in the background and prints its link
