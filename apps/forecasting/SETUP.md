@@ -5,9 +5,6 @@ Step-by-step setup for the shared training site, where Demo 3 is the **AI Foreca
 Docker container, `ai_weather`, on the Spark; you open the site in your laptop's browser
 through an SSH tunnel.
 
-For Demo 3 on its own (its own image and container, `demo3`, on port 8502), see
-[demos/demo3/SETUP.md](../../demos/demo3/SETUP.md). The two share the same models and code.
-
 There are two ways in:
 
 - **A. Use a Spark where the site already runs:** only step 5 below. You need Tailscale
@@ -27,8 +24,16 @@ docker run --rm --device nvidia.com/gpu=all ubuntu nvidia-smi -L
 
 - `unresolvable CDI devices nvidia.com/gpu=all`: Docker started before the GPU list existed
   (common right after a reboot). Run `systemctl --user restart docker` and try again.
-  [demos/demo3/SETUP.md](../../demos/demo3/SETUP.md#1-check-docker-can-see-the-gpu) shows how
-  to stop this happening after every reboot.
+  To stop this happening after every reboot, make Docker wait for the GPU list:
+
+  ```bash
+  mkdir -p ~/.config/systemd/user/docker.service.d
+  cat > ~/.config/systemd/user/docker.service.d/wait-for-gpu.conf <<'EOF'
+  [Service]
+  ExecStartPre=/bin/sh -c "for i in $(seq 120); do [ -s /var/run/cdi/nvidia.yaml ] && exit 0; sleep 1; done; exit 0"
+  EOF
+  systemctl --user daemon-reload
+  ```
 - `failed to fulfil mount request: open /usr/lib/aarch64-linux-gnu/libnvidia-...: no such file or
   directory`: the NVIDIA libraries were updated since the Spark booted. Restarting Docker doesn't
   help; an admin has to run `sudo systemctl start nvidia-cdi-refresh.service` (then
@@ -89,8 +94,7 @@ Options (put them before `bash docker/run.sh`):
   inputs AIFS v2 needs for 2000–2025 starts; `DEMO3_BUCKET=` turns it off. On a Spark nothing
   else is needed: `run.sh` mounts the machine's read-only key, `/etc/fleet-gcs-key.json`, into
   the container. The key can't write, so runs made on a Spark stay on it. Never copy the key
-  into the image or the repository. Elsewhere, see "Saved runs from the bucket" in
-  [demos/demo3/README.md](../../demos/demo3/README.md#saved-runs-from-the-bucket).
+  into the image or the repository. Elsewhere, see "Saved runs from the bucket" in [README.md](README.md#saved-runs-from-the-bucket).
 
 **Skip the first-run downloads and get the saved runs** by copying them from a Spark that
 has them (replace `<user>@<spark>` and the source paths with the right ones):
@@ -100,8 +104,6 @@ rsync -a --info=progress2 <user>@<spark>:<its weights cache>/ ~/.cache/ai_weathe
 rsync -a --info=progress2 <user>@<spark>:<its outputs folder>/ outputs/
 ```
 
-The saved-run files are the same for this site and for Demo 3 on its own, so either's
-outputs folder works.
 
 ## 5. Open the site
 
