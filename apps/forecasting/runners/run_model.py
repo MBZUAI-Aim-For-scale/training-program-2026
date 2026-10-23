@@ -34,9 +34,9 @@ import xarray as xr
 # The largest JAX model needs ~18 GB; 35% (~42 GB) leaves room for everything else.
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.35")
 
-APP_ROOT = Path(__file__).resolve().parent
+APP_ROOT = Path(__file__).resolve().parent  # runners/: each model's runner_<key>.py
 sys.path.insert(0, str(APP_ROOT))
-sys.path.insert(0, str(APP_ROOT / "runners"))
+sys.path.insert(0, str(APP_ROOT.parents[2]))  # the repository root, for apps.forecasting
 
 from apps.forecasting import contract  # noqa: E402
 from apps.forecasting.catalog import BY_KEY  # noqa: E402
