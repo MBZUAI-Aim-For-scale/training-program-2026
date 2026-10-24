@@ -35,14 +35,12 @@ for _p in (PROJECT_ROOT, ROMP_ROOT):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-# Data locations come from config.py (DATA_DIR defaults to ~/data, NOT the project
-# folder), so defaults below must be built from these rather than "data/...".
+# Data locations come from config.py
 DATA_DIR = Path(config.DATA_DIR).expanduser()
 EXTERNAL_DATA_DIR = Path(config.EXTERNAL_DATA_DIR).expanduser()
 
-# Current config.py defines ROMP_OUT_DIR / ROMP_FIG_DIR; older versions used ROMP_DEMO_OUT_DIR / ROMP_DEMO_FIG_DIR.
-ROMP_OUT_DIR = Path(getattr(config, "ROMP_OUT_DIR", getattr(config, "ROMP_DEMO_OUT_DIR", PROJECT_ROOT / "romp_output")))
-ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_FIG_DIR", PROJECT_ROOT / "romp_figure")))
+ROMP_OUT_DIR = Path(getattr(config, "ROMP_OUT_DIR", getattr(config, "ROMP_DEMO_OUT_DIR", PROJECT_ROOT / "romp_output"))).expanduser()
+ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_FIG_DIR", PROJECT_ROOT / "romp_figure"))).expanduser()
 
 import momp  # noqa: E402,F401
 import momp.params as params  # noqa: E402
@@ -249,19 +247,33 @@ def patched_package_metadata():
 def apply_base_paths(cfg):
     cfg.work_dir = str(ROMP_ROOT)
     cfg.pkg_dir = str(MOMP_PKG_DIR)
-    cfg.obs_dir = resolve_path(
-        getattr(cfg, "obs_dir", None) or EXTERNAL_DATA_DIR / "ENACTS_regridded_025"
-    )
-    cfg.ref_model_dir = resolve_path(
-        getattr(cfg, "ref_model_dir", None) or EXTERNAL_DATA_DIR / "ENACTS"
-    )
-    cfg.nc_mask = resolve_path(
-        getattr(cfg, "nc_mask", None)
-        or EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc"
-    )
+
+    # Use resolved paths from config.py as primary sources
+    obs_dir = getattr(config, "obs_dir", None) or getattr(config, "OBS_DIR", None)
+    ref_dir = getattr(config, "ref_model_dir", None) or getattr(config, "obs_dir", None)
+    mask_file = getattr(config, "nc_mask", None) or getattr(config, "JJAS_MASK_FILE", None)
+
+    cfg.obs_dir = resolve_path(obs_dir) if obs_dir else resolve_path(EXTERNAL_DATA_DIR / "CHIRPS")
+    cfg.ref_model_dir = resolve_path(ref_dir) if ref_dir else cfg.obs_dir
+    cfg.nc_mask = resolve_path(mask_file) if mask_file else resolve_path(EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc")
+
+    if hasattr(config, "obs_file_pattern"):
+        cfg.obs_file_pattern = config.obs_file_pattern
+    if hasattr(config, "obs_var"):
+        cfg.obs_var = config.obs_var
+    if hasattr(config, "ref_model_file_pattern"):
+        cfg.ref_model_file_pattern = config.ref_model_file_pattern
+    if hasattr(config, "ref_model_var"):
+        cfg.ref_model_var = config.ref_model_var
+    if hasattr(config, "region"):
+        cfg.region = config.region
+
     if getattr(cfg, "shpfile_dir", None):
         cfg.shpfile_dir = resolve_path(cfg.shpfile_dir)
-    cfg.ref_model = "climatology"
+    else:
+        cfg.shpfile_dir = resolve_path(EXTERNAL_DATA_DIR / "shapefile")
+
+    cfg.ref_model = getattr(config, "ref_model", "climatology")
     cfg.layout = ("model", "verification_window")
 
 # ------------------------------------------------------------------------------
@@ -377,7 +389,7 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
         cfg.ensemble_forecast = bool(model_spec["ensemble_forecast"])
 
 # ------------------------------------------------------------------------------
-# NEW: Apply Advanced Temporal & Verification Parameters from Environment
+# Apply Advanced Temporal & Verification Parameters from Environment
 # ------------------------------------------------------------------------------
 def apply_env_vars_to_cfg(cfg):
     """Apply advanced temporal and verification parameters from environment variables."""
@@ -429,7 +441,7 @@ def configure_model(cfg, catalog_key: str, meta, mode):
     name = _model_name(meta, catalog_key)
     cfg.model_list = (name,)
     model_dir = resolve_path(_meta_get(meta, "dir", ""))
-    if not model_dir or not config.exists(model_dir):
+    if not model_dir or not _path_exists(model_dir):
         raise FileNotFoundError(
             f"Model data directory for '{name}' not found: {model_dir!r}. "
             "Check BENCHMARK_MODEL_CATALOG['dir'] in config.py."
@@ -462,11 +474,9 @@ def _path_exists(path) -> bool:
     """True if a local path or a gs:// object/folder exists."""
     return config.exists(str(path)) if config.is_uri(path) else Path(str(path)).expanduser().exists()
 
-
 def _list_nc(folder):
     """Names of the .nc files directly in a local folder or gs:// folder."""
     return sorted(Path(f).name for f in config.glob(config.join(folder, "*.nc")))
-
 
 def validate_paths(cfg):
     checks = {
@@ -475,7 +485,7 @@ def validate_paths(cfg):
         "nc_mask": getattr(cfg, "nc_mask", None),
         "thresh_file": getattr(cfg, "thresh_file", None),
     }
-    if getattr(cfg, "polygon", False):                 # the shapefile folder is only needed for polygons
+    if getattr(cfg, "polygon", False):                 # shapefile folder is only needed for polygons
         checks["shpfile_dir"] = getattr(cfg, "shpfile_dir", None)
     for i, d in enumerate(getattr(cfg, "model_dir_list", ()) or ()):
         checks[f"model_dir_list[{i}]"] = d
