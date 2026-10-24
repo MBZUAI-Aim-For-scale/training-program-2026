@@ -16,6 +16,8 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 OUTPUTS="${DEMO_OUTPUTS:-$here/outputs}"                 # saved forecasts, movies, job logs
 CACHE="${DEMO_CACHE:-$HOME/.cache/ai_weather}"           # model weights (~90 GB once all are fetched)
+HOST_DATA="${DEMO_DATA_DIR:-$HOME/data}"                # local host data folder if present
+
 mkdir -p "$OUTPUTS" "$CACHE"
 
 container_exists() {
@@ -25,19 +27,34 @@ container_exists() {
 start_container() {
   code=() envs=()
   [ "${DEV:-0}" = 1 ] && code=(-v "$here:/app")
+  
   # .env files are kept out of the image (.dockerignore); the code reads them at run time
   if [ "${DEV:-0}" != 1 ]; then
     for f in .env ai_weather/.env; do
       [ -f "$here/$f" ] && envs+=(-v "$here/$f:/app/$f:ro")
     done
   fi
-  # Shared runs are downloaded from DEMO3_BUCKET (DEMO3_BUCKET= turns that off); runs made here stay here
-  cloud=(-e DEMO3_BUCKET="${DEMO3_BUCKET-gs://aim4scale_training_2026/demo3}")
-  # Credentials: DEMO3_GCP_KEY=<service-account.json>, else the Spark's read-only key for the
-  # bucket, else this user's `gcloud auth application-default login`
+
+  # Data Mounts: Mount host dataset directory to /app/data if it exists
+  data_mounts=(-e DEMO_DATA_DIR=/app/data)
+  if [ -d "$HOST_DATA" ]; then
+    data_mounts+=(-v "$HOST_DATA:/app/data")
+  fi
+
+  # GCS Buckets Configuration
+  raw_bucket="${DEMO_BUCKET:-${DEMO3_BUCKET:-gs://aim4scale_training_2026/demo3}}"
+  clean_bucket=$(echo "$raw_bucket" | sed -E 's|^gs://||; s|/.*||')
+
+  cloud=(
+    -e DEMO3_BUCKET="${DEMO3_BUCKET-gs://aim4scale_training_2026/demo3}"
+    -e DEMO_BUCKET="${clean_bucket:-aim4scale_training_2026}"
+  )
+
+  # Credentials: DEMO3_GCP_KEY=<service-account.json>, else the Spark's read-only key,
+  # else this user's `gcloud auth application-default login`
   FLEET_KEY=/etc/fleet-gcs-key.json
   ADC="$HOME/.config/gcloud/application_default_credentials.json"
-  if [ -n "${DEMO3_GCP_KEY:-}" ]; then
+  if [ -n "${DEMO3_GCP_KEY:-}" ] && [ -f "$DEMO3_GCP_KEY" ]; then
     cloud+=(-v "$DEMO3_GCP_KEY:/run/gcp-key.json:ro" -e GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-key.json)
   elif [ -f "$FLEET_KEY" ]; then
     cloud+=(-v "$FLEET_KEY:/run/gcp-key.json:ro" -e GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-key.json)
@@ -51,9 +68,10 @@ start_container() {
   fi
 
   docker run -d --name ai_weather --restart unless-stopped \
-    --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
+    --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
     -p 127.0.0.1:8501:8501 \
-    "${code[@]}" "${envs[@]}" "${cloud[@]}" -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
+    "${code[@]}" "${envs[@]}" "${data_mounts[@]}" "${cloud[@]}" \
+    -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
     -e DEMO_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
     ai_weather
 

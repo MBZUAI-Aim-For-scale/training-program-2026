@@ -168,3 +168,18 @@ Demo 3 · AI forecast lab
   skip   Page answers on :8502: image build failed
 
 Setup finished with errors (see above, or the dashboard).
+Spark host (demo1)
+  …      GPU visible to the host
+  ok     GPU visible to the host: GPU 0: NVIDIA GB10 (UUID: GPU-024d6593-6aca-82a1-74b0-01ca05c9fb8d)
+  …      Docker daemon running
+  ok     Docker daemon running: Docker 29.6.2 (rootless)
+  …      Containers can use the GPU
+  ok     Containers can use the GPU: containers see the GPU
+  …      Docker waits for GPU after reboot
+  ok     Docker waits for GPU after reboot: already installed
+  …      Disk space
+  ok     Disk space: 3,191 GB free
+  …      PyTorch GPU smoke test
+  ok     PyTorch GPU smoke test: CUDA matmul + flash-attention ok
+
+Setup finished.

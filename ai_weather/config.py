@@ -49,17 +49,15 @@ PROJ_ROOT = Path(_env_root).expanduser().resolve() if _env_root else BASE_DIR
 PROJECT_ROOT = PROJ_ROOT
 APP_DIR = PROJ_ROOT
 
-# ------------------------------------------------------------------------------
-# Data folder. Order: DEMO_DATA_DIR / ROMP_DATA_DIR (explicit) -> ~/data -> PROJ_ROOT/data.
-# Among the automatic candidates, the first one that already holds an `external/`
-# folder wins (so a mounted /app/data/external is found even when ~/data exists).
-# ------------------------------------------------------------------------------
 def _pick_data_dir() -> Path:
     for name in ("DEMO_DATA_DIR", "ROMP_DATA_DIR"):
         v = os.getenv(name)
         if v:
             return Path(v).expanduser()
-    candidates = [Path.home() / "data", PROJ_ROOT / "data"]
+    
+    # Check /app/data first before ~/data (/root/data)
+    candidates = [PROJ_ROOT / "data", Path.home() / "data"]
+    
     for c in candidates:
         if (c / "external").is_dir():
             return c
