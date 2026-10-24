@@ -4,3 +4,60 @@
 outputs/
 .venv/
 **/__pycache__/
+
+.env.local
+ai_weather/.env
+ai_weather/.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# uv
+.uv/
+uv.lock
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Docker
+docker/Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Data & Output (mounted via volumes)
+data/
+*.nc
+*.pkl
+*.geojson
+*.shp
+ROMP_OUT/
+romp_output/
+romp_figure/
+
+# Logs & Misc
+*.log
+logs/
+.mplcache/
+.romp_runtime/
+.pytest_cache/
+.coverage
+htmlcov/

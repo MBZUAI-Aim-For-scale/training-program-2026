@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
 """Set up a DGX Spark for the ai_weather demos, with a live progress dashboard.
 
-  python3 spark_setup.py                      start the dashboard, check the host, then build,
-                                              start and health-check a container for every demo
-  python3 spark_setup.py --only demo3         host checks + one demo (repeatable)
-  python3 spark_setup.py --rebuild            rebuild demo images even if they exist
-  python3 spark_setup.py --host-only          host checks only
-  python3 spark_setup.py --no-dashboard       terminal output only
-  python3 spark_setup.py status               print the last run's steps
-  python3 spark_setup.py dashboard [--stop]   start (or stop) just the dashboard
-
-Standard library only, so it runs on a fresh Spark before anything is installed; the
-dashboard's Streamlit goes into .venv/ here on first use. Progress goes to
-state/status.json and each step's output to state/logs/<step>.log; dashboard.py reads both.
-The demos are listed in demos.toml.
+  python3 apps/setup/spark_setup.py                 start dashboard, check host, then build/start containers
+  python3 apps/setup/spark_setup.py --only demo3    host checks + one demo
+  python3 apps/setup/spark_setup.py --rebuild       rebuild images even if they exist
+  python3 apps/setup/spark_setup.py --host-only     host checks only
+  python3 apps/setup/spark_setup.py status          print last run's steps
 """
 from __future__ import annotations
 
@@ -31,8 +23,8 @@ import tomllib
 import urllib.request
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-REPO = HERE.parents[1]
+HERE = Path(__file__).resolve().parent          # apps/setup
+REPO = HERE.parents[1] if (HERE.parents[1] / "demos.toml").exists() else HERE.parent  # repo root
 STATE = HERE / "state"
 LOGS = STATE / "logs"
 STATUS = STATE / "status.json"
@@ -40,30 +32,17 @@ LOCK = STATE / "setup.lock"
 VENV = HERE / ".venv"
 DASHBOARD_PID = STATE / "dashboard.pid"
 GPU_WAIT = Path.home() / ".config/systemd/user/docker.service.d/wait-for-gpu.conf"
-MIN_FREE_GB = 150  # one demo image (~50 GB) plus model weights (~90 GB)
+MIN_FREE_GB = 150
 
-# Known failure messages -> what to do. Matched against step output and container errors.
 HINTS = [
     (r"unresolvable CDI devices|CDI device injection failed",
-     "Docker started before the GPU list existed (common after a reboot): "
-     "`systemctl --user restart docker`, then retry."),
-    (r"failed to fulfil mount request: open /usr/lib/\S*nvidia\S*: no such file",
-     "The GPU list (/var/run/cdi/nvidia.yaml) is out of date after an NVIDIA update: "
-     "`sudo systemctl start nvidia-cdi-refresh.service`, then `systemctl --user restart docker`."),
+     "Docker started before GPU list existed: `systemctl --user restart docker`, then retry."),
     (r"Cannot connect to the Docker daemon|docker\.sock.*(no such file|connection refused)",
      "Docker isn't running: `systemctl --user start docker`."),
     (r"port is already allocated|address already in use",
-     "Another container already uses this port: give each demo its own port in demos.toml."),
+     "Another container uses this port: update demos.toml."),
     (r"no space left on device",
-     "Disk is full: check `docker system df`, then `docker image prune` / `docker builder prune`."),
-    (r"pull access denied|unauthorized|authentication required",
-     "Registry login needed: `docker login nvcr.io` (user `$oauthtoken`, password = NGC API key)."),
-    (r"Temporary failure in name resolution|Could not resolve host|TLS handshake timeout|i/o timeout",
-     "Network problem while downloading: check the Spark's internet connection and retry."),
-    (r"out of memory|CUDA_ERROR_OUT_OF_MEMORY|OutOfMemoryError",
-     "GPU memory exhausted: stop other demo containers (`docker stop <name>`) and retry."),
-    (r"is already in use by container",
-     "A container with this name exists: `docker rm -f <name>` and retry."),
+     "Disk full: `docker system df` or `docker image prune`."),
 ]
 
 SMOKE_TEST = """
@@ -96,12 +75,14 @@ def hint_for(text: str) -> str:
 
 
 def load_config() -> dict:
-    with open(HERE / "demos.toml", "rb") as f:
+    config_path = REPO / "demos.toml"
+    if not config_path.exists():
+        config_path = HERE / "demos.toml"
+    with open(config_path, "rb") as f:
         return tomllib.load(f)
 
 
 def tail(path: Path, lines: int = 40) -> str:
-    """Last lines of a (possibly huge) log file."""
     try:
         with open(path, "rb") as f:
             f.seek(0, os.SEEK_END)
@@ -119,14 +100,11 @@ def pid_alive(pid) -> bool:
         return False
 
 
-# --- Docker queries (also used by the dashboard) -----------------------------------------
-
 def docker(*args: str, timeout: float = 20) -> subprocess.CompletedProcess:
     return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=timeout)
 
 
 def inspect(kind: str, name: str) -> dict | None:
-    """`docker <kind> inspect`, or None if it doesn't exist (or Docker is down)."""
     try:
         r = docker(kind, "inspect", name)
     except (OSError, subprocess.TimeoutExpired):
@@ -135,17 +113,21 @@ def inspect(kind: str, name: str) -> dict | None:
 
 
 def host_ports(container: dict) -> list[int]:
-    """Host ports a container publishes (works for stopped containers too)."""
     bindings = (container.get("HostConfig") or {}).get("PortBindings") or {}
     return sorted({int(b["HostPort"]) for bs in bindings.values() if bs for b in bs if b.get("HostPort")})
 
 
 def healthy(port: int, timeout: float = 3) -> bool:
-    try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/_stcore/health", timeout=timeout) as r:
-            return r.read().strip() == b"ok"
-    except OSError:
-        return False
+    endpoints = ["/_stcore/health", "/api", "/"]
+    for ep in endpoints:
+        try:
+            req = urllib.request.Request(f"http://127.0.0.1:{port}{ep}", headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                if r.status in (200, 302):
+                    return True
+        except OSError:
+            continue
+    return False
 
 
 def container_logs(name: str, lines: int = 300) -> str:
@@ -156,11 +138,7 @@ def container_logs(name: str, lines: int = 300) -> str:
     return r.stdout + r.stderr
 
 
-# --- Run bookkeeping ----------------------------------------------------------------------
-
 class Run:
-    """The steps of one setup run, saved to status.json after every change."""
-
     def __init__(self, steps: list[dict], args: list[str]):
         self.data = {
             "pid": os.getpid(), "args": args, "started": time.time(), "finished": None, "state": "running",
@@ -185,7 +163,6 @@ class Run:
         tmp.replace(STATUS)
 
     def step(self, sid: str, fn, *args) -> str:
-        """Run one step function, logging to logs/<sid>.log. Returns its final status."""
         log_path = LOGS / f"{sid}.log"
         self.update(sid, status="running", started=time.time(), log=log_path.name)
         print(f"  …      {self.title(sid)}", flush=True)
@@ -196,7 +173,7 @@ class Run:
                 status, detail = "warn", str(e)
             except Failed as e:
                 status, detail = "failed", str(e)
-            except Exception as e:  # a bug or missing tool shouldn't kill the whole run
+            except Exception as e:
                 status, detail = "failed", f"{type(e).__name__}: {e}"
             log.write(f"\n[{status}] {detail}\n")
         hint = hint_for(detail + "\n" + tail(log_path)) if status != "ok" else ""
@@ -221,7 +198,6 @@ class Run:
 
 
 def sh(cmd: list[str], log, *, env: dict | None = None, timeout: float | None = None, on_line=None):
-    """Run a command from the repo root, streaming its output into the step log."""
     log.write(f"$ {' '.join(cmd)}\n")
     log.flush()
     proc = subprocess.Popen(cmd, cwd=REPO, env={**os.environ, **(env or {})}, text=True, errors="replace",
@@ -249,13 +225,15 @@ def last_line(out: str) -> str:
     return lines[-1][:300] if lines else "no output"
 
 
-# --- Host steps (demo1) -------------------------------------------------------------------
-
 def step_gpu(run, sid, log):
-    rc, out = sh(["nvidia-smi", "-L"], log, timeout=30)
-    if rc:
-        raise Failed(f"nvidia-smi failed: {last_line(out)}")
-    return out.strip().splitlines()[0]
+    cmd = shutil.which("nvidia-smi") or "/usr/bin/nvidia-smi"
+    try:
+        rc, out = sh([cmd, "-L"], log, timeout=30)
+        if rc:
+            raise Warn(f"host nvidia-smi failed: {last_line(out)}")
+        return out.strip().splitlines()[0]
+    except FileNotFoundError:
+        raise Warn("nvidia-smi not found on host; checking container GPU access instead")
 
 
 def step_docker(run, sid, log):
@@ -267,21 +245,21 @@ def step_docker(run, sid, log):
 
 
 def step_cdi(run, sid, log):
-    rc, out = sh(["docker", "run", "--rm", "--device", "nvidia.com/gpu=all", "ubuntu", "nvidia-smi", "-L"],
-                 log, timeout=300)
-    if rc:
-        # Docker ends with "Run 'docker run --help'…"; the useful part is the daemon's error line
+    rc, out = sh(["docker", "run", "--rm", "--gpus", "all", "ubuntu", "nvidia-smi", "-L"], log, timeout=300)
+    if rc != 0:
+        rc, out = sh(["docker", "run", "--rm", "--device", "nvidia.com/gpu=all", "ubuntu", "nvidia-smi", "-L"], log, timeout=300)
+
+    if rc != 0:
         error = next((l for l in out.splitlines() if "Error response from daemon" in l), last_line(out))
-        raise Failed(f"containers can't see the GPU: {error.split('error during container init: ')[-1][:300]}")
+        raise Failed(f"containers can't see GPU: {error.split('error during container init: ')[-1][:300]}")
     return "containers see the GPU"
 
 
 def step_gpu_wait(run, sid, log):
-    """SETUP.md step 1: make rootless Docker wait for the GPU list after a reboot."""
     if GPU_WAIT.exists():
         return "already installed"
     if "rootless" not in docker("info", "--format", "{{.SecurityOptions}}").stdout:
-        raise Warn("Docker isn't rootless; skipped (only the Sparks' rootless setup needs this)")
+        raise Warn("Docker isn't rootless; skipped")
     GPU_WAIT.parent.mkdir(parents=True, exist_ok=True)
     GPU_WAIT.write_text(
         "[Service]\n"
@@ -290,9 +268,8 @@ def step_gpu_wait(run, sid, log):
     log.write(f"wrote {GPU_WAIT}\n")
     rc, out = sh(["systemctl", "--user", "daemon-reload"], log, timeout=30)
     if rc:
-        raise Warn(f"installed {GPU_WAIT.name}, but `systemctl --user daemon-reload` failed "
-                   "(run it from a login shell)")
-    return "installed: Docker now waits for the GPU after reboots"
+        raise Warn(f"installed {GPU_WAIT.name}, but systemctl daemon-reload failed")
+    return "installed: Docker waits for GPU after reboots"
 
 
 def step_disk(run, sid, log):
@@ -305,16 +282,17 @@ def step_disk(run, sid, log):
 
 
 def step_smoke(run, sid, log, image):
-    rc, out = sh(["docker", "run", "--rm", "--device", "nvidia.com/gpu=all", "--ipc=host", image,
+    rc, out = sh(["docker", "run", "--rm", "--gpus", "all", "--ipc=host", image,
                   "python", "-c", SMOKE_TEST], log, timeout=3600)
-    if rc or "SMOKE matmul ok" not in out:
+    if rc != 0:
+        rc, out = sh(["docker", "run", "--rm", "--device", "nvidia.com/gpu=all", "--ipc=host", image,
+                      "python", "-c", SMOKE_TEST], log, timeout=3600)
+    if rc != 0 or "SMOKE matmul ok" not in out:
         raise Failed(f"PyTorch GPU test failed: {last_line(out)}")
     if "SMOKE flash_attn unavailable" in out:
         raise Warn("CUDA matmul ok; flash-attention not installed in this image")
     return "CUDA matmul + flash-attention ok"
 
-
-# --- Demo steps ---------------------------------------------------------------------------
 
 BUILD_STEP = re.compile(r"^#\d+ \[(?:[\w.-]+ )?\s*(\d+)/(\d+)\] (.*)")
 
@@ -322,15 +300,14 @@ BUILD_STEP = re.compile(r"^#\d+ \[(?:[\w.-]+ )?\s*(\d+)/(\d+)\] (.*)")
 def step_build(run, sid, log, demo, rebuild):
     image = inspect("image", demo["image"])
     if image and not rebuild:
-        log.write(f"image {demo['image']} exists; pass --rebuild to rebuild it\n")
+        log.write(f"image {demo['image']} exists; pass --rebuild to rebuild\n")
         return f"image present (built {image['Created'][:10]}, {image.get('Size', 0) / 1e9:.0f} GB)"
 
     def on_line(line):
         m = BUILD_STEP.match(line)
         if m:
             done, total, what = int(m[1]), int(m[2]), m[3]
-            run.update(sid, throttle=True, progress=(done - 1) / total,
-                       detail=f"layer {done}/{total}: {what[:120]}")
+            run.update(sid, throttle=True, progress=(done - 1) / total, detail=f"layer {done}/{total}: {what[:120]}")
 
     cmd = ["docker", "build", "--progress=plain", "-t", demo["image"], "-f", demo["dockerfile"], demo["context"]]
     rc, out = sh(cmd, log, on_line=on_line)
@@ -345,10 +322,13 @@ def step_start(run, sid, log, demo):
     c = inspect("container", name)
     if c and c["State"]["Running"]:
         return f"already running (since {c['State']['StartedAt'][:16].replace('T', ' ')})"
-    if c:  # stopped or crashed: recreate so it picks up the current image and settings
+    if c:
         log.write(f"container {name} exists but is {c['State']['Status']}; recreating it\n")
         sh(["docker", "rm", "-f", name], log, timeout=60)
-    rc, out = sh(demo["run"], log, env=demo.get("env"), timeout=300)
+
+    run_cmd = demo.get("run", f"docker run -d --name {name} -p {demo.get('port', 8501)}:{demo.get('port', 8501)} --gpus all {demo['image']}")
+    cmd_args = run_cmd.split() if isinstance(run_cmd, str) else run_cmd
+    rc, out = sh(cmd_args, log, env=demo.get("env"), timeout=300)
     if rc:
         raise Failed(f"start failed: {last_line(out)}")
     time.sleep(3)
@@ -356,7 +336,7 @@ def step_start(run, sid, log, demo):
     if not c or not c["State"]["Running"]:
         state = c["State"] if c else {}
         log.write(container_logs(name, 50))
-        raise Failed(f"container stopped right after starting: {state.get('Error') or 'exit code ' + str(state.get('ExitCode'))}")
+        raise Failed(f"container stopped: {state.get('Error') or 'exit code ' + str(state.get('ExitCode'))}")
     return "container started"
 
 
@@ -367,12 +347,12 @@ def step_health(run, sid, log, demo, timeout=240):
         c = inspect("container", name)
         if not c or not c["State"]["Running"]:
             log.write(container_logs(name, 80))
-            raise Failed(f"container exited (code {c['State']['ExitCode'] if c else '?'}) before the page came up")
+            raise Failed(f"container exited before page answered")
         ports = host_ports(c)
         actual = port if port in ports or not ports else ports[0]
         if healthy(actual):
             if actual != port:
-                raise Warn(f"page up on :{actual}, but demos.toml says :{port}; recreate the container to move it")
+                raise Warn(f"page up on :{actual}, but demos.toml says :{port}")
             return f"page up at http://localhost:{port}"
         run.update(sid, throttle=True, detail=f"waiting for http://localhost:{actual} …")
         time.sleep(3)
@@ -380,29 +360,32 @@ def step_health(run, sid, log, demo, timeout=240):
     raise Failed(f"page not answering on :{port} after {timeout}s")
 
 
-# --- Dashboard ----------------------------------------------------------------------------
-
 def dashboard_port(cfg: dict) -> int:
     return int(os.environ.get("DASHBOARD_PORT") or cfg.get("dashboard", {}).get("port", 8500))
 
 
 def start_dashboard(cfg: dict) -> str:
-    """Start dashboard.py in the background unless it's already up; return its URL."""
     port = dashboard_port(cfg)
     url = f"http://localhost:{port}"
     if healthy(port):
         return url
     streamlit = VENV / "bin" / "streamlit"
     if not streamlit.exists():
-        print("Installing Streamlit for the dashboard (first run only)…", flush=True)
+        print("Installing Streamlit for dashboard (first run only)…", flush=True)
         subprocess.run([sys.executable, "-m", "venv", str(VENV)], check=True)
         subprocess.run([str(VENV / "bin" / "pip"), "install", "-q", "streamlit==1.61.0"], check=True)
     STATE.mkdir(parents=True, exist_ok=True)
+
+    # Point to the actual Streamlit dashboard entry point in ui/pages/ai_setup.py
+    script_path = REPO / "ui" / "pages" / "ai_setup.py"
+    if not script_path.exists():
+        script_path = HERE / "ai_setup.py"
+
     with open(STATE / "dashboard.log", "a") as log:
         proc = subprocess.Popen(
-            [str(streamlit), "run", str(HERE / "dashboard.py"), "--server.headless", "true",
+            [str(streamlit), "run", str(script_path), "--server.headless", "true",
              "--server.address", "127.0.0.1", "--server.port", str(port), "--browser.gatherUsageStats", "false"],
-            cwd=HERE, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)  # outlives this script
+            cwd=REPO, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     DASHBOARD_PID.write_text(str(proc.pid))
     for _ in range(60):
         if healthy(port):
@@ -425,12 +408,10 @@ def cmd_dashboard(args, _argv):
     return 0
 
 
-# --- Main ---------------------------------------------------------------------------------
-
 HOST_STEPS = [
-    ("host.gpu", "GPU visible to the host", step_gpu),
+    ("host.gpu", "GPU visible to host", step_gpu),
     ("host.docker", "Docker daemon running", step_docker),
-    ("host.cdi", "Containers can use the GPU", step_cdi),
+    ("host.cdi", "Containers can use GPU", step_cdi),
     ("host.gpu_wait", "Docker waits for GPU after reboot", step_gpu_wait),
     ("host.disk", "Disk space", step_disk),
     ("host.smoke", "PyTorch GPU smoke test", step_smoke),
@@ -438,7 +419,7 @@ HOST_STEPS = [
 
 
 def plan(cfg: dict, only: list[str] | None, host_only: bool) -> tuple[list[dict], list[dict]]:
-    demos = [] if host_only else [d for d in cfg["demo"] if not only or d["id"] in only]
+    demos = [] if host_only else [d for d in cfg.get("demo", []) if not only or d["id"] in only]
     if only and not host_only and len(demos) != len(only):
         sys.exit(f"unknown demo id(s): {set(only) - {d['id'] for d in demos}}")
     steps = [{"id": sid, "group": "demo1", "title": title} for sid, title, _ in HOST_STEPS]
@@ -461,17 +442,16 @@ def cmd_run(args, argv):
         if not args.no_dashboard:
             try:
                 url = start_dashboard(cfg)
-                print(f"Progress dashboard: {url}  (from a laptop: ssh -L {dashboard_port(cfg)}:localhost:"
-                      f"{dashboard_port(cfg)} <spark>)\n", flush=True)
+                print(f"Progress dashboard: {url}  (from laptop: ssh -L {dashboard_port(cfg)}:localhost:{dashboard_port(cfg)} <spark>)\n", flush=True)
             except Exception as e:
-                print(f"(dashboard didn't start: {e}; carrying on in the terminal)\n", flush=True)
+                print(f"(dashboard didn't start: {e}; carrying on in terminal)\n", flush=True)
         print("Spark host (demo1)", flush=True)
         smoke_image = cfg.get("smoke_test", {}).get("image", "nvcr.io/nvidia/pytorch:25.03-py3")
         for sid, title, fn in HOST_STEPS:
             if sid not in ("host.gpu", "host.docker") and run.status("host.docker") == "failed":
                 run.skip(sid, "Docker isn't running")
             elif sid == "host.smoke" and run.status("host.cdi") == "failed":
-                run.skip(sid, "containers can't see the GPU")
+                run.skip(sid, "containers can't see GPU")
             else:
                 run.step(sid, fn, *([smoke_image] if sid == "host.smoke" else []))
 
@@ -479,7 +459,7 @@ def cmd_run(args, argv):
         gpu_ok = run.status("host.cdi") == "ok"
         for d in demos:
             ids = [f"{d['id']}.{s}" for s in ("build", "start", "health")]
-            print(f"\n{d['title']}", flush=True)
+            print(f"\n{d.get('title', d['id'])}", flush=True)
             if not docker_ok:
                 for sid in ids:
                     run.skip(sid, "Docker isn't running")
@@ -488,7 +468,7 @@ def cmd_run(args, argv):
                 run.skip(ids[1], "image build failed")
                 run.skip(ids[2], "image build failed")
             elif not gpu_ok and not (inspect("container", d["container"]) or {}).get("State", {}).get("Running"):
-                run.skip(ids[1], "containers can't see the GPU (see host checks)")
+                run.skip(ids[1], "containers can't see GPU")
                 run.skip(ids[2], "container not started")
             elif run.step(ids[1], step_start, d) == "failed":
                 run.skip(ids[2], "container not running")
@@ -498,7 +478,7 @@ def cmd_run(args, argv):
         failed = any(s["status"] == "failed" for s in run.data["steps"])
         run.data.update(state="failed" if failed else "done", finished=time.time())
         run.save()
-        print("\nSetup finished with errors (see above, or the dashboard)." if failed else "\nSetup finished.")
+        print("\nSetup finished with errors." if failed else "\nSetup finished.")
         return 1 if failed else 0
     finally:
         LOCK.unlink(missing_ok=True)
@@ -524,14 +504,14 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
-    r = sub.add_parser("run", help="run the setup (the default)")
-    r.add_argument("--only", action="append", metavar="DEMO", help="demo id from demos.toml (repeatable)")
-    r.add_argument("--rebuild", action="store_true", help="rebuild images even if they exist")
+    r = sub.add_parser("run", help="run the setup")
+    r.add_argument("--only", action="append", metavar="DEMO", help="demo id from demos.toml")
+    r.add_argument("--rebuild", action="store_true", help="rebuild images even if present")
     r.add_argument("--host-only", action="store_true", help="host checks only")
-    r.add_argument("--no-dashboard", action="store_true", help="don't start the progress dashboard")
-    sub.add_parser("status", help="print the last run's steps")
-    dash = sub.add_parser("dashboard", help="start just the progress dashboard")
-    dash.add_argument("--stop", action="store_true", help="stop it instead")
+    r.add_argument("--no-dashboard", action="store_true", help="don't start dashboard")
+    sub.add_parser("status", help="print last run's steps")
+    dash = sub.add_parser("dashboard", help="start progress dashboard")
+    dash.add_argument("--stop", action="store_true", help="stop dashboard")
     if not argv or argv[0] not in ("run", "status", "dashboard", "-h", "--help"):
         argv = ["run", *argv]
     args = p.parse_args(argv)

@@ -34,7 +34,7 @@ import forecast_event_movie as fem  # noqa: E402
 
 ARCO = "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3"
 OBS_CACHE = Path(os.environ.get(
-    "DEMO3_OBS_CACHE", Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().parents[3] / "outputs")) / "_obs_cache"))
+    "DEMO3_OBS_CACHE", Path(__file__).resolve().parents[2] / "outputs" / "_obs_cache"))
 
 _orig_open_store = fem.open_store
 _orig_era5 = fem._era5

@@ -1,9 +1,9 @@
 """Run one model and write its output in the shared format (see apps/forecasting/contract.py).
 
-Invoked by the app (forecasting/jobs.py) with the interpreter of the model's own
+Invoked by the app (apps/forecasting/jobs.py) with the interpreter of the model's own
 environment:
 
-    python runners/run_model.py --model graphcast --init 2025-07-01T00 \
+    python apps/forecasting/runners/run_model.py --model graphcast --init 2025-07-01T00 \
         --lead-hours 240 --members 1 --out out.nc --status job.json [--synthetic]
 
 A real model is added by creating runners/runner_<model_key>.py with
@@ -34,7 +34,7 @@ import xarray as xr
 # The largest JAX model needs ~18 GB; 35% (~42 GB) leaves room for everything else.
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.35")
 
-APP_ROOT = Path(__file__).resolve().parent
+APP_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "runners"))
 

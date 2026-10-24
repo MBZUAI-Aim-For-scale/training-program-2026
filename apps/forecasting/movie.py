@@ -19,8 +19,8 @@ import pandas as pd
 from .regions import Box
 from .store import OUTPUT_DIR
 
-APP_ROOT = Path(__file__).resolve().parent
-WRAPPER = APP_ROOT / "forecasting" / "event_movie" / "run_event_movie.py"
+APP_ROOT = Path(__file__).resolve().parent.parent.parent
+WRAPPER = APP_ROOT / "apps" / "forecasting" / "event_movie" / "run_event_movie.py"
 MOVIES_DIR = OUTPUT_DIR / "_movies"
 DATA_DIR = Path(os.environ.get("DEMO3_DATA", "/data"))  # optional preloaded obs
 

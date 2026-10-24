@@ -1,7 +1,7 @@
 """Share saved runs between Sparks through a cloud bucket.
 
-    docker exec demo3 /opt/envs/ui/bin/python runners/sync_bucket.py push --dry-run
-    docker exec demo3 /opt/envs/ui/bin/python runners/sync_bucket.py pull --models aurora15 atlas_crps
+    docker exec ai_weather /opt/envs/ui/bin/python apps/forecasting/runners/sync_bucket.py push --dry-run
+    docker exec ai_weather /opt/envs/ui/bin/python apps/forecasting/runners/sync_bucket.py pull --models aurora15 atlas_crps
 
 The bucket comes from --bucket or $DEMO3_BUCKET (e.g. gs://<bucket>/demo3), laid out
 like outputs/: <model>/<YYYYMMDDTHH>_<lead>h_m<members>.nc plus its .json timings.
@@ -17,9 +17,8 @@ import os
 import sys
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(APP_ROOT))
-sys.path.insert(0, str(APP_ROOT / "runners"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from apps.forecasting import store  # noqa: E402
 
 
 def main() -> int:

@@ -1,0 +1,108 @@
+services:
+  ai_weather:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ai_weather:latest
+    container_name: ai_weather_app
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    ipc: host
+    shm_size: '8gb'
+    
+    ports:
+      - "8501:8501"
+      
+    volumes:
+      # Mount local code for development
+      - ./:/app
+      
+      # Mount host data directory to container
+      - ${HOST_DATA_DIR:-${HOME}/data/external}:/app/data/external:rw
+      
+      # Persist model weights and caches
+      - ai_weather_model_cache:/root/.cache
+      - ai_weather_app_cache:/app/.streamlit
+      
+      # Mount environment files read-only
+      - ./.env:/app/.env:ro
+      - ./ai_weather/.env:/app/ai_weather/.env:ro
+      
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - AI_WEATHER_ENV_ROOT=/opt/envs
+      
+      # GCS Bucket Configuration
+      - DEMO3_BUCKET=${DEMO3_BUCKET:-gs://aim4scale_training_2026/demo3}
+      - DEMO3_GCP_KEY=${DEMO3_GCP_KEY:-/etc/fleet-gcs-key.json}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-${DEMO3_GCP_KEY}}
+      
+      # Other credentials
+      - EARTHDATA_USERNAME=${EARTHDATA_USERNAME:-}
+      - EARTHDATA_PASSWORD=${EARTHDATA_PASSWORD:-}
+      - DATA_DIR=/app/data
+      - EXTERNAL_DATA_DIR=/app/data/external
+      
+    command: >
+      streamlit run ui/app.py 
+      --server.headless true 
+      --server.port 8501 
+      --browser.gatherUsageStats false
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ai_weather:latest
+    container_name: ai_weather_jupyter
+    profiles: ["dev"]
+    
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+              
+    ipc: host
+    ports:
+      - "127.0.0.1:8888:8888"
+      
+    volumes:
+      - ./:/app
+      - ${HOST_DATA_DIR:-${HOME}/data/external}:/app/data/external:rw
+      - ./.env:/app/.env:ro
+      - ./ai_weather/.env:/app/ai_weather/.env:ro
+      - ai_weather_model_cache:/root/.cache
+      
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - AI_WEATHER_ENV_ROOT=/opt/envs
+      - DEMO3_BUCKET=${DEMO3_BUCKET:-gs://aim4scale_training_2026/demo3}
+      - DEMO3_GCP_KEY=${DEMO3_GCP_KEY:-/etc/fleet-gcs-key.json}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-${DEMO3_GCP_KEY}}
+      - DATA_DIR=/app/data
+      - EXTERNAL_DATA_DIR=/app/data/external
+      
+    command: >
+      jupyter lab 
+      --ip=0.0.0.0 
+      --allow-root 
+      --no-browser 
+      --ServerApp.token="" 
+      --ServerApp.password=""
+
+volumes:
+  ai_weather_model_cache:
+    name: ai_weather_model_cache
+  ai_weather_app_cache:
+    name: ai_weather_app_cache

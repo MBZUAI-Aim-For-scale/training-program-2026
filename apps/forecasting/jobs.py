@@ -18,7 +18,7 @@ from .catalog import BY_KEY, ENV_ROOT
 from .store import JOBS_DIR, RunRequest
 
 APP_ROOT = Path(__file__).resolve().parent.parent
-RUNNER = APP_ROOT / "runners" / "run_model.py"
+RUNNER = APP_ROOT / "forecasting"  / "runners" / "run_model.py"
 
 
 def _python_for(req: RunRequest) -> str:

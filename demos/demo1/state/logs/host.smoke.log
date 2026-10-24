@@ -10,36 +10,100 @@ try:
 except Exception as e:
     print("SMOKE flash_attn unavailable:", e)
 
-
-=============
-== PyTorch ==
-=============
-
-NVIDIA Release 25.03 (build 148941829)
-PyTorch Version 2.7.0a0+7c8ec84
-Container image Copyright (c) 2025, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-Copyright (c) 2014-2024 Facebook Inc.
-Copyright (c) 2011-2014 Idiap Research Institute (Ronan Collobert)
-Copyright (c) 2012-2014 Deepmind Technologies    (Koray Kavukcuoglu)
-Copyright (c) 2011-2012 NEC Laboratories America (Koray Kavukcuoglu)
-Copyright (c) 2011-2013 NYU                      (Clement Farabet)
-Copyright (c) 2006-2010 NEC Laboratories America (Ronan Collobert, Leon Bottou, Iain Melvin, Jason Weston)
-Copyright (c) 2006      Idiap Research Institute (Samy Bengio)
-Copyright (c) 2001-2004 Idiap Research Institute (Ronan Collobert, Samy Bengio, Johnny Mariethoz)
-Copyright (c) 2015      Google Inc.
-Copyright (c) 2015      Yangqing Jia
-Copyright (c) 2013-2016 The Caffe contributors
-All rights reserved.
-
-Various files include modifications (c) NVIDIA CORPORATION & AFFILIATES.  All rights reserved.
-
-GOVERNING TERMS: The software and materials are governed by the NVIDIA Software License Agreement
-(found at https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-software-license-agreement/)
-and the Product-Specific Terms for NVIDIA AI Products
-(found at https://www.nvidia.com/en-us/agreements/enterprise-software/product-specific-terms-for-ai-products/).
-WARNING: Detected NVIDIA GB10 GPU, which may not yet be supported in this version of the container
-
-SMOKE matmul ok on NVIDIA GB10 -10508.626953125
-SMOKE flash_attn ok (1, 128, 8, 64)
-
-[ok] CUDA matmul + flash-attention ok
+Unable to find image 'nvcr.io/nvidia/pytorch:25.03-py3' locally
+25.03-py3: Pulling from nvidia/pytorch
+99bf4d75d53b: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+0ea8e595bfa5: Pulling fs layer
+58f537c310dd: Pulling fs layer
+abea52fb7ba8: Pulling fs layer
+e40082895cb8: Pulling fs layer
+141529ee388c: Pulling fs layer
+ebce38133960: Pulling fs layer
+3e9c152cbbba: Pulling fs layer
+56e1b89a5698: Pulling fs layer
+64e6149c87b6: Pulling fs layer
+69fbe38eb239: Pulling fs layer
+45dd1a4ab662: Pulling fs layer
+1fa31fff18ed: Pulling fs layer
+95aee456ddeb: Pulling fs layer
+76f12d4f9876: Pulling fs layer
+e93efb287e09: Pulling fs layer
+488546d79be9: Pulling fs layer
+8c7ddd46b4d3: Pulling fs layer
+53e2b830a814: Pulling fs layer
+7a2b2f818ff4: Pulling fs layer
+5b17151e9710: Pulling fs layer
+787eeb4d2148: Pulling fs layer
+db9ae5b42936: Pulling fs layer
+f0a415162e30: Pulling fs layer
+ceb4da2a45e5: Pulling fs layer
+b4e2180b3ace: Pulling fs layer
+f3922fed5b1c: Pulling fs layer
+2cc418b42d5d: Pulling fs layer
+a5aa6a28afbc: Pulling fs layer
+a79115e426a0: Pulling fs layer
+fb84f81d011a: Pulling fs layer
+f71c5d44674e: Pulling fs layer
+ae70b7a0d48d: Pulling fs layer
+e897ed52fae7: Pulling fs layer
+54c41548ff48: Pulling fs layer
+ee101c9665e9: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+69458d2612d2: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+9347d2c6b88f: Pulling fs layer
+e4d2ebfddfbe: Pulling fs layer
+96fe4dc0d6ef: Pulling fs layer
+ff0dc5c9aede: Pulling fs layer
+65280a51cc29: Pulling fs layer
+416eac053621: Pulling fs layer
+7c0a34154a13: Pulling fs layer
+304c1a4e8506: Pulling fs layer
+d18146a222f0: Pulling fs layer
+db9595573c66: Pulling fs layer
+5a59de1077ef: Pulling fs layer
+23a0ad37f5b3: Pulling fs layer
+082efba21e48: Pulling fs layer
+f9128797ec9a: Pulling fs layer
+469d3777deed: Pulling fs layer
+401f24ce4f44: Pulling fs layer
+7e7803cd40b7: Pulling fs layer
+0d657f76b5ae: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+7183c7fdc740: Pulling fs layer
+57a015cda828: Pulling fs layer
+9330e7096a34: Pulling fs layer
+7a3e5d6a8cb7: Pulling fs layer
+4f4fb700ef54: Already exists
+abea52fb7ba8: Download complete
+f71c5d44674e: Download complete
+7a2b2f818ff4: Download complete
+787eeb4d2148: Download complete
+e40082895cb8: Download complete
+f0a415162e30: Download complete
+99bf4d75d53b: Download complete
+488546d79be9: Download complete
+76f12d4f9876: Download complete
+ee101c9665e9: Download complete
+b4e2180b3ace: Download complete
+69458d2612d2: Download complete
+2cc418b42d5d: Download complete
+57a015cda828: Download complete
+9347d2c6b88f: Download complete
+7a3e5d6a8cb7: Download complete
+a79115e426a0: Download complete
+f9128797ec9a: Download complete
+7e7803cd40b7: Download complete
+ae70b7a0d48d: Download complete
+69fbe38eb239: Download complete
+96fe4dc0d6ef: Download complete
+7c0a34154a13: Download complete
+db9595573c66: Download complete
+e4d2ebfddfbe: Download complete
+082efba21e48: Download complete
+401f24ce4f44: Download complete
+65280a51cc29: Download complete
+7183c7fdc740: Download complete
+64e6149c87b6: Download complete
+469d3777deed: Download complete

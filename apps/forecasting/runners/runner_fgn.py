@@ -28,9 +28,8 @@ import xarray as xr
 from _e2s import peak_gpu_gb
 
 APP_ROOT = Path(__file__).resolve().parent.parent
-OUTPUTS = Path(os.environ.get("DEMO3_OUTPUT_DIR", APP_ROOT.parents[1] / "outputs"))  # <repo>/outputs
 FGN_DIR = Path(os.environ.get("DEMO3_FGN_DIR", Path.home() / ".cache" / "fgn"))
-INPUTS_DIR = OUTPUTS / "_fgn_inputs"
+INPUTS_DIR = APP_ROOT / "outputs" / "_fgn_inputs"
 BUCKET = "https://storage.googleapis.com/dm_graphcast/weathernext2"
 CONFIG = "WeatherNextCyclones_Mini"
 WEIGHTS = ("WeatherNextCyclones_Mini_2024.npz", "params/WeatherNextCyclones_Mini_%3C2024.npz")

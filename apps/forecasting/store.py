@@ -11,18 +11,14 @@ on the Spark stay on it. runners/sync_bucket.py pulls others' in bulk.
 from __future__ import annotations
 
 import os
-import sys
 import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
 import pandas as pd
 
-APP_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(APP_ROOT))
-
-# <repo>/outputs, which docker/run.sh mounts at /app/outputs (so runs survive a new container)
-OUTPUT_DIR = Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().parents[2] / "outputs"))
+OUTPUT_DIR = Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().parent.parent / "outputs"))
 JOBS_DIR = OUTPUT_DIR / "_jobs"
 BUCKET = os.environ.get("DEMO3_BUCKET", "").rstrip("/")
 

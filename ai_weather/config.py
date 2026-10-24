@@ -124,16 +124,16 @@ if DATA_MODE == "local":
 
 BUCKET_ROOT = f"gs://{DEMO_BUCKET}/{BUCKET_PREFIX}"     # gs://<bucket>/demo4
 
-MODEL_FOLDERS = {            # catalog key -> folder under demo4/MODEL/  (edit here if yours differ)
+MODEL_FOLDERS = {            # catalog key -> folder under demo4/MODEL/ 
     "AIFS": "aifs_single",
     "AIFS_ENS": "aifs_ens",
     "FuXi": "fuxi",
     "GraphCast": "graphcast",
     "GenCast": "gencast",
-    "Aurora 1.5": "aurora15",
-    "Atlas CRPS": "atlas_crps",
-    "NeuralGCM": "neural_gcm",
-    "FGN mini": "fgn_mini",
+   # "Aurora 1.5": "aurora15",
+   # "Atlas CRPS": "atlas_crps",
+   # "NeuralGCM": "neural_gcm",
+   # "FGN mini": "fgn_mini",
 
 }
 
@@ -308,16 +308,16 @@ LOCAL_MODEL_DIRS = {             # local mapping, aligned with BENCHMARK_MODEL_C
     "graphcast":   EXTERNAL_DATA_DIR / "graphcast",
     "aifs_ens":    EXTERNAL_DATA_DIR / "aifs_ens",
     "gencast":     EXTERNAL_DATA_DIR / "gencast",
-    "aurora15":    EXTERNAL_DATA_DIR / "aurora15",
-    "atlas_crps":  EXTERNAL_DATA_DIR / "atlas_crps",
-    "neuralgcm":   EXTERNAL_DATA_DIR / "neuralgcm",
-    "fgn_mini":    EXTERNAL_DATA_DIR / "fgn_mini",
-}
+   # "aurora15":    EXTERNAL_DATA_DIR / "aurora15",
+   # "atlas_crps":  EXTERNAL_DATA_DIR / "atlas_crps",
+   # "neuralgcm":   EXTERNAL_DATA_DIR / "neuralgcm",
+   # "fgn_mini":    EXTERNAL_DATA_DIR / "fgn_mini",
+   }
 def _model_dir(key: str):
     return _pick(f"model {key}", [(LOCAL_MODEL_DIRS[key], True)], _model_uri(key))
 
 # Observations: ~/data/external/CHIRPS/<Country>, else the flat CHIRPS folder, else the older
-# CHIRPS_IMERG folder; else gs://<bucket>/demo4/DATA/<Country>/CHIRPS
+# CHIRPS folder; else gs://<bucket>/demo4/DATA/<Country>/CHIRPS
 OBS_DIR = _pick("observations",
                 [(EXTERNAL_DATA_DIR / obs / region, True),
                  (EXTERNAL_DATA_DIR / obs, False),
@@ -434,51 +434,51 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "slow": True,
     },
 
-"Aurora15": {
-        "label": "Probabilistic · Aurora15",
-        "dir": _model_dir("aurora15"),
-        "model_name": "aurora15",
-        "file_pattern": "{}.nc",
-        "var": "tp",
-        "probabilistic": True,
-        "category": "Probabilistic",
-        "slow": True,
-    },
+#"Aurora15": {
+#        "label": "Probabilistic · Aurora15",
+#        "dir": _model_dir("aurora15"),
+#        "model_name": "aurora15",
+#        "file_pattern": "{}.nc",
+#        "var": "tp",
+#        "probabilistic": True,
+#        "category": "Probabilistic",
+#        "slow": True,
+#    },
 
 
-   "Atlas CRPS": {
-        "label": "Probabilistic · Atlas CRPS",
-        "dir": _model_dir("atlas_crps"),
-        "model_name": "atlas_crps",
-        "file_pattern": "{}.nc",
-        "var": "tp",
-        "probabilistic": True,
-        "category": "Probabilistic",
-        "slow": True,
-    },
+#   "Atlas CRPS": {
+#        "label": "Probabilistic · Atlas CRPS",
+#        "dir": _model_dir("atlas_crps"),
+#        "model_name": "atlas_crps",
+#        "file_pattern": "{}.nc",
+#        "var": "tp",
+#        "probabilistic": True,
+#        "category": "Probabilistic",
+#        "slow": True,
+#    },
 
 
- "NeuralGCM": {
-        "label": "Probabilistic · NeuralGCM",
-        "dir": _model_dir("neuralgcm"),
-        "model_name": "neuralgcm",
-        "file_pattern": "{}.nc",
-        "var": "tp",
-        "probabilistic": True,
-        "category": "Probabilistic",
-        "slow": True,
-    },
-
- "FGN mini": {
-        "label": "Probabilistic · FGN mini",
-        "dir": _model_dir("fgn_mini"),
-        "model_name": "fgn_mini",
-        "file_pattern": "{}.nc",
-        "var": "tp",
-        "probabilistic": True,
-        "category": "Probabilistic",
-        "slow": True,
-    },
+# "NeuralGCM": {
+#        "label": "Probabilistic · NeuralGCM",
+#        "dir": _model_dir("neuralgcm"),
+#        "model_name": "neuralgcm",
+#        "file_pattern": "{}.nc",
+#        "var": "tp",
+#        "probabilistic": True,
+#        "category": "Probabilistic",
+#        "slow": True,
+#    },
+#
+# "FGN mini": {
+#        "label": "Probabilistic · FGN mini",
+#        "dir": _model_dir("fgn_mini"),
+#        "model_name": "fgn_mini",
+#        "file_pattern": "{}.nc",
+#        "var": "tp",
+#        "probabilistic": True,
+#        "category": "Probabilistic",
+#        "slow": True,
+#    },
 }
 
 # ==============================================================================
@@ -739,8 +739,8 @@ def check_data() -> int:
 
 if __name__ == "__main__":
     # python ai_weather/config.py    -> show where each input comes from (local or bucket) and check it exists
-    print(f".env file : {ENV_FILE}")
-    print(f"mode      : {DATA_MODE}  (local first, bucket as fallback)" if DATA_MODE == "auto" else f"mode      : {DATA_MODE}")
+   # print(f".env file : {ENV_FILE}")
+   # print(f"mode      : {DATA_MODE}  (local first, bucket as fallback)" if DATA_MODE == "auto" else f"mode      : {DATA_MODE}")
     print(f"local     : {EXTERNAL_DATA_DIR}")
     print(f"bucket    : {BUCKET_ROOT if BUCKET_OK else '(off: ' + BUCKET_NOTE + ')'}")
     print(f"region    : {region}")
