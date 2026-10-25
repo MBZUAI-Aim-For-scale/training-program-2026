@@ -52,7 +52,7 @@ obs.py                 CHIRPS daily rainfall (yearly files, downloaded once)
 theme.py               styling helpers (hover hints)
 data/mwset4x4.nc4      ROMP's MWset: local 5-day wet-spell amounts for Moron–Robertson
 event_movie/           Panchali's forecast_event_movie.py (unchanged) + the Spark adapter
-runners/run_model.py   runner entry point (+ synthetic output generator)
+runners/run_model.py   runner entry point
 runners/runner_*.py    one per model
 runners/wave_source.py AIFS v2 inputs for 2000–2025: ECMWF wave dataset (bucket) + ERA5
 runners/fgn_convert.py FGN starting conditions from ECMWF open data (see the FGN section)
@@ -73,7 +73,7 @@ Each run is one NetCDF file covering the whole globe:
 | `t2m` | 2 m temperature, in **K** |
 | `z500` | 500 hPa geopotential, in **m² s⁻²** (divide by 9.80665 to get height in m) |
 | coords | `valid_time` (along lead_time), `init_time` |
-| attrs | `model`, `model_name`, `init_source`, `members`, `synthetic` |
+| attrs | `model`, `model_name`, `init_source`, `members` |
 
 ## Results: the event movie
 
@@ -83,8 +83,6 @@ Demo 3's output files, and fetches ERA5 observations from Google's ARCO copy (ca
 `outputs/_obs_cache/`) when the cluster's ERA5 folder isn't there. The use case picks the
 movie: **Heat** = daily max 2 m temperature, **Precipitation** = daily rainfall. Each movie is
 rendered once per request and saved under `outputs/_movies/`.
-
-To get test data without a GPU, turn on **Use synthetic output** in Developer options and press Run. This writes a fake file in exactly this format.
 
 ## Results: onset
 

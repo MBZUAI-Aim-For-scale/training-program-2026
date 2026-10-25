@@ -7,8 +7,7 @@ The bucket comes from --bucket or $DEMO3_BUCKET (e.g. gs://<bucket>/demo3), laid
 like outputs/: <model>/<YYYYMMDDTHH>_<lead>h_m<members>.nc plus its .json timings.
 pull downloads runs this Spark doesn't have (a public bucket needs no credentials).
 push uploads runs the bucket doesn't have yet. It needs a key that can write to the
-bucket: the Sparks' own key is read-only, so their runs stay on them. Synthetic runs
-are never pushed.
+bucket: the Sparks' own key is read-only, so their runs stay on them.
 """
 from __future__ import annotations
 
@@ -36,7 +35,7 @@ def main() -> int:
 
     remote = {(m, n): size for m, n, size in store.remote_runs(max_age_s=0)}
     local = {(p.parent.name, p.name): p for p in store.OUTPUT_DIR.glob("*/*.nc")
-             if store._NAME.match(p.name) and "_synthetic" not in p.name}
+             if store._NAME.match(p.name)}
     if a.files:
         keep = {(Path(f).parent.name, Path(f).name) for f in a.files}
         local = {k: p for k, p in local.items() if k in keep}

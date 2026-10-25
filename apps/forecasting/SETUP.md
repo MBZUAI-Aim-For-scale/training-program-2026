@@ -118,16 +118,14 @@ in the menu.
 
 ### Trying it
 
-1. Open **Developer options** and turn **Use synthetic output** off; it is on by default,
-   which makes fake forecasts for testing the page without a GPU.
-2. **Model(s):** pick up to four models. Hover over a card for its run time on the Spark, what
+1. **Model(s):** pick up to four models. Hover over a card for its run time on the Spark, what
    it starts from and what it can't do; the dropdown below lists what each needs on the Spark.
-3. **Forecast setup:** start date (hover the ⓘ for each model's allowed range), lead time and
+2. **Forecast setup:** start date (hover the ⓘ for each model's allowed range), lead time and
    members; then a country (or a custom box) and a use case: **Heat**, **Precipitation** or
    **Onset**.
-4. **Run:** one button loads the saved runs that match (instant), downloads any that are in the
+3. **Run:** one button loads the saved runs that match (instant), downloads any that are in the
    bucket, and runs the rest on the Spark one after another, with progress.
-5. **Results:** how each forecast was made; event movies (forecast next to observations, plus the
+4. **Results:** how each forecast was made; event movies (forecast next to observations, plus the
    event's track) for the models you choose, or onset maps and movies for Onset; a time-series
    comparison of all the models; and forecast maps with Play/Pause to step through the days.
 
@@ -152,7 +150,6 @@ bash docker/run.sh rebuild           # rebuild the image and start a new contain
 | `docker run` fails: `unresolvable CDI devices` | `systemctl --user restart docker`, then `bash docker/run.sh restart` (step 1) |
 | `docker run` fails: `failed to fulfil mount request ... libnvidia-...: no such file` | NVIDIA libraries updated since boot: ask an admin to refresh the GPU list or reboot (step 1) |
 | Browser can't reach localhost:8501 | the SSH tunnel isn't open, or port 8501 is busy on your laptop: use `-L 8502:localhost:8501` and open :8502 |
-| The page shows fake forecasts | turn off **Use synthetic output** in Developer options |
 | A code change doesn't show | `bash docker/run.sh restart` (needed for `apps/forecasting/`, even with `DEV=1`) |
 | A run fails while downloading starting conditions | ECMWF/Google mirror busy: try again, or start with `DEMO3_IFS_SOURCE=azure` |
 | First run of a model is slow | it is downloading the weights once (Atlas CRPS ~30 min); later runs start in seconds |

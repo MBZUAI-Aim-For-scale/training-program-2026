@@ -16,31 +16,31 @@ def members_for(m: catalog.Model, members: int) -> int:
     return min(members, m.max_members) if m.kind == "ensemble" else 1
 
 
-def plan(keys, init, lead_days, members, box, region_name, use_case, synthetic) -> dict:
+def plan(keys, init, lead_days, members, box, region_name, use_case) -> dict:
     """Per model: (what, info, RunRequest). what: ready | download | run | skip."""
     out = {}
     for k in keys:
         m = catalog.BY_KEY[k]
-        req = store.RunRequest(k, init, lead_days * 24, members_for(m, members), synthetic)
+        req = store.RunRequest(k, init, lead_days * 24, members_for(m, members))
         errs = [msg for lvl, msg in catalog.check(m, init, lead_days, req.members, box, region_name,
                                                    use_case) if lvl == "error"]
-        saved = store.find_saved(req) or store.find_any(k, init, lead_days * 24, synthetic)
-        remote = None if saved or synthetic else store.find_remote(req)
+        saved = store.find_saved(req) or store.find_any(k, init, lead_days * 24)
+        remote = None if saved else store.find_remote(req)
         if saved:
             out[k] = (READY, str(saved), req)
         elif errs:
             out[k] = (SKIP, errs[0].split(". ")[0], req)
         elif remote:
             out[k] = (DOWNLOAD, remote, req)
-        elif m.live or synthetic:
+        elif m.live:
             out[k] = (RUN, "", req)
         else:
             out[k] = (SKIP, f"no saved run, and {m.name} can't run live on this Spark", req)
     return out
 
 
-def signature(keys, init, lead_days, members, synthetic) -> tuple:
-    return (tuple(keys), str(init), lead_days, members, synthetic)
+def signature(keys, init, lead_days, members) -> tuple:
+    return (tuple(keys), str(init), lead_days, members)
 
 
 def state(sig) -> dict:
