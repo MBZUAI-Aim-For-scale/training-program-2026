@@ -4,7 +4,7 @@ A Streamlit app, running on the DGX Spark, for running AI weather models. Partic
 
 **Status:**
 - All 7 models run live on the Spark from one Docker image (`docker/`), and saved runs load instantly.
-- The event movie tab (forecast vs observations) is Panchali's `demo3/event_movie/forecast_event_movie.py`.
+- The event movie (forecast vs observations) is Panchali's `demo3/event_movie/forecast_event_movie.py`.
 - Results are Panchali's event movie (forecast next to ERA5 observations, day by day) and event-track map, for heat or precipitation; plus how the forecast was made (load, inputs, run, save, with times on the Spark), maps of z500 / 2 m temperature / rainfall, and a NetCDF download.
 - Each model card lists what it needs on the Spark: weight size, peak GPU memory, output size, grid and inputs.
 - **Onset** use case: onset maps (forecast vs observed), the rainfall series and an onset movie, by a choice of definitions (ICPAC, Moron–Robertson, Moron–Robertson with MOK filter), each adjustable.

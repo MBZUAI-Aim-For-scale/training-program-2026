@@ -29,7 +29,7 @@ import xarray as xr
 
 APP_ROOT = Path(__file__).resolve().parent.parent
 OUTPUTS = Path(os.environ.get("DEMO3_OUTPUT_DIR", APP_ROOT.parents[1] / "outputs"))  # <repo>/outputs
-sys.path.insert(0, str(APP_ROOT))
+sys.path.insert(0, str(APP_ROOT.parents[1]))  # the repository root
 from apps.forecasting import contract  # noqa: E402
 
 DATA_FILE = "hres_2024-10-07_0p25_steps30.nc"

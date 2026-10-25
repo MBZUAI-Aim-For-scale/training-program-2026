@@ -17,7 +17,7 @@ from pathlib import Path
 from .catalog import BY_KEY, ENV_ROOT
 from .store import JOBS_DIR, RunRequest
 
-APP_ROOT = Path(__file__).resolve().parent.parent
+APP_ROOT = Path(__file__).resolve().parent  # apps/forecasting
 RUNNER = APP_ROOT / "runners" / "run_model.py"
 
 
