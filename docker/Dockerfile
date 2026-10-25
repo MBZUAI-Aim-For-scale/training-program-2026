@@ -23,7 +23,8 @@ ENV PIP_CONSTRAINT= \
 # Fail fast: check that the UI requirements resolve before the long model builds
 RUN pip install uv
 COPY docker/requirements.txt /tmp/requirements.txt
-RUN uv pip compile /tmp/requirements.txt --python-version 3.12 -o /dev/null
+# (to stdout: uv can't write its output file onto /dev/null inside a build)
+RUN uv pip compile /tmp/requirements.txt --python-version 3.12 --quiet > /dev/null
 
 COPY docker/locks /tmp/locks
 
