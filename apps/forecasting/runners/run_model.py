@@ -87,7 +87,8 @@ def main() -> int:
         ds = runner.run(init, a.lead_hours, a.members, report)
         t_post = time.time()
         report("Post-processing and saving…", 0.97)
-        source = ds.attrs.get("fgn_init_source") or model.init_source  # FGN: sample or converter
+        # what this run started from, when it depends on the date (AIFS v2, FGN), else the model's usual
+        source = ds.attrs.get("run_init_source") or ds.attrs.get("fgn_init_source") or model.init_source
         ds = contract.finalize(ds, model_key=a.model, model_name=model.name, init=init,
                                init_source=source)
         contract.write(ds, a.out)
