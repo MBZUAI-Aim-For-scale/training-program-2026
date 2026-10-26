@@ -26,9 +26,14 @@ cd training-program-2026
 3. **Initialize the environment configuration**:
 ```bash
 cp .env.example .env
-
 ```
 
+```bash
+cat <<EOF > .env
+DEMO_BUCKET=<bucket>/demo
+DEMO3_BUCKET=<bucket>/demo3
+DEMO4_BUCKET=<bucket>/demo4
+EOF
 
 4. **Start the container stack** using the management script:
 ```bash
