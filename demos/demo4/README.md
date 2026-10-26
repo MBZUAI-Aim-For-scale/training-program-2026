@@ -49,12 +49,9 @@ ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
 
 
 6. **Access dashboards**:
-* **Streamlit UI**: `http://localhost:8501`
-* **Jupyter Lab**: `http://localhost:8888`
+  * **Streamlit UI**: `http://localhost:8501`
+  * **Jupyter Lab**: `http://localhost:8888`
 
-
-
----
 
 ## Command-Line Execution (`run_momp.py`)
 
@@ -89,15 +86,15 @@ python run_momp.py --mode prob --model AIFS_ENS
 
 1. **Navigate to Benchmarking**: Open `http://localhost:8501` and select **Short Medium Benchmarking** in the sidebar.
 2. **Configure Benchmark Inputs**:
-* **Ground Truth**: Select `CHIRPS` or `ENACTS`.
-* **Benchmark Coverage**: Select region (e.g., `Ethiopia`).
-* **Forecast Window**: Choose lead time (`1-15 days` or `16-30 days`).
+  * **Ground Truth**: Select `CHIRPS` or `ENACTS`.
+  * **Benchmark Coverage**: Select region (e.g., `Ethiopia`).
+  * **Forecast Window**: Choose lead time (`1-15 days` or `16-30 days`).
 
 
 3. **Select Models**: Filter by *Deterministic* or *Probabilistic* and select target models from the table.
 4. **Adjust Run Windows & Shared Settings**:
-* Set Evaluation Start/End dates, Baseline Years, and Initialization Days (e.g., days 0, 3).
-* Configure event detection thresholds (e.g., Wet-day threshold = 20mm, Dry spell limit = 7 days).
+  * Set Evaluation Start/End dates, Baseline Years, and Initialization Days (e.g., days 0, 3).
+  * Configure event detection thresholds (e.g., Wet-day threshold = 20mm, Dry spell limit = 7 days).
 
 
 5. **Execute Benchmark**: Click **Run Benchmark** to initiate `run_momp.py` with live logging.
