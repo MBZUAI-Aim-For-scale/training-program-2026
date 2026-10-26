@@ -339,7 +339,7 @@ You can run benchmarks interactively inside the running container or execute sin
 
 Enter the container's interactive `bash` shell to run multiple commands sequentially:
 
-```bash
+```{bash}
 docker exec -it ai_weather bash
 
 ```
@@ -348,7 +348,7 @@ docker exec -it ai_weather bash
 
 Execute a benchmark directly from the host without staying inside the container shell:
 
-```bash
+```{bash}
 docker exec -it ai_weather python run_momp.py --mode det --model GraphCast
 
 ```
@@ -363,15 +363,17 @@ docker exec -it ai_weather python run_momp.py --mode det --model GraphCast
 
 Specify the target model using the `--model` flag alongside the corresponding evaluation track:
 
-* **Deterministic Track** (e.g., GraphCast, FuXi, AIFS Single v2):
-```bash
+* **Deterministic Track** (e.g., GraphCast, FuXi, AIFS Single v2)
+
+```{bash}
 python run_momp.py --mode det --model GraphCast
 
 ```
 
 
 * **Probabilistic / Ensemble Track** (e.g., AIFS Ensemble v2, GenCast):
-```bash
+
+```{bash}
 python run_momp.py --mode prob --model AIFS_ENS
 
 ```
@@ -383,21 +385,19 @@ python run_momp.py --mode prob --model AIFS_ENS
 Omitting the `--model` argument triggers batch evaluation across all registered models for that specific mode:
 
 * **Batch All Deterministic Models**:
-```bash
+
+```{bash}
 python run_momp.py --mode det
 
 ```
 
 
 * **Batch All Probabilistic Models**:
-```bash
+
+```{bash}
 python run_momp.py --mode prob
 
 ```
-
-
-
----
 
 ### Benchmark Track Reference
 
