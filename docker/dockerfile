@@ -20,7 +20,6 @@ ENV PIP_CONSTRAINT= \
 
 # Install uv package manager
 RUN pip install uv
-<<<<<<< HEAD
 
 # Install gcsfuse and FUSE utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -62,9 +61,9 @@ RUN python -m venv --system-site-packages /opt/envs/fgn \
  && uv pip install --python /opt/envs/fgn --no-deps -r /tmp/locks/fgn.txt \
  && /opt/envs/fgn/bin/python -c "from weathernext.weathernext2 import fgn; import xarray_jax"
 
-# 5. Streamlit UI environment
+# 5. Streamlit UI environment (including h5py for NetCDF4 GCS streaming)
 RUN python -m venv /opt/envs/ui \
- && uv pip install --python /opt/envs/ui -r /tmp/requirements.txt \
+ && uv pip install --python /opt/envs/ui -r /tmp/requirements.txt h5py \
  && /opt/envs/ui/bin/python -c "\
 import cartopy.feature as cf, cartopy.io.shapereader as sr; \
 [sr.natural_earth(resolution=r, category=c, name=n) for r in ('10m', '50m', '110m') \
@@ -80,9 +79,9 @@ RUN cd /opt/envs/graphcast/lib/python3.12/site-packages/earth2studio/models/px \
 
 WORKDIR /app
 
-# Create isolated application virtual environment in /opt/envs/app
+# Create isolated application virtual environment in /opt/envs/app with h5py pre-installed
 RUN uv venv /opt/envs/app \
- && uv pip install --python /opt/envs/app -r /tmp/requirements.resolved.txt
+ && uv pip install --python /opt/envs/app -r /tmp/requirements.resolved.txt h5py
 
 COPY . /app
 
