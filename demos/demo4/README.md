@@ -81,12 +81,6 @@ python run_momp.py --mode prob --model AIFS_ENS
 ```
 
 
-4. **Run with a Benchmark Specification File**:
-```bash
-python run_momp.py --mode det --model FuXi --spec path/to/benchmark_spec.json
-
-```
-
 
 
 ---
