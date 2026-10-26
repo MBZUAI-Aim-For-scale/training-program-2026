@@ -156,17 +156,6 @@ We want your feedback, in person and online, to improve this package.
 | Lead-time evaluation | Skill is reported per verification window and per lead-time bin. |
 | Configuration-driven experiments | Each run is fully described by its config file, so results can be reproduced. |
 
-### ROMP Workflow
-
-```
-config file  ->  load observations + model reforecasts
-             ->  apply the SAME onset definition to both
-             ->  match forecast onset to observed onset (per grid cell, per year, per init date)
-             ->  compute metrics (DET or PROB track)
-             ->  skill scores vs. climatology (or a named reference model)
-             ->  maps, tables, heatmaps and reliability diagrams
-```
-
 ### ROMP Specifications
 
 #### 1. Onset definition (set in the config)
