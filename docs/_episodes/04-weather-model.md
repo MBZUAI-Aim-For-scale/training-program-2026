@@ -353,7 +353,6 @@ docker exec -it ai_weather python run_momp.py --mode det --model GraphCast
 
 ```
 
----
 
 ### Step 2: Model Execution Syntax
 
