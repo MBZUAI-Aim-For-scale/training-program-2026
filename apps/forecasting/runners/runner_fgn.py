@@ -32,6 +32,7 @@ FGN_DIR = Path(os.environ.get("DEMO3_FGN_DIR", Path.home() / ".cache" / "fgn"))
 INPUTS_DIR = APP_ROOT / "outputs" / "_fgn_inputs"
 BUCKET = "https://storage.googleapis.com/dm_graphcast/weathernext2"
 CONFIG = "WeatherNextCyclones_Mini"
+CONVERT_TIMEOUT_S = 600  # per ECMWF mirror; a normal conversion takes about 2 min
 WEIGHTS = ("WeatherNextCyclones_Mini_2024.npz", "params/WeatherNextCyclones_Mini_%3C2024.npz")
 SAMPLE = ("hres_2024-10-07_1p0_steps30.nc",
           "dataset/source-hres_forecast_init-2024-10-07%2000:00:00_res-1.0_levels-13_steps-30.nc")
@@ -57,15 +58,23 @@ def _inputs(init: pd.Timestamp, steps: int, sample: Path, report) -> tuple[xr.Da
     # the converter writes just the two input times; forecast frames are added here
     cached = INPUTS_DIR / f"{init:%Y%m%dT%H}.nc"
     if not cached.exists():
-        report("Building starting conditions from ECMWF open data…", 0.05)
-        cmd = [str(CONVERTER_PY), str(Path(__file__).with_name("fgn_convert.py")),
-               "--init", f"{init:%Y-%m-%dT%H}", "--steps", "0", "--static", str(sample),
-               "--out", str(cached), "--source", os.environ.get("DEMO3_IFS_SOURCE", "aws")]
-        r = subprocess.run(cmd, capture_output=True, text=True)
-        print(r.stdout[-2000:], r.stderr[-4000:], sep="\n", flush=True)
-        if r.returncode != 0:
-            lines = [ln for ln in r.stderr.strip().splitlines() if ln.strip()]
-            raise RuntimeError(lines[-1] if lines else "FGN input conversion failed")
+        # ECMWF's mirrors throttle at times ("503 Slow Down", a few kB/s): give each one
+        # CONVERT_TIMEOUT_S and fall back to the other, rather than hang for hours
+        first = os.environ.get("DEMO3_IFS_SOURCE", "aws")
+        for source in (first, "azure" if first == "aws" else "aws"):
+            report(f"Building starting conditions from ECMWF open data ({source} mirror)…", 0.05)
+            cmd = [str(CONVERTER_PY), str(Path(__file__).with_name("fgn_convert.py")),
+                   "--init", f"{init:%Y-%m-%dT%H}", "--steps", "0", "--static", str(sample),
+                   "--out", str(cached), "--source", source]
+            try:  # the converter's progress goes straight to the job log
+                if subprocess.run(cmd, timeout=CONVERT_TIMEOUT_S).returncode == 0:
+                    break
+                print(f"Conversion from the {source} mirror failed; see above", flush=True)
+            except subprocess.TimeoutExpired:
+                print(f"The {source} mirror is too slow (over {CONVERT_TIMEOUT_S // 60} min)", flush=True)
+        else:
+            raise RuntimeError("Couldn't get ECMWF open data from either mirror (AWS or Azure); "
+                               "try again later")
     batch = xr.load_dataset(cached)
     times = pd.to_timedelta(np.arange(steps + 2) * 6, unit="h")
     start = batch.datetime.values[0, 0]
