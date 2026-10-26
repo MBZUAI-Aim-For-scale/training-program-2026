@@ -28,12 +28,16 @@ keypoints:
 
 This lesson documents the complete ROMP (Rainy season Onset Metrics Package) / MOMP benchmarking workflow. It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCast, AIFS-ENS) against observational rainfall data (e.g., CHIRPS, ENACTS) for rainy season onset in Ethiopia's Kiremt season, and it is designed to transfer to other regions and seasons.
 
+
 > #### Prerequisites
 > 
-> - Complete the environment setup in [Demo 1: Setting Up AI Weather Forecasting Lab](/training-program-2026/01-setup/) before proceeding.
-> - ROMP must be installed (`uv pip install pyproject.toml`). See [Demo 1, Section 7](/training-program-2026/01-setup#7-rompmomp-benchmarking-configuration).
-> - Familiarity with the Demo 3 Streamlit interface and NetCDF output format.
-{: .prereq}
+> * Complete the Docker container setup in [Demo 1: Setting Up AI Weather Forecasting Lab](https://www.google.com/search?q=/training-program-2026/01-setup/) before proceeding.
+> * The container stack must be running (`bash docker/run.sh start`). ROMP and all model environments are pre-installed inside the container.  See [Demo 1, Section 7](/training-program-2026/01-setup#7-rompmomp-benchmarking-configuration).
+> * Familiarity with the Demo 3 Streamlit interface (`http://localhost:8501`) and NetCDF output format.
+> {: .prereq}
+
+
+
 
 ## Learning Objectives
 
