@@ -1,14 +1,12 @@
-# Demo 4 
+# Demo 4: AI Weather Model Benchmarking
 
-Because the AI models and datasets are large, the benchmarking environment is containerized using Docker and hosted on a remote server (the "Spark"). You will launch the backend via Docker and access the interactive Streamlit UI from your local machine using an SSH tunnel. Alternatively, a local development setup using `uv` is provided.
+Because AI models and datasets are large, the benchmarking environment is containerized using Docker and hosted on a remote server. You will launch the backend via Docker and access the interactive Streamlit UI from your local machine using an SSH tunnel.
 
 ---
 
 ## Environment Setup
 
-You will need two terminal windows: one connected to the remote server to manage the Docker container, and one on your local machine to create the SSH tunnel.
-
-1. **SSH into the Spark server** using your preferred terminal:
+1. **SSH into the server**:
 ```bash
 ssh <you>@country-spark
 
@@ -23,112 +21,95 @@ cd training-program-2026
 ```
 
 
-3. **Initialize the environment configuration**:
+3. **Initialize environment configuration**:
 ```bash
 cp .env.example .env
-```
-
-```bash
 cat <<EOF > .env
 DEMO_BUCKET=<bucket>/demo
 DEMO3_BUCKET=<bucket>/demo3
 DEMO4_BUCKET=<bucket>/demo4
 EOF
 
-4. **Start the container stack** using the management script:
+```
+
+
+4. **Start the container stack**:
 ```bash
 bash docker/run.sh rebuild
 
 ```
 
 
-*For subsequent runs without rebuilding:*
-```bash
-bash docker/run.sh start
-
-```
-
-
-*(Tip: To edit code live without rebuilding the image, run `DEV=1 bash docker/run.sh start` instead).*
-5. **Create the SSH tunnel** (Local Machine): Open a new terminal window on your local laptop and set up port forwarding:
+*(For subsequent runs without rebuilding, use `bash docker/run.sh start` or `DEV=1 bash docker/run.sh start` for live code editing).*
+5. **Create the SSH tunnel** (from your local machine):
 ```bash
 ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
 
 ```
 
 
-*(Leave this terminal window open while working).*
-6. **Access the dashboards** in your local web browser:
-* **Streamlit UI**: `http://localhost:8501`
-* **Jupyter Lab**: `http://localhost:8888`
+6. **Access dashboards**:
+  * **Streamlit UI**: `http://localhost:8501`
+  * **Jupyter Lab**: `http://localhost:8888`
 
-
----
 
 ## Command-Line Execution (`run_momp.py`)
 
-The `run_momp.py` script is the backend execution engine. It processes one model per run, categorizing them into Deterministic (`det`) or Probabilistic (`prob`) modes. If you are using the Docker setup, you must execute these commands inside the running container.
+The `run_momp.py` script is the execution engine. Execute commands inside the Docker container:
 
-1. **Enter the Docker Container** (Remote Server Terminal):
-   ```bash
-   docker exec -it ai_weather bash
-   ```
-2. **Run a Deterministic Model** (e.g., GraphCast, FuXi, AIFS):
-   ```bash
-   python run_momp.py --mode det --model GraphCast
-   ```
-3. **Run a Probabilistic (Ensemble) Model** (e.g., AIFS_ENS, GenCast):
-   ```bash
-   python run_momp.py --mode prob --model AIFS_ENS
-   ```
-4. **Run with a Benchmark Specification File**:
-   If you have a predefined `benchmark_spec.json` containing evaluation windows and shared settings:
-   ```bash
-   python run_momp.py --mode det --model FuXi --spec path/to/benchmark_spec.json
-   ```
-5. **Exit the container** when finished:
-   ```bash
-   exit
-   ```
+1. **Enter the Docker container**:
+```bash
+docker exec -it ai_weather bash
+
+```
+
+
+2. **Run a Deterministic Model** (e.g., GraphCast, FuXi, AIFS Single v2):
+```bash
+python run_momp.py --mode det --model GraphCast
+
+```
+
+
+3. **Run a Probabilistic (Ensemble) Model** (e.g., AIFS Ensemble v2, GenCast):
+```bash
+python run_momp.py --mode prob --model AIFS_ENS
+
+```
+
+
+
 
 ---
 
-## Part 3: UI-Based Execution (Streamlit Dashboard)
+## UI-Based Execution (Streamlit Dashboard)
 
-The interactive dashboard provides a visual interface to configure, execute, and analyze the benchmark without needing to type CLI commands.
-
-1. **Navigate to the Benchmarking Page**: In your local browser at `http://localhost:8501`, look at the sidebar on the left. Click on the page named "Short Medium Benchmarking" (or similar, depending on the main `ui/app.py` configuration).
+1. **Navigate to Benchmarking**: Open `http://localhost:8501` and select **Short Medium Benchmarking** in the sidebar.
 2. **Configure Benchmark Inputs**:
-   - **Ground Truth**: Select the observational dataset (e.g., CHIRPS or ENACTS).
-   - **Benchmark Coverage**: Select the region (e.g., Ethiopia). Note: The run button will be disabled if the region's data or masks are not configured in `config.py`.
-   - **Forecast Window**: Choose the lead time window (1-15 days or 16-30 days).
-3. **Select Models**:
-   - The UI auto-detects available models from your data directories.
-   - Use the "Filter by category" radio buttons to view Deterministic or Probabilistic models.
-   - Click the rows in the table to select the models you want to benchmark.
-4. **Adjust Model Run Windows & Settings**:
-   - Expand the model details to set the Evaluation Start/End dates and Baseline Years.
-   - Select Initialization Days (e.g., day 0, day 3).
-   - (Optional) Expand "Advanced Temporal & Verification Settings" to tweak tolerances and verification windows.
-   - Scroll down to "Shared Settings" to adjust event detection thresholds (e.g., Wet-day threshold, Dry spell limit) and area masks.
-5. **Execute the Benchmark**:
-   - Click the "Run Benchmark" button.
-   - A live log stream will appear at the bottom of the page showing the progress of the `run_momp.py` subprocess running inside the Docker container.
-   - Wait for the completion message. This can take several minutes per model depending on the server's hardware.
+  * **Ground Truth**: Select `CHIRPS` or `ENACTS`.
+  * **Benchmark Coverage**: Select region (e.g., `Ethiopia`).
+  * **Forecast Window**: Choose lead time (`1-15 days` or `16-30 days`).
+
+
+3. **Select Models**: Filter by *Deterministic* or *Probabilistic* and select target models from the table.
+4. **Adjust Run Windows & Shared Settings**:
+  * Set Evaluation Start/End dates, Baseline Years, and Initialization Days (e.g., days 0, 3).
+  * Configure event detection thresholds (e.g., Wet-day threshold = 20mm, Dry spell limit = 7 days).
+
+
+5. **Execute Benchmark**: Click **Run Benchmark** to initiate `run_momp.py` with live logging.
 
 ---
 
-## Part 4: Exploring Results & Exporting
+## Exploring Results & Exporting
 
-After the benchmark finishes, the UI will automatically refresh and populate the Results section with several tabs:
+1. **Metric Map**: 2D spatial cross-sections (False Alarm Rate, Miss Rate, MAE) with skill thresholding, map subtraction, and swipe comparisons.
+2. **All Metrics**:
+* Summary evaluation matrix comparing model scores against Traditional Climatology.
+* **Detailed Metric Distributions**: Grouped statistic cards (Mean, Min, Median, P75, P90, Max) highlighting best values in **Bold** and comparing model performance against climatology baselines.
 
-1. **Metric Map**: Visualize spatial metrics (False Alarm Rate, Miss Rate, MAE). You can swipe between models, compare lead times, and clip to specific administrative regions if a shapefile is configured.
-2. **All Metrics**: View a comprehensive, color-coded HTML table comparing all models across all windows, alongside detailed distribution statistics (Mean, Min, Median, P75, P90, Max).
-3. **Benchmark Outputs**: Browse the generated PNG figures categorized by model type (Deterministic, Probabilistic, Climatology) and explore the raw NetCDF datasets.
-4. **Onset Analysis**: Run a localized time-series onset analysis for specific coordinates or administrative regions.
-5. **Skill vs Baseline**: View verification scores comparing the AI models against the Traditional Climatology baseline.
-6. **Uncertainty**: Compute and view bootstrap confidence intervals and statistical significance.
-7. **Benchmark Report & Export**: 
-   - Click "Generate Complete PDF Report" to compile an executive summary, fair-comparison plan, verification scores, and all generated figures into a single scientific PDF.
-   - Click "Download Complete PDF Report" to save it to your local machine.
 
+3. **Benchmark Outputs**: Browse generated PNG output figures and inspect underlying NetCDF variables via the NetCDF Data Explorer.
+4. **Onset Analysis**: Interactive time-series onset analysis with automatic grid snapping by coordinates or administrative Woredas.
+5. **Skill vs Baseline & Uncertainty**: Verification scores relative to baseline, along with bootstrap confidence intervals and statistical significance.
+6. **Benchmark Report & Export**: Generate and download a consolidated PDF report containing executive summaries, model inventory tables, and output figures.
