@@ -39,14 +39,16 @@ This lesson documents the complete ROMP (Rainy season Onset Metrics Package) / M
 
 ## Environment Setup
 
-1. **SSH into the server** (from your local machine):
+1. **SSH into the server** (from your local machine)
+
 ```bash
 ssh <you>@country-spark
 
 ```
 
 
-2. **Clone the repository and navigate to the project directory**:
+2. **Clone the repository and navigate to the project directory**
+
 ```bash
 git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
 cd training-program-2026
@@ -54,7 +56,8 @@ cd training-program-2026
 ```
 
 
-3. **Initialize environment configuration**:
+3. **Initialize environment configuration**
+
 ```bash
 cp .env.example .env
 cat <<EOF > .env
@@ -66,7 +69,8 @@ EOF
 ```
 
 
-4. **Start the container stack**:
+4. **Start the container stack**
+
 ```bash
 bash docker/run.sh rebuild
 
@@ -74,14 +78,18 @@ bash docker/run.sh rebuild
 
 
 *(For subsequent runs without rebuilding, use `bash docker/run.sh start`, or `DEV=1 bash docker/run.sh start` for live host code mounting).*
-5. **Create the SSH tunnel** (Open a separate terminal window on your local laptop):
+
+5. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
+
 ```bash
 ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
 
 ```
 
 *(Leave this terminal window open while working).*
+
 6. **Access dashboards**:
+
 * **Streamlit UI**: `http://localhost:8501`
 
 
