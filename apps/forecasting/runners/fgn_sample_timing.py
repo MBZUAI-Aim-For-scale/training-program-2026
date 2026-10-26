@@ -30,6 +30,7 @@ APP_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(APP_ROOT))
 from apps.forecasting import contract  # noqa: E402
 
+OUTPUTS = Path(os.environ.get("DEMO3_OUTPUT_DIR", APP_ROOT.parents[1] / "outputs"))  # <repo>/outputs
 DATA_FILE = "hres_2024-10-07_0p25_steps30.nc"
 CHECKPOINTS = {  # config name -> local weights file (checkpoint 1 of 4)
     "WeatherNextCyclones": "WeatherNextCyclones_2025_model1.npz",

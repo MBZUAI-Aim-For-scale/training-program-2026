@@ -20,6 +20,7 @@ ENV PIP_CONSTRAINT= \
 
 # Install uv package manager
 RUN pip install uv
+<<<<<<< HEAD
 
 # Install gcsfuse and FUSE utilities
 RUN apt-get update && apt-get install -y --no-install-recommends \

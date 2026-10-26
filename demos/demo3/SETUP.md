@@ -39,6 +39,12 @@ EOF
 systemctl --user daemon-reload
 ```
 
+If it fails with `failed to fulfil mount request: open /usr/lib/aarch64-linux-gnu/libnvidia-...: no
+such file or directory`, the NVIDIA libraries were updated since the Spark booted and the GPU list
+still names the old files. Restarting Docker doesn't help; an admin has to refresh the list
+(`sudo systemctl start nvidia-cdi-refresh.service`, then `systemctl --user restart docker`), or
+reboot the Spark.
+
 ## 2. Get the code
 
 ```bash
@@ -82,15 +88,24 @@ Options (put them before `bash docker/run.sh`):
 
 - `DEV=1`: use the code in this folder instead of the copy inside the image, so
   `git pull` (or editing a file) changes the page without a rebuild. Use this while developing.
+  Edits to `app.py` show on the next reload; edits to anything under `demo3/` need
+  `docker restart demo3`, because the page keeps those modules loaded.
 - `DEMO3_CACHE=/path`: keep model weights somewhere else (e.g. an existing cache).
 - `DEMO3_IFS_SOURCE=azure`: download ECMWF data from the Azure mirror if AWS is slow.
+- `DEMO3_BUCKET=gs://...`: where saved runs are downloaded from. By default `run.sh` uses
+  `gs://aim4scale_training_2026/demo3` (the program's bucket, also holding the ocean-wave inputs
+  AIFS v2 needs for 2000–2025 starts); `DEMO3_BUCKET=` turns it off. On a Spark nothing else is
+  needed: `run.sh` mounts the machine's read-only key, `/etc/fleet-gcs-key.json`, into the
+  container. The key can't write, so runs made on a Spark stay on it. Never copy the key into
+  the image or the repository. Elsewhere, see "Saved runs from the bucket" in the README.
 
 **Skip the first-run downloads and get the saved runs** by copying them from a Spark that
-has them (replace `<user>@<spark>` and the source paths with the right ones):
+has them (replace `<user>@<spark>` and the source paths with the right ones; run this from
+`training-program-2026/demos/demo3`):
 
 ```bash
 rsync -a --info=progress2 <user>@<spark>:<its weights cache>/ ~/.cache/demo3/
-rsync -a --info=progress2 <user>@<spark>:ai_weather/demos/demo3/outputs/ ai_weather/demos/demo3/outputs/
+rsync -a --info=progress2 <user>@<spark>:training-program-2026/demos/demo3/outputs/ outputs/
 ```
 
 On `rwanda-spark` the weights cache is `~/e2s-spark/root_cache`.
@@ -107,13 +122,17 @@ Leave that terminal open and browse to **http://localhost:8502**.
 
 ### Trying it
 
-1. Pick **Deterministic** or **Probabilistic**, then a model. The card shows its run time
-   on the Spark and what it can't do (e.g. NeuralGCM has no 2 m temperature).
-2. Pick a start date (the caption under it gives the model's allowed range and why),
-   lead time, members, country and use case.
-3. **Load saved run** appears when a matching forecast is already saved (instant);
-   otherwise **Run forecast** runs the model on the Spark with a progress bar.
-4. Explore the result tabs, and the **Event movie** tab for forecast vs observations.
+1. **Model(s):** pick up to four models. Hover over a card for its run time on the Spark, what it
+   starts from and what it can't do (e.g. NeuralGCM has no 2 m temperature); the dropdown
+   below lists what each needs on the Spark.
+2. **Forecast setup:** start date (hover the ⓘ for each model's allowed range), lead time and
+   members; then a country (or a custom box) and a use case: **Heat**, **Precipitation** or
+   **Onset**.
+3. **Run:** one button loads the saved runs that match (instant), downloads any that are in the
+   bucket, and runs the rest on the Spark one after another, with progress.
+4. **Results:** how each forecast was made; event movies (forecast next to observations, plus the
+   event's track) for the models you choose, or onset maps and movies for Onset; a time-series
+   comparison of all the models; and forecast maps with Play/Pause to step through the days.
 
 Slow models (Aurora 1.5 ~26 min, Atlas CRPS ~19 min for 10 days) are best pre-run and
 loaded in class.
@@ -125,7 +144,7 @@ loaded in class.
 ```bash
 docker logs -f demo3                 # page log
 docker restart demo3                 # restart the page
-git pull                             # update the code (live with DEV=1; otherwise rebuild)
+git pull && docker restart demo3     # update the code (with DEV=1; otherwise rebuild)
 docker build -t demo3 -f docker/Dockerfile . && docker rm -f demo3 && bash docker/run.sh
                                      # rebuild and restart with the new image
 ```
@@ -135,6 +154,8 @@ docker build -t demo3 -f docker/Dockerfile . && docker rm -f demo3 && bash docke
 | Symptom | Fix |
 |---|---|
 | `docker run` fails: `unresolvable CDI devices` | `systemctl --user restart docker`, then `docker start demo3` (see step 1 to prevent it) |
+| `docker run` fails: `failed to fulfil mount request ... libnvidia-...: no such file` | NVIDIA libraries updated since boot: ask an admin to refresh the GPU list or reboot (step 1) |
+| A code change doesn't show on the page | `docker restart demo3` (needed for anything under `demo3/`, even with `DEV=1`) |
 | `docker: Conflict ... name "/demo3" is already in use` | a container exists already: `docker start demo3`, or `docker rm -f demo3` and run again |
 | Browser can't reach localhost:8502 | the SSH tunnel isn't open, or port 8502 is busy on your laptop: use `-L 8503:localhost:8502` and open :8503 |
 | A run fails while downloading starting conditions | ECMWF/Google mirror busy: try again, or start with `DEMO3_IFS_SOURCE=azure` |

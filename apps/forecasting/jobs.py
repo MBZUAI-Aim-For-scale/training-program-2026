@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-import sys
 import time
 import uuid
 from pathlib import Path
@@ -22,8 +21,6 @@ RUNNER = APP_ROOT / "forecasting"  / "runners" / "run_model.py"
 
 
 def _python_for(req: RunRequest) -> str:
-    if req.synthetic:
-        return sys.executable
     py = ENV_ROOT / BY_KEY[req.model].env / "bin" / "python"
     if not py.exists():
         raise FileNotFoundError(f"environment for {req.model} not found at {py}")
@@ -42,8 +39,6 @@ def launch(req: RunRequest) -> str:
     cmd = [_python_for(req), str(RUNNER), "--model", req.model,
            "--init", req.init.strftime("%Y-%m-%dT%H"), "--lead-hours", str(req.lead_hours),
            "--members", str(req.members), "--out", str(out), "--status", str(status_path)]
-    if req.synthetic:
-        cmd.append("--synthetic")
     with open(log_path, "w") as log:
         subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=APP_ROOT,
                          start_new_session=True)

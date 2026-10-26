@@ -97,6 +97,15 @@ cleanup_standalone_conflicts() {
     echo "Cleaning up conflicting standalone container 'ai_weather'..."
     docker rm -f ai_weather >/dev/null 2>&1 || true
   fi
+
+  docker run -d --name ai_weather --restart unless-stopped \
+    --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
+    -p 127.0.0.1:8501:8501 \
+    "${code[@]}" "${envs[@]}" "${cloud[@]}" -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
+    -e DEMO3_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
+    ai_weather
+
+  echo "AI Forecasting starting: http://localhost:8501"
 }
 
 check_gpu_availability() {

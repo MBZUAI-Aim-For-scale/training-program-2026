@@ -257,7 +257,7 @@ def _run_panel(sig, plan):
         st.rerun()  # a model finished: refresh the results below
 
 
-def _model_card_html(m, selected: bool, timings, synthetic: bool) -> str:
+def _model_card_html(m, selected: bool, timings) -> str:
     accent = "#8B5CF6" if m.kind == "ensemble" else "#0F766E"
     accent_bg = "#F5F3FF" if m.kind == "ensemble" else "#F0FDF4"
     border = accent if selected else "#E2E8F0"
@@ -266,7 +266,7 @@ def _model_card_html(m, selected: bool, timings, synthetic: bool) -> str:
     tip = escape(f"{catalog.timing_label(m, timings)}\nStarts from {m.init_source}"
                  + "".join(f"\nNo {catalog.VAR_LABELS[v]}" for v in m.missing)
                  + (f"\n\n{m.notes}" if m.notes else "")).replace("\n", "&#10;")
-    dim = not m.live and not synthetic
+    dim = not m.live
     badge = f"{'ENS' if m.kind == 'ensemble' else 'DET'} · {'LIVE' if m.live else 'SAVED ONLY'}"
     return f'''
     <div class="fc-card" style="cursor:help;background:#ffffff;border:1px solid {border};border-top:4px solid {accent};
@@ -305,9 +305,6 @@ def render():
 
     # ── Developer options (main dashboard) ───────────────────────────────
     with st.expander("Developer options", expanded=False, key="forecast_dev_options"):
-        synthetic = st.toggle("Use synthetic output", value=True, key="forecast_synthetic",
-                              help="Generate fake fields in the output format instead of running a model. "
-                                   "For building the visualizations before the model runners exist.")
         st.caption(f"Output folder: `{store.OUTPUT_DIR}`")
         if store.BUCKET:
             st.caption(f"Shared bucket: `{store.BUCKET}`")
@@ -337,7 +334,7 @@ def render():
         row = catalog.MODELS[i:i + per_row]
         for col, m in zip(st.columns(per_row), row):
             with col:
-                st.markdown(_model_card_html(m, m.key in model_keys, timings, synthetic),
+                st.markdown(_model_card_html(m, m.key in model_keys, timings),
                             unsafe_allow_html=True)
 
     if not models:
@@ -435,14 +432,12 @@ def render():
             ("Start", f"{init:%Y-%m-%d %HZ}"), ("Lead", f"{lead_days} days"),
             ("Members", str(members) if ens_models else "1"), ("Region", region_name),
             ("Use case", use_case)]
-    if synthetic:
-        tags.append(("Output", "synthetic"))
     st.markdown('<div class="kpi-row" style="margin-top:0.5rem;">' +
                 "".join(f'<span class="metric-pill"><strong>{k}:</strong> {v}</span>' for k, v in tags) +
                 '</div>', unsafe_allow_html=True)
 
-    plan = runs.plan(model_keys, init, lead_days, members, box, region_name, use_case, synthetic)
-    sig = runs.signature(model_keys, init, lead_days, members, synthetic)
+    plan = runs.plan(model_keys, init, lead_days, members, box, region_name, use_case)
+    sig = runs.signature(model_keys, init, lead_days, members)
     s = runs.state(sig)
     actionable = any(w != runs.SKIP for w, _, _ in plan.values())
     if not s["started"]:
@@ -459,9 +454,6 @@ def render():
         return
 
     _section("Results", "teal")
-    if any(_open(paths[k]).attrs.get("synthetic") for k in loaded):
-        st.markdown('<div class="ibox ibox-amber">ⓘ Synthetic output — not a real forecast.</div>',
-                    unsafe_allow_html=True)
 
     with st.expander("How " + ("this forecast was" if len(loaded) == 1 else "these forecasts were") + " made",
                      key="forecast_pipeline_expander"):
@@ -510,7 +502,7 @@ def render():
         results.field_maps(ds, m, box, region_name)
     data = results.netcdf_bytes(paths[k], p.stat().st_mtime,
                                 (box.lat_min, box.lat_max, box.lon_min, box.lon_max), lead_days * 24)
-    if store.BUCKET and not full.attrs.get("synthetic") and store.in_bucket(p):
+    if store.BUCKET and store.in_bucket(p):
         theme.hint("✓ In the shared bucket", f"Other Sparks can load this {m.name} run.")
     st.download_button(f"Download this {m.name} forecast for {region_name} (NetCDF, "
                        f"{len(data) / 1e6:.1f} MB)", data, mime="application/x-netcdf",

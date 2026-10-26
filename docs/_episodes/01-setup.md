@@ -93,7 +93,7 @@ docker run --rm --device nvidia.com/gpu=all ubuntu nvidia-smi -L
 **Expected output:**
 
 ```
-GPU 0: NVIDIA H100 80GB HBM3 (UUID: GPU-xxxxx)
+GPU 0: NVIDIA GB10 (UUID: GPU-xxxxx)
 ```
 
 > #### Common Issue: Unresolvable CDI Devices
@@ -108,6 +108,8 @@ systemctl --user restart docker
 ```
 
 Then retry the GPU verification command.
+
+If it instead fails with `failed to fulfil mount request: open /usr/lib/aarch64-linux-gnu/libnvidia-...: no such file or directory`, the NVIDIA libraries were updated since the Spark booted. Restarting Docker doesn't help; an admin has to refresh the GPU registry (`sudo systemctl start nvidia-cdi-refresh.service`, then `systemctl --user restart docker`) or reboot the Spark.
 
 ### 1.2 Preventative Configuration
 
@@ -143,14 +145,14 @@ When running AI weather models, Docker manages two primary storage locations:
 
 | Asset Type | Location | Size | Purpose |
 | --- | --- | --- | --- |
-| Saved forecasts, event movies, job logs | `ai_weather/demos/demo3/outputs/` | Grows with use | Persistent results |
-| Model weights (downloaded on first run) | `~/.cache/demo3/` | Up to ~75 GB | Model parameters |
+| Saved forecasts, event movies, job logs | `training-program-2026/outputs/` | Grows with use | Persistent results |
+| Model weights (downloaded on first run) | `~/.cache/ai_weather/` | Up to ~75 GB | Model parameters |
 
 > #### Storage Best Practices
 >
 > - Model weights are downloaded once per model and cached locally.
 > - Saved forecasts accumulate over time; consider periodic cleanup.
-> - Use `DEMO3_CACHE=/path` to redirect weights to high-performance storage.
+> - Use `DEMO_CACHE=/path` to redirect weights (and `DEMO_OUTPUTS=/path` for saved forecasts) to other storage.
 {: .keypoints}
 
 ## 3. Container Image Management
@@ -166,7 +168,7 @@ docker build -t ai_weather -f docker/Dockerfile .
 **Build characteristics:**
 
 - **First build**: ~1 hour (compiling earth2grid, NATTEN libraries).
-- **Subsequent builds**: Seconds (using Docker layer cache).
+- **Subsequent builds**: Seconds (using Docker layer cache), unless `docker/requirements.txt` or `docker/locks/` changed, which rebuilds from that step.
 - **Image contents**: Python environments, dependencies, application code.
 - **Excluded**: Model weights (downloaded on first run).
 
@@ -189,7 +191,7 @@ To avoid rebuilding on every Spark node, transfer a pre-built image:
 docker save ai_weather | gzip > ai_weather_image.tar.gz
 
 # Transfer via scp/rsync over Tailscale:
-scp demo3-image.tar.gz <user>@<target-spark>:~/
+scp ai_weather_image.tar.gz <user>@<target-spark>:~/
 
 # On the target Spark:
 docker load < ai_weather_image.tar.gz
@@ -225,17 +227,18 @@ docker load < ai_weather_image.tar.gz
 
 ```bash
 # 1. Clone the repository
-git clone git@github.com:MBZUAI-Aim-For-scale/training-program-2026.git
+git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
 cd training-program-2026
 
-# 2. Build the container image (~1 hour first time)
-bash docker/run.sh  rebuild
-
+# 2. Build the container image (~1 hour first time) and start it
+bash docker/run.sh rebuild
 
 # 3. Access the UI from your laptop (on Tailscale)
 ssh -L 8501:localhost:8501 <user>@<spark>
-# Then browse to http://localhost:8501
+# Then browse to http://localhost:8501 and choose Demo3 in the menu
 ```
+
+On a Spark, `run.sh` also reads saved runs from the program's bucket (`gs://aim4scale_training_2026/demo3`) with the machine's read-only key, `/etc/fleet-gcs-key.json`, which it mounts into the container. Never copy that key into the image or the repository.
 
 ### 4.2 Runtime Configuration Flags
 
@@ -244,13 +247,14 @@ Prepend these flags to `bash docker/run.sh` to customize behavior:
 | Flag | Purpose | Example | Default |
 | --- | --- | --- | --- |
 | `DEV=1` | Mount local code for live development | `DEV=1 bash docker/run.sh` | Disabled |
-| `DEMO3_CACHE=/path` | Redirect model weight cache location | `DEMO3_CACHE=/shared/cache bash docker/run.sh` | `~/.cache/demo3/` |
+| `DEMO_CACHE=/path` | Redirect model weight cache location | `DEMO_CACHE=/shared/cache bash docker/run.sh` | `~/.cache/ai_weather/` |
+| `DEMO_OUTPUTS=/path` | Redirect saved forecasts, movies and logs | `DEMO_OUTPUTS=/data/outputs bash docker/run.sh` | `training-program-2026/outputs/` |
+| `DEMO3_BUCKET=gs://...` | Bucket to load saved runs from (empty: none) | `DEMO3_BUCKET= bash docker/run.sh` | `gs://aim4scale_training_2026/demo3` |
 | `DEMO3_IFS_SOURCE=azure` | Use Azure mirror for ECMWF data | `DEMO3_IFS_SOURCE=azure bash docker/run.sh` | AWS |
-| `DEMO3_FGN_DIR=/path` | FGN weights and sample file location | `DEMO3_FGN_DIR=/data/fgn bash docker/run.sh` | `~/.cache/fgn` |
 
 > #### Development Workflow
 >
-> Use `DEV=1` during active development to avoid rebuilding the container after every code change. Changes to Python files take effect immediately after a page refresh.
+> Use `DEV=1` during active development to avoid rebuilding the container after every code change. Changes to a page file show after a page refresh; changes to the modules it imports (e.g. `apps/forecasting/`) need `bash docker/run.sh restart`.
 {: .tip}
 
 > #### First-Run Downloads
@@ -264,15 +268,15 @@ Skip first-run downloads by copying weights and outputs from an existing Spark:
 
 ```bash
 # Copy model weights
-rsync -a --info=progress2 <user>@<spark>:<its weights cache>/ ~/.cache/demo3/
+rsync -a --info=progress2 <user>@<spark>:<its weights cache>/ ~/.cache/ai_weather/
 
 # Copy saved runs
-rsync -a --info=progress2 <user>@<spark>:ai_weather/demos/demo3/outputs/ ai_weather/demos/demo3/outputs/
+rsync -a --info=progress2 <user>@<spark>:<its outputs folder>/ training-program-2026/outputs/
 ```
 
 **Known cache locations:**
 
-- On `hcwfpgx`: `~/e2s-spark/root_cache`
+- On `hcwfpgx` and `rwanda-spark`: `~/e2s-spark/root_cache`
 
 ## 5. Model-Specific Environments
 
@@ -335,7 +339,7 @@ python runners/fgn_convert.py --date 2024-10-08
 
 | Parameter | Default | Purpose |
 | --- | --- | --- |
-| `DEMO3_FGN_DIR` | `~/.cache/fgn` | FGN weights and sample file location |
+| FGN weights and sample file | `fgn/` in the weights cache (`~/.cache/ai_weather/fgn`) | Downloaded from Google on FGN's first run |
 | Sample file date | 2024-10-07 | Google's published input (up to 7.5 days) |
 | Converted input cache | `outputs/_fgn_inputs/` | 53 MB per start date, reused for subsequent runs |
 
@@ -446,8 +450,10 @@ Pinned in `docker/locks/` for reproducibility. Key versions:
 
 | Symptom | Likely Cause | Resolution |
 | --- | --- | --- |
-| `docker run` fails: `unresolvable CDI devices` | Docker started before GPU registry populated | `systemctl --user restart docker`, then `docker start demo3` |
-| `docker: Conflict ... name "/demo3" is already in use` | Stale container exists | `docker start demo3` or `docker rm -f demo3 && bash docker/run.sh` |
+| `docker run` fails: `unresolvable CDI devices` | Docker started before GPU registry populated | `systemctl --user restart docker`, then `bash docker/run.sh restart` |
+| `docker run` fails: `failed to fulfil mount request ... libnvidia-...: no such file` | NVIDIA libraries updated since boot | An admin runs `sudo systemctl start nvidia-cdi-refresh.service`, or reboot (section 1.1) |
+| Port 8501 already in use when starting | Another container (e.g. the old stand-alone `demo3`) holds it | `docker ps`, then `docker stop <name>` and `bash docker/run.sh` |
+| A code change doesn't show (with `DEV=1`) | The page keeps imported modules loaded | `bash docker/run.sh restart` |
 | Browser can't reach `localhost:8501` | SSH tunnel not open or port conflict | Use `-L 8502:localhost:8501` and navigate to `:8502` |
 | Run fails during starting condition download | ECMWF/Google mirrors throttled | Retry or use `DEMO3_IFS_SOURCE=azure` |
 | First model run is exceptionally slow | Downloading model weights (~30 min for Atlas CRPS) | Expected behavior; subsequent runs are fast |
@@ -460,10 +466,10 @@ Pinned in `docker/locks/` for reproducibility. Key versions:
 
 ```bash
 # Check container status
-docker ps -a | grep demo3
+docker ps -a | grep ai_weather
 
 # View container logs
-docker logs -f demo3
+docker logs -f ai_weather
 
 # Check GPU allocation
 nvidia-smi
@@ -472,12 +478,12 @@ nvidia-smi
 systemctl --user status docker
 
 # Check disk space
-df -h ~/.cache/demo3/
+df -h ~/.cache/ai_weather/
 ```
 
 > #### Proactive Monitoring
 >
-> Run `docker logs -f demo3` in a separate terminal while testing to catch errors in real-time. This is especially useful during first-time model runs when weights are being downloaded.
+> Run `docker logs -f ai_weather` in a separate terminal while testing to catch errors in real-time. This is especially useful during first-time model runs when weights are being downloaded.
 {: .tip}
 
 ## 10. Everyday Maintenance Commands
@@ -487,13 +493,13 @@ df -h ~/.cache/demo3/
 docker logs -f ai_weather
 
 # Gracefully restart the application container
-docker restart ai_
+docker restart ai_weather
 
-# Fetch latest code (takes effect immediately if DEV=1; otherwise requires rebuild)
-git pull
+# Fetch latest code: restarts with DEV=1, otherwise rebuilds and restarts
+bash docker/run.sh update
 
 # Full rebuild and restart cycle
-docker build -t ai_weather -f docker/Dockerfile . && docker rm -f ai_weather && bash docker/run.sh
+bash docker/run.sh rebuild
 
 # Clean up old containers
 docker system prune -f
@@ -510,7 +516,7 @@ Before running AI weather models, verify:
 
 - [ ] GPU is visible to Docker (`nvidia-smi -L` works in container)
 - [ ] Docker service is running (`systemctl --user status docker`)
-- [ ] Container image is built or loaded (`docker images | grep demo3`)
+- [ ] Container image is built or loaded (`docker images | grep ai_weather`)
 - [ ] Sufficient disk space for model weights (~75 GB)
 - [ ] SSH tunnel is active (if accessing remotely)
 - [ ] Network connectivity to ECMWF/Google data sources

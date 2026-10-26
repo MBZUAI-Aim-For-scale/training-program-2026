@@ -6,37 +6,61 @@ Because the AI models and datasets are large, the benchmarking environment is co
 
 ## Environment Setup
 
-Choose the setup that best fits your workflow. Option A is the recommended approach for running the full benchmark. Option B is for local code development.
-
-### Option A: Remote Server Setup with Docker (Recommended)
-You will need two terminal windows: one connected to the remote server to run the Docker container, and one on your local machine to create the SSH tunnel.
+You will need two terminal windows: one connected to the remote server to manage the Docker container, and one on your local machine to create the SSH tunnel.
 
 1. **SSH into the Spark server** using your preferred terminal:
-   ```bash
-   ssh <you>@country-spark
-   ```
-2. **Navigate to the project directory** (if not already there).
-3. **Start the container** by running the `run.sh` script. This builds the image, mounts the necessary cache volumes (for the model weights), and starts the Streamlit server on port 8501:
-   ```bash
-   bash docker/run.sh rebuild
-   ```
+```bash
+ssh <you>@country-spark
 
-or 
-
-  ```bash
-   docker restart ai_weather
-   ```
+```
 
 
+2. **Clone the repository and navigate to the project directory**:
+```bash
+git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026
 
-   *(Tip: If you are actively editing the code and want changes to reflect live without rebuilding the image, use `DEV=1 bash docker/run.sh` instead).*
-4. **Create the SSH Tunnel** (Local Machine): Open a new terminal window on your local laptop. Set up port forwarding so your local browser can access the remote Streamlit server:
-   ```bash
-   ssh -L 8501:localhost:8501 <you>@country-spark
-   ```
-   *(Leave this terminal open while you work).*
-5. **Access the Dashboard**: Open your local web browser and navigate to `http://localhost:8501`.
+```
 
+
+3. **Initialize the environment configuration**:
+```bash
+cp .env.example .env
+```
+
+```bash
+cat <<EOF > .env
+DEMO_BUCKET=<bucket>/demo
+DEMO3_BUCKET=<bucket>/demo3
+DEMO4_BUCKET=<bucket>/demo4
+EOF
+
+4. **Start the container stack** using the management script:
+```bash
+bash docker/run.sh rebuild
+
+```
+
+
+*For subsequent runs without rebuilding:*
+```bash
+bash docker/run.sh start
+
+```
+
+
+*(Tip: To edit code live without rebuilding the image, run `DEV=1 bash docker/run.sh start` instead).*
+5. **Create the SSH tunnel** (Local Machine): Open a new terminal window on your local laptop and set up port forwarding:
+```bash
+ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
+
+```
+
+
+*(Leave this terminal window open while working).*
+6. **Access the dashboards** in your local web browser:
+* **Streamlit UI**: `http://localhost:8501`
+* **Jupyter Lab**: `http://localhost:8888`
 
 
 ---

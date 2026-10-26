@@ -194,7 +194,7 @@ Every model execution produces a single, globally covered NetCDF file. All runne
 | **`t2m`** | 2-meter temperature, in **K** |
 | **`z500`** | 500 hPa geopotential, in **m² s⁻²** (divide by 9.80665 to derive geopotential height in meters) |
 | **coords** | `valid_time` (aligned with `lead_time`), `init_time` |
-| **attrs** | `model`, `model_name`, `init_source`, `members`, `synthetic` |
+| **attrs** | `model`, `model_name`, `init_source`, `members` |
 
 ### 3.2 Loading Outputs in Python
 
@@ -229,11 +229,6 @@ The visualization pipeline reads Demo 3 output files and dynamically fetches ERA
 - **Precipitation**: daily rainfall accumulation
 
 Movies are rendered on-demand and cached in `outputs/_movies/`.
-
-> #### Synthetic Testing
-> 
-> To validate the pipeline without consuming GPU resources, enable **Use synthetic output** in the Streamlit sidebar and execute a run. This generates a mock NetCDF file that strictly adheres to the production data contract.
-{: .tip}
 
 ## 4. Use-Case Customization
 
@@ -310,7 +305,7 @@ movie.py               # Background event movie generator for loaded runs
 results.py             # Pipeline visualization: model requirements, forecast maps, NetCDF export
 event_movie/           # forecast_event_movie.py + Spark adaptation layer
 theme.py               # UI styling, aligned with the Demo 5 platform design system
-runners/run_model.py   # Universal runner entry point (+ synthetic output generator for testing)
+runners/run_model.py   # Universal runner entry point
 runners/fgn_convert.py # FGN-specific starting condition converter from ECMWF open data
 timings.json           # Empirically measured Spark runtimes displayed in the UI
 docker/                # Containerization: Dockerfile, run.sh, per-environment dependency locks

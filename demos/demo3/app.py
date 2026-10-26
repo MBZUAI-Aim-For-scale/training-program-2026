@@ -23,7 +23,8 @@ import xarray as xr
 from demo3 import catalog, compare, movie, onset_view, results, runs, store, theme
 from demo3.regions import COUNTRIES, GROUPS, Box, country_box
 
-st.set_page_config(page_title="Demo 3 · AI Weather Forecast", layout="wide")
+st.set_page_config(page_title="Demo 3 · AI Weather Forecast", layout="wide",
+                   initial_sidebar_state="expanded")
 theme.apply()
 
 
@@ -229,9 +230,6 @@ gpu = gpu_name()
 # ── sidebar: developer options ───────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### Developer options")
-    synthetic = st.toggle("Use synthetic output", value=False,
-                          help="Generate fake fields in the output format instead of running a model. "
-                               "For building the visualizations before the model runners exist.")
     st.caption(f"Output folder: `{store.OUTPUT_DIR}`")
     if store.BUCKET:
         st.caption(f"Shared bucket: `{store.BUCKET}`")
@@ -277,7 +275,7 @@ theme.cards([{
            + "".join(f"\nNo {catalog.VAR_LABELS[v]}" for v in m.missing)
            + (f"\n\n{m.notes}" if m.notes else ""),
     "color": theme.PURPLE if m.kind == "ensemble" else theme.TEAL,
-    "selected": m.key in model_keys, "dim": not m.live and not synthetic,
+    "selected": m.key in model_keys, "dim": not m.live,
 } for m in catalog.MODELS])
 if not models:
     st.info("Pick at least one model above.")
@@ -371,9 +369,9 @@ theme.section("Run the forecasts" if len(models) > 1 else "Run the forecast", "S
 theme.pills([("Model" + ("s" if len(models) > 1 else ""), ", ".join(m.name for m in models)),
              ("Start", f"{init:%Y-%m-%d %HZ}"), ("Lead", f"{lead_days} days"),
              ("Members", str(members) if ens_models else "1"), ("Region", region_name),
-             ("Use case", use_case)] + ([("Output", "synthetic")] if synthetic else []))
-plan = runs.plan(model_keys, init, lead_days, members, box, region_name, use_case, synthetic)
-sig = runs.signature(model_keys, init, lead_days, members, synthetic)
+             ("Use case", use_case)])
+plan = runs.plan(model_keys, init, lead_days, members, box, region_name, use_case)
+sig = runs.signature(model_keys, init, lead_days, members)
 s = runs.state(sig)
 actionable = any(w != runs.SKIP for w, _, _ in plan.values())
 if not s["started"]:
@@ -388,8 +386,6 @@ paths = {k: p for k, p in s["paths"].items() if Path(p).exists()}
 loaded = [k for k in model_keys if k in paths]
 if loaded:
     theme.section("Results")
-    if any(open_output(paths[k], Path(paths[k]).stat().st_mtime).attrs.get("synthetic") for k in loaded):
-        st.caption("ⓘ Synthetic output — not a real forecast.")
 
     with st.expander("How " + ("this forecast was" if len(loaded) == 1 else "these forecasts were") + " made"):
         k = (st.selectbox("Model", loaded, key="pipeline_model", format_func=lambda k: catalog.BY_KEY[k].name)
@@ -436,7 +432,7 @@ if loaded:
         results.field_maps(ds, m, box, region_name)
     data = results.netcdf_bytes(paths[k], p.stat().st_mtime,
                                 (box.lat_min, box.lat_max, box.lon_min, box.lon_max), lead_days * 24)
-    if store.BUCKET and not full.attrs.get("synthetic") and store.in_bucket(p):
+    if store.BUCKET and store.in_bucket(p):
         theme.hint("✓ In the shared bucket", f"Other Sparks can load this {m.name} run.")
     st.download_button(f"Download this {m.name} forecast for {region_name} (NetCDF, "
                        f"{len(data) / 1e6:.1f} MB)", data, mime="application/x-netcdf",
