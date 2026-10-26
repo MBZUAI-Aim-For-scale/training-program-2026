@@ -1,77 +1,107 @@
-#import importlib.resources
+"""
+momp/io/input.py
+Data loading utilities for observation and model forecast datasets.
+"""
+
 import os
+import sys
 from datetime import datetime
+from pathlib import Path
 import pandas as pd
 import xarray as xr
+
+# Import config safely across main and worker processes
+try:
+    import config
+except ImportError:
+    try:
+        from ai_weather import config
+    except ImportError:
+        _curr = Path(__file__).resolve()
+        for _parent in _curr.parents:
+            if (_parent / "ai_weather" / "config.py").exists() or (_parent / "config.py").exists():
+                sys.path.insert(0, str(_parent / "ai_weather"))
+                sys.path.insert(0, str(_parent))
+                break
+        import config
+
 from momp.utils.standard import dim_fmt, dim_fmt_model, dim_fmt_model_ensemble
 from momp.utils.region import region_select
-from momp.utils import storage   # local folders or gs:// (Google bucket)
-#from momp.lib.control import restore_args
+from momp.utils import storage
 from momp.utils.practical import restore_args
-
-#def set_dir(folder):
-#    """
-#    set absolute directory path for a specific folder in MOMP
-#    """
-#    package = "MOMP"
-#    base_dir = importlib.resources.files(package)
-#    target_dir = (base_dir / folder).resolve()
-#
-#    return target_dir
+import momp.params as params
 
 
-def load_thresh_file(*, thresh_file, thresh_var, wet_threshold, region, **kwargs):
+def load_thresh_file(*, thresh_file=None, thresh_var=None, wet_threshold=None, region=None, **kwargs):
+    kwargs_clean = kwargs.copy()
+    kwargs_clean.pop("region", None)
+    kwargs_clean.pop("thresh_file", None)
+    kwargs_clean.pop("thresh_var", None)
+    kwargs_clean.pop("wet_threshold", None)
+
+    if thresh_file is None:
+        thresh_file = getattr(params, "thresh_file", None)
+    if thresh_var is None:
+        thresh_var = getattr(params, "thresh_var", None)
+    if wet_threshold is None:
+        wet_threshold = getattr(params, "wet_threshold", 20)
+    if region is None:
+        region = getattr(params, "region", "Ethiopia")
+
     if thresh_file:
         thresh_ds = storage.open_dataset(thresh_file)
-        #thresh_da = thresh_ds[kwargs["thresh_var"]]
         thresh_da = thresh_ds[thresh_var]
-
-        thresh_da = region_select(thresh_da, region=region,  **kwargs)
-
-    #elif np.isscalar(thresh_file):
+        thresh_da = region_select(thresh_da, region=region, **kwargs_clean)
     else:
-        #thresh_da = kwargs["wet_threshold"]
         thresh_da = wet_threshold
 
     return thresh_da
 
 
-#def get_initialization_dates(year, *, date_filter_year, init_days, start_date, end_date, **kwargs):
-def get_initialization_dates(year, *, date_filter_year, init_days, start_date, end_date, init_type="weekly", **kwargs):
-    """
-    Get initialization dates (Mondays and Thursdays from May-July) for a given year.
-    """
+def get_initialization_dates(year=None, *, date_filter_year=None, init_days=None, start_date=None, end_date=None, init_type="weekly", **kwargs):
+    kwargs_clean = kwargs.copy()
+    kw_year = kwargs_clean.pop("year", None)
+    year = year if year is not None else kw_year
+
     if init_type == "monthly":
-        return get_initialization_dates_monthly(year, start_date=start_date, end_date=end_date, init_days=init_days, **kwargs)
-    
-    #date_filter_year = kwargs['date_filter_year']
-    #init_days = kwargs["init_days"]
-    #start_MMDD = kwargs["start_date"][1:]
-    #end_MMDD = kwargs["end_date"][1:]
+        return get_initialization_dates_monthly(year, date_filter_year=date_filter_year, init_days=init_days, start_date=start_date, end_date=end_date, **kwargs_clean)
+
+    if date_filter_year is None:
+        date_filter_year = getattr(params, "date_filter_year", 2024)
+    if init_days is None:
+        init_days = getattr(params, "init_days", (0, 3))
+    if start_date is None:
+        start_date = getattr(params, "start_date", (2003, 5, 1))
+    if end_date is None:
+        end_date = getattr(params, "end_date", (2023, 7, 31))
 
     start_MMDD = start_date[1:]
     end_MMDD = end_date[1:]
 
-    start_date = datetime(date_filter_year, *start_MMDD)
-    end_date = datetime(date_filter_year, *end_MMDD)
-    date_range = pd.date_range(start_date, end_date, freq='D')
+    start_date_obj = datetime(date_filter_year, *start_MMDD)
+    end_date_obj = datetime(date_filter_year, *end_MMDD)
+    date_range = pd.date_range(start_date_obj, end_date_obj, freq='D')
 
     filtered_dates = date_range[date_range.weekday.isin(init_days)]
-
-    # Convert to the requested year
     filtered_dates_yr = pd.to_datetime(filtered_dates.strftime(f'{year}-%m-%d'))
 
     return filtered_dates_yr
 
 
-def get_initialization_dates_monthly(year, *, date_filter_year, init_days, start_date, end_date, **kwargs):
-    """
-    Get initialization dates 
-    Filters for the 1st, 7th, 13th, 19th, 25th of each month (approx. weekly) for a given year.
-    """
+def get_initialization_dates_monthly(year=None, *, date_filter_year=None, init_days=None, start_date=None, end_date=None, **kwargs):
+    kwargs_clean = kwargs.copy()
+    kw_year = kwargs_clean.pop("year", None)
+    year = year if year is not None else kw_year
 
-    start_month = start_date[1]   # 5  (May)
-    end_month   = end_date[1]     # 7  (July)
+    if start_date is None:
+        start_date = getattr(params, "start_date", (2003, 5, 1))
+    if end_date is None:
+        end_date = getattr(params, "end_date", (2023, 7, 31))
+    if init_days is None:
+        init_days = getattr(params, "init_days", (1, 15))
+
+    start_month = start_date[1]
+    end_month   = end_date[1]
     
     filtered_dates_yr = pd.DatetimeIndex([
         pd.Timestamp(year, month, day)
@@ -82,13 +112,42 @@ def get_initialization_dates_monthly(year, *, date_filter_year, init_days, start
     return filtered_dates_yr
 
 
-def load_imd_rainfall(year, *, obs_dir, obs_file_pattern, obs_var, obs_unit_cvt, region, 
+def load_imd_rainfall(year=None, *, obs_dir=None, obs_file_pattern=None, obs_var=None, obs_unit_cvt=None, region=None, 
                       grid_point=False, lat_select=None, lon_select=None, **kwargs):
-    """Load IMD daily rainfall NetCDF for a given year."""
+    kwargs_clean = kwargs.copy()
+    kw_year = kwargs_clean.pop("year", None)
+    year = year if year is not None else kw_year
 
-    #file_patterns = [f"data_{year}.nc", f"{year}.nc"]
-    file_patterns = [p.format(year) for p in obs_file_pattern]
+    if obs_dir is None:
+        obs_dir = getattr(params, "obs_dir", None)
+    if obs_file_pattern is None:
+        obs_file_pattern = getattr(params, "obs_file_pattern", ("{}.nc",))
+    if obs_var is None:
+        obs_var = getattr(params, "obs_var", "precip")
+    if region is None:
+        region = getattr(params, "region", "Ethiopia")
 
+    kwargs_clean.pop("region", None)
+
+    if obs_dir and config.is_uri(obs_dir):
+        obs_dir = f"gs://{config._strip(obs_dir)}"
+
+    region_clean = str(region).replace(" ", "_")
+
+    file_patterns = []
+    if isinstance(obs_file_pattern, (list, tuple)):
+        file_patterns.extend(p.format(year) for p in obs_file_pattern if "{}" in p)
+    elif isinstance(obs_file_pattern, str) and "{}" in obs_file_pattern:
+        file_patterns.append(obs_file_pattern.format(year))
+
+    fallbacks = [
+        f"CHIRPS_{region_clean}_{year}.nc",
+        f"CHIRPS_{region}_{year}.nc",
+        f"{year}.nc"
+    ]
+    for fb in fallbacks:
+        if fb not in file_patterns:
+            file_patterns.append(fb)
 
     obs_file = None
     for pattern in file_patterns:
@@ -100,22 +159,15 @@ def load_imd_rainfall(year, *, obs_dir, obs_file_pattern, obs_var, obs_unit_cvt,
     if obs_file is None:
         available_files = storage.list_nc(obs_dir)
         raise FileNotFoundError(
-            f"No observation file found for year {year} in {obs_dir}. "
-            f"Tried patterns: {file_patterns}. "
-            f"Available files: {available_files}"
+            f"No observation file found for region '{region}' year {year} in {obs_dir}. "
+            f"Tried patterns: {file_patterns}. Available files: {available_files[:5] if available_files else '[]'}"
         )
 
-    #print(f"Loading observation rainfall from: {obs_file}")
-
     ds = storage.open_dataset(obs_file)
-
-    # Standardize dimension names
     ds = dim_fmt(ds)
-
-    ds = region_select(ds, region=region, **kwargs)
+    ds = region_select(ds, region=region, **kwargs_clean)
 
     rainfall = ds[obs_var]
-
     if obs_unit_cvt:
         rainfall *= obs_unit_cvt
 
@@ -125,60 +177,67 @@ def load_imd_rainfall(year, *, obs_dir, obs_file_pattern, obs_var, obs_unit_cvt,
     return rainfall
 
 
-def get_forecast_deterministic_twice_weekly(year, *, model_dir, model_var, date_filter_year, init_days, 
-                                            start_date, end_date, unit_cvt, file_pattern, region, **kwargs):
-    """
-    Loads model precip data for twice-weekly initializations from May to July.
-    Filters for Mondays and Thursdays in the specified year.
-    The forecast file is expected to be named as '{year}.nc' in the model_dir with
-    variable "tp" being daily accumulated rainfall with dimensions (init_time, lat, lon, step).
+def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_var=None, date_filter_year=None, init_days=None, 
+                                            start_date=None, end_date=None, unit_cvt=None, file_pattern=None, region=None, **kwargs):
+    kwargs_clean = kwargs.copy()
+    kw_year = kwargs_clean.pop("year", None)
+    year = year if year is not None else kw_year
 
-    Parameters:
-    year: int, year to load data for
+    if not model_dir:
+        model_dir = kwargs_clean.get("model_dir") or kwargs_clean.get("model_dir_list") or getattr(params, "model_dir_list", None)
+    if isinstance(model_dir, (list, tuple)) and len(model_dir) > 0:
+        model_dir = model_dir[0]
 
-    Returns:
-    p_model: ndarray, precipitation data
-    """
+    if not file_pattern:
+        file_pattern = kwargs_clean.get("file_pattern") or kwargs_clean.get("file_pattern_list") or getattr(params, "file_pattern_list", ("{}.nc",))
+    if isinstance(file_pattern, (list, tuple)) and len(file_pattern) > 0:
+        file_pattern = file_pattern[0]
 
-    kwargs = restore_args(get_forecast_deterministic_twice_weekly, kwargs, locals())
+    if not model_var:
+        model_var = kwargs_clean.get("model_var") or kwargs_clean.get("model_var_list") or getattr(params, "model_var_list", "tp")
+    if isinstance(model_var, (list, tuple)) and len(model_var) > 0:
+        model_var = model_var[0]
 
-    fname = file_pattern.format(year)
+    if region is None:
+        region = kwargs_clean.get("region") or getattr(params, "region", "Ethiopia")
+
+    kwargs_clean = restore_args(get_forecast_deterministic_twice_weekly, kwargs_clean, locals())
+    kwargs_clean.pop("year", None)
+    kwargs_clean.pop("region", None)
+
+    if model_dir and config.is_uri(model_dir):
+        model_dir = f"gs://{config._strip(model_dir)}"
+
+    fname = file_pattern.format(year) if "{}" in str(file_pattern) else f"{year}.nc"
     file_path = storage.join(model_dir, fname)
 
     if not storage.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    # Filter for twice weekly data from daily for the specified year based on 2024 Monday and Thursday dates (to match with IFS CY48R1 reforecasts)
+    filtered_dates_yr = get_initialization_dates(year, **kwargs_clean)
 
-    filtered_dates_yr = get_initialization_dates(year, **kwargs)
-
-    # Load data using xarray
     ds = storage.open_dataset(file_path)
-
     ds = dim_fmt_model(ds)
 
-    #print("filtered_dates_yr = ", filtered_dates_yr )
-    #print("init_time  = ", ds.init_time.values)
-
-    #ds = ds.sel(init_time=filtered_dates_yr)
-
-    # Find common dates between desired dates and available dates
-    # redundant, len(ds.init_time) or ds.sizes['init_time'] is same as len(matching_times)
     available_init_times = pd.to_datetime(ds.init_time.values)
     matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
     if len(matching_times) == 0:
-        raise ValueError(f"No matching initialization times found for year {year}")
+        raise ValueError(f"No matching initialization times found for year {year} in {file_path}")
     ds = ds.sel(init_time=matching_times)
 
-    ds = region_select(ds, **kwargs)
+    ds = region_select(ds, region=region, **kwargs_clean)
 
-    # Check if 'step' dimension exists and conditionally slice
-    if 'step' in ds.dims:
-        # Check if the first value of 'step' is 0, then slice to exclude it
+    # Detect or fallback 'step' dimension name
+    if 'step' not in ds.dims and 'step' not in ds.coords:
+        unrecognized_dims = [d for d in ds.dims if d not in ('init_time', 'lat', 'lon', 'member')]
+        if unrecognized_dims:
+            ds = ds.rename({unrecognized_dims[0]: 'step'})
+
+    if 'step' in ds.dims or 'step' in ds.coords:
         if ds['step'][0].values == 0:
             ds = ds.sel(step=slice(1, None))
     else:
-        raise KeyError("'step' dimension not found in dataset")
+        raise KeyError(f"'step' dimension not found in dataset. Active dimensions: {list(ds.dims)}")
 
     p_model = ds[model_var]
 
@@ -186,112 +245,84 @@ def get_forecast_deterministic_twice_weekly(year, *, model_dir, model_var, date_
         p_model *= unit_cvt
 
     ds.close()
-
     return p_model
 
-def get_forecast_probabilistic_twice_weekly(year, *, model_dir, model_var, date_filter_year, init_days,
-                                            start_date, end_date, unit_cvt, file_pattern,
-                                            members, region, **kwargs):
-    """
-    Loads model precip data for twice-weekly initializations from May to July.
-    """
 
-    kwargs = restore_args(get_forecast_probabilistic_twice_weekly, kwargs, locals())
+def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_var=None, date_filter_year=None, init_days=None,
+                                            start_date=None, end_date=None, unit_cvt=None, file_pattern=None,
+                                            members=None, region=None, **kwargs):
+    kwargs_clean = kwargs.copy()
+    kw_year = kwargs_clean.pop("year", None)
+    year = year if year is not None else kw_year
 
-#    print("\n file_pattern =  ", file_pattern)
-    fname = file_pattern.format(year)
+    if not model_dir:
+        model_dir = kwargs_clean.get("model_dir") or kwargs_clean.get("model_dir_list") or getattr(params, "model_dir_list", None)
+    if isinstance(model_dir, (list, tuple)) and len(model_dir) > 0:
+        model_dir = model_dir[0]
+
+    if not file_pattern:
+        file_pattern = kwargs_clean.get("file_pattern") or kwargs_clean.get("file_pattern_list") or getattr(params, "file_pattern_list", ("{}.nc",))
+    if isinstance(file_pattern, (list, tuple)) and len(file_pattern) > 0:
+        file_pattern = file_pattern[0]
+
+    if not model_var:
+        model_var = kwargs_clean.get("model_var") or kwargs_clean.get("model_var_list") or getattr(params, "model_var_list", "tp")
+    if isinstance(model_var, (list, tuple)) and len(model_var) > 0:
+        model_var = model_var[0]
+
+    if region is None:
+        region = kwargs_clean.get("region") or getattr(params, "region", "Ethiopia")
+
+    kwargs_clean = restore_args(get_forecast_probabilistic_twice_weekly, kwargs_clean, locals())
+    kwargs_clean.pop("year", None)
+    kwargs_clean.pop("region", None)
+
+    if model_dir and config.is_uri(model_dir):
+        model_dir = f"gs://{config._strip(model_dir)}"
+
+    fname = file_pattern.format(year) if "{}" in str(file_pattern) else f"{year}.nc"
     file_path = storage.join(model_dir, fname)
 
-#    print("AAAAA", file_path)
     if not storage.exists(file_path):
         raise FileNotFoundError(f"File not found: {file_path}")
 
-    filtered_dates_yr = get_initialization_dates(year, **kwargs)
-#    print("BBBBB")
+    filtered_dates_yr = get_initialization_dates(year, **kwargs_clean)
 
-    # Load data using xarray
     ds = storage.open_dataset(file_path)
-
     ds.load()
-#    print("\n\nYYYYY ds raw ", ds.tp[1,1,1,...].values)
-#    print("XXXX", ds)
     ds = dim_fmt_model_ensemble(ds)
 
-#    print("1. after dim_fmt_model_ensemble:", type(list(ds.data_vars.values())[0].variable._data))
-
-#    print("\n\nYYYYY ds raw ", ds.tp[1,1,1,...].values)
-#    print("\n\nYYYYY ds raw ", ds.tp[0,0,0,...].values)
-#    print("YYYY", ds)
-    # Find common dates between desired dates and available dates
-    # redundant
     available_init_times = pd.to_datetime(ds.init_time.values)
     matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
 
     if len(matching_times) == 0:
-        raise ValueError(f"No matching initialization times found for year {year}")
+        raise ValueError(f"No matching initialization times found for year {year} in {file_path}")
 
-    # Select only the matching initialization times
     ds = ds.sel(init_time=matching_times)
 
-#    print("2. after init_time isel:", type(list(ds.data_vars.values())[0].variable._data))
-#    print("\n\nYYYYY ds raw ", ds.tp[1,1,1,...].values)
-#    print("ZZZZZ", ds)
-#    if "total_precipitation_24hr" in ds.data_vars:
-#        ds = ds.rename({"total_precipitation_24hr": "tp"}) # For the quantile-mapped variable change the var name from total_precipitation_24hr to tp
-#        ds = ds[['tp']]*1000  # Convert from m to mm
+    if 'step' not in ds.dims and 'step' not in ds.coords:
+        unrecognized_dims = [d for d in ds.dims if d not in ('init_time', 'lat', 'lon', 'member')]
+        if unrecognized_dims:
+            ds = ds.rename({unrecognized_dims[0]: 'step'})
 
-    if 'step' in ds.dims:
-        # Check if the first value of 'step' is 0, then slice to exclude it
+    if 'step' in ds.dims or 'step' in ds.coords:
         if ds['step'][0].values == 0:
             ds = ds.sel(step=slice(1, None))
     else:
-        raise KeyError("'step' dimension not found in dataset")
+        raise KeyError(f"'step' dimension not found in dataset. Active dimensions: {list(ds.dims)}")
 
-#    print("3. after step sel:", type(list(ds.data_vars.values())[0].variable._data))
-    #ds = ds.isel(member =slice(0, mem_num))  # limit to first mem_num members (0-mem_num)
-
-    #print("\n\n\n members = ", members)
-    #print(type(members))
-    #print(list(members))
-    # members="All" (string) means "keep every member". Without this guard
-    # list("All") == ['A', 'l', 'l'] and ds.sel(member=...) raises a KeyError.
     if isinstance(members, str) and members.strip().lower() in ("all", ""):
         members = None
 
     if members:
-        #ds = ds.isel(member = members)
-        #ds = ds.isel(member = list(members) )
+        ds = ds.sel(member=list(members))
 
-        ds = ds.sel(member = list(members) )
+    ds = region_select(ds, region=region, **kwargs_clean)
 
-#        print("members type:", type(members), "values:", list(members))
-#        member_arr = ds.member.values
-#        member_idx = [int(np.where(member_arr == m)[0][0]) for m in list(members)]
-#        ds = ds.isel(member=member_idx)
-#        print("4. after member isel:", type(list(ds.data_vars.values())[0].variable._data))
-#        print("backing type after member isel:", type(list(ds.data_vars.values())[0].variable._data))
-
-#    else:
-#        print("4. members is falsy, skipped. members =", members)
-
-    #print("\n\nYYYYY ds raw ", ds.tp[1,1,1,...].values)
-    #print("\n\n\n ds = ", ds)
-
-#    import numpy as np
-#    print("backing type before region_select:", type(list(ds.data_vars.values())[0].variable._data))
-
-    ds = region_select(ds, **kwargs)
-
-    #print("\n\n\n ds = ", ds)
-#    print("\n\nYYYYY ds raw ", ds.tp[1,1,1,...].values)
-    p_model = ds[model_var]  # in mm
+    p_model = ds[model_var]
 
     if unit_cvt:
         p_model *= unit_cvt
 
-    #print("\n\n\n p_model = ", p_model[1,1,1,...])
-    #init_times = p_model.init_time.values
-
     ds.close()
-
-    return p_model#, init_times
+    return p_model

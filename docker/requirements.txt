@@ -52,11 +52,10 @@ frozenlist==1.8.0
 geopandas==1.1.4 ; python_full_version < '3.11'
 geopandas==1.2.0 ; python_full_version >= '3.11'
 git-filter-repo==2.47.0
-google-api-core==2.40.0
 google-auth==2.59.1
 google-auth-oauthlib==1.5.0
-google-cloud-core==2.8.0
-google-cloud-storage==3.16.0
+google-cloud-core
+google-cloud-storage
 google-crc32c==1.9.0
 google-resumable-media==2.11.0
 googleapis-common-protos==1.75.5
@@ -210,3 +209,6 @@ yarl==1.25.1
 zarr==2.18.3 ; python_full_version < '3.11'
 zarr==3.1.6 ; python_full_version == '3.11.*'
 zarr==3.4.0 ; python_full_version >= '3.12'
+protobuf>=6.33.5
+h5py==3.16.0
+

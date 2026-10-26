@@ -21,6 +21,7 @@ import sys
 from datetime import date
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+
 import config
 
 # ------------------------------------------------------------------------------
@@ -47,7 +48,7 @@ import momp.params as params  # noqa: E402
 from momp.lib.loader import get_cfg  # noqa: E402
 
 # ------------------------------------------------------------------------------
-# Lead windows / tolerances
+# Lead windows / tolerances (Length matched: 2 items each)
 # ------------------------------------------------------------------------------
 LEAD_SETTINGS = {
     "verification_window_list": ((1, 15), (16, 30)),
@@ -154,19 +155,22 @@ def _obs_meta(obs_key: str):
 def resolve_path(p):
     if p is None or str(p).strip() == "":
         return None
-    if config.is_uri(p):                      # gs:// (Google bucket) paths are used as they are
-        return str(p).strip().rstrip("/")
-    p = Path(str(p)).expanduser()
-    if p.is_absolute():
-        return str(p)
-    candidates = [PROJECT_ROOT / p, ROMP_ROOT / p]
-    if p.parts and p.parts[0].lower() == "data":
-        candidates.insert(0, DATA_DIR.joinpath(*p.parts[1:]))
+    s = str(p).strip()
+    if config.is_uri(s):
+        clean_path = config._strip(s)
+        return f"gs://{clean_path}"
+
+    p_obj = Path(s).expanduser()
+    if p_obj.is_absolute():
+        return str(p_obj)
+
+    candidates = [PROJECT_ROOT / p_obj, ROMP_ROOT / p_obj]
+    if p_obj.parts and p_obj.parts[0].lower() == "data":
+        candidates.insert(0, DATA_DIR.joinpath(*p_obj.parts[1:]))
     for cand in candidates:
         if cand.exists():
             return str(cand.resolve())
     return str(candidates[0])
-
 # ------------------------------------------------------------------------------
 # Mode helpers
 # ------------------------------------------------------------------------------
@@ -248,7 +252,7 @@ def apply_base_paths(cfg):
     cfg.work_dir = str(ROMP_ROOT)
     cfg.pkg_dir = str(MOMP_PKG_DIR)
 
-    # Use resolved paths from config.py as primary sources
+    # Resolve paths dynamically from config.py
     obs_dir = getattr(config, "obs_dir", None) or getattr(config, "OBS_DIR", None)
     ref_dir = getattr(config, "ref_model_dir", None) or getattr(config, "obs_dir", None)
     mask_file = getattr(config, "nc_mask", None) or getattr(config, "JJAS_MASK_FILE", None)
@@ -256,6 +260,9 @@ def apply_base_paths(cfg):
     cfg.obs_dir = resolve_path(obs_dir) if obs_dir else resolve_path(EXTERNAL_DATA_DIR / "CHIRPS")
     cfg.ref_model_dir = resolve_path(ref_dir) if ref_dir else cfg.obs_dir
     cfg.nc_mask = resolve_path(mask_file) if mask_file else resolve_path(EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc")
+
+    cfg.verification_window_list = ((1, 15), (16, 30))
+    cfg.tolerance_days_list = (3, 5)
 
     if hasattr(config, "obs_file_pattern"):
         cfg.obs_file_pattern = config.obs_file_pattern
@@ -315,10 +322,7 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
             cfg.obs_var = _clean_str(_meta_get(obs_meta, "var", "precip"))
     coverage = _clean_str(spec.get("benchmark_coverage", ""))
     if coverage:
-        if coverage.lower().startswith("ethiopia"):
-            cfg.region = "Ethiopia"
-        else:
-            cfg.region = coverage
+        cfg.region = coverage
     forecast_window = _clean_str(spec.get("forecast_window", ""))
     if forecast_window:
         _apply_forecast_window(cfg, forecast_window)
@@ -394,7 +398,8 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
 def apply_env_vars_to_cfg(cfg):
     """Apply advanced temporal and verification parameters from environment variables."""
     def _parse_tuple(val):
-        if not val: return None
+        if not val:
+            return None
         try:
             return ast.literal_eval(val)
         except Exception:
@@ -409,18 +414,18 @@ def apply_env_vars_to_cfg(cfg):
             pass
     if val := os.getenv("ROMP_VERIFICATION_WINDOW_LIST"):
         parsed = _parse_tuple(val)
-        if parsed: 
+        if parsed:
             cfg.verification_window_list = parsed
     if val := os.getenv("ROMP_TOLERANCE_DAYS_LIST"):
         parsed = _parse_tuple(val)
-        if parsed: 
+        if parsed:
             cfg.tolerance_days_list = parsed
     if val := os.getenv("ROMP_MAX_FORECAST_DAY"):
         try:
             cfg.max_forecast_day = int(val)
         except ValueError:
             pass
-            
+
     for key, env_name in [
         ("mok", "ROMP_MOK"),
         ("years", "ROMP_YEARS"),
@@ -485,7 +490,7 @@ def validate_paths(cfg):
         "nc_mask": getattr(cfg, "nc_mask", None),
         "thresh_file": getattr(cfg, "thresh_file", None),
     }
-    if getattr(cfg, "polygon", False):                 # shapefile folder is only needed for polygons
+    if getattr(cfg, "polygon", False):
         checks["shpfile_dir"] = getattr(cfg, "shpfile_dir", None)
     for i, d in enumerate(getattr(cfg, "model_dir_list", ()) or ()):
         checks[f"model_dir_list[{i}]"] = d
@@ -500,31 +505,58 @@ def validate_paths(cfg):
             + f"\n(data root is {DATA_DIR})"
         )
     problems = []
-    def _first(x):
-        return x[0] if isinstance(x, (list, tuple)) and x else x
-    obs_dir = getattr(cfg, "obs_dir", None)
-    obs_pat = _first(getattr(cfg, "obs_file_pattern", None)) or "{}.nc"
+    
+    region_clean = getattr(cfg, "region", "Ethiopia").replace(" ", "_")
     sd, ed = getattr(cfg, "start_date", None), getattr(cfg, "end_date", None)
+    
+    # 1. Validate Observations
+    obs_dir = getattr(cfg, "obs_dir", None)
+    obs_pat_raw = getattr(cfg, "obs_file_pattern", None)
     if obs_dir and sd and ed:
-        names = _list_nc(obs_dir)                      # one listing, also for the bucket
-        absent = [y for y in range(sd[0], ed[0] + 1) if obs_pat.format(y) not in names]
+        names = _list_nc(obs_dir)
+        absent = []
+        for y in range(sd[0], ed[0] + 1):
+            patterns_to_try = []
+            if isinstance(obs_pat_raw, (list, tuple)):
+                patterns_to_try.extend(p.format(y) for p in obs_pat_raw if "{}" in p)
+            elif isinstance(obs_pat_raw, str) and "{}" in obs_pat_raw:
+                patterns_to_try.append(obs_pat_raw.format(y))
+            
+            patterns_to_try.extend([f"CHIRPS_{region_clean}_{y}.nc", f"{y}.nc"])
+            if not any(pat in names for pat in patterns_to_try):
+                absent.append(y)
+
         if absent:
             problems.append(
-                f"obs: no file '{obs_pat}' in {obs_dir} for years {absent}; "
+                f"obs: missing rainfall files in {obs_dir} for years {absent}; "
                 f"first files found: {names[:5] or 'none'}"
             )
+
+    # 2. Validate Reference Model
     ref_dir = getattr(cfg, "ref_model_dir", None)
-    ref_pat = _first(getattr(cfg, "ref_model_file_pattern", None)) or "{}.nc"
+    ref_pat_raw = getattr(cfg, "ref_model_file_pattern", None) or "{}.nc"
     if ref_dir:
         names = _list_nc(ref_dir)
-        if not any(fnmatch.fnmatch(n, ref_pat.replace("{}", "*")) for n in names):
+        patterns_to_check = []
+        if isinstance(ref_pat_raw, (list, tuple)):
+            patterns_to_check.extend(p.replace("{}", "*") for p in ref_pat_raw if "{}" in p)
+        elif isinstance(ref_pat_raw, str):
+            patterns_to_check.append(ref_pat_raw.replace("{}", "*"))
+        patterns_to_check.extend(["*.nc", f"CHIRPS_{region_clean}_*.nc"])
+
+        matched = any(
+            fnmatch.fnmatch(n, pat) 
+            for pat in patterns_to_check 
+            for n in names
+        )
+        if not matched:
             problems.append(
-                f"ref model: nothing matches '{ref_pat}' in {ref_dir}; "
+                f"ref model: nothing matches patterns {patterns_to_check} in {ref_dir}; "
                 f"first files found: {names[:5] or 'none'}"
             )
+
     if problems:
         raise FileNotFoundError("Data file check failed:\n  " + "\n  ".join(problems))
-
 def sync_params(cfg):
     for attr in dir(cfg):
         if not attr.startswith("_"):

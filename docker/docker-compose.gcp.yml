@@ -1,6 +1,0 @@
-services:
-  ai_weather:
-    volumes:
-      - /etc/fleet-gcs-key.json:/run/gcp-key.json:ro
-    environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-key.json

@@ -1,5 +1,0 @@
-services:
-  ai_weather:
-    volumes:
-      # Mount local code for live editing
-      - ${PROJECT_ROOT:-..}:/app

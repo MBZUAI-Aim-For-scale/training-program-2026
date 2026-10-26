@@ -2,222 +2,192 @@
 # config.in file
 # Rainy season Onset Metrics Package (ROMP) Configuration
 # Version: 0.0.1
-# Description: Workflow configuration for evaluating rainy season onset forecast 
+# Description: Workflow configuration dynamically aligned with ai_weather/config.py
 # ==============================================================================
+
+import os
+import sys
+from pathlib import Path
+
+# ==============================================================================
+# Dynamic config.py Import
+# ==============================================================================
+try:
+    import config
+except ImportError:
+    try:
+        from ai_weather import config
+    except ImportError:
+        _curr = Path(__file__).resolve()
+        for _parent in _curr.parents:
+            if (_parent / "ai_weather" / "config.py").exists() or (_parent / "config.py").exists():
+                sys.path.insert(0, str(_parent / "ai_weather"))
+                sys.path.insert(0, str(_parent))
+                break
+        import config
 
 # ------------------------------------------------------------------------------
 # 1. CORE STRUCTURE & DIMENSIONS
 # ------------------------------------------------------------------------------
-import os
-project_name = "deterministic or probablistic benchmarking with ENACTS data"
-work_dir = "apps/benchmarking/ROMP"
-pkg_dir =  work_dir + "momp"
+project_name = getattr(config, "project_name", "deterministic or probablistic benchmarking with ENACTS data")
+work_dir = getattr(config, "work_dir", str(config.ROMP_ROOT.resolve()))
+pkg_dir = getattr(config, "pkg_dir", str(config.MOMP_PKG_DIR.resolve()))
 
-# Internal data layout (e.g., dimensions in the processed case).
-# Frozen with major ROMP version
-layout = ("model", "verification_window")
-
-# List of models to process (e.g., "AIFS", "fuxi", "graphcast").
-model_list = ("AIFS", "fuxi", "graphcast",)
+# Internal data layout (frozen with major ROMP version)
+layout = getattr(config, "layout", ("model", "verification_window"))
 
 # ------------------------------------------------------------------------------
 # 2. OBSERVATION DATA SETTINGS
 # ------------------------------------------------------------------------------
-# Name of the observational dataset (e.g., ENACTS, CHIRPS).
-data_dir = os.path.join(os.path.expanduser("~"), "data")
-obs = "CHIRPS"
-obs_dir = os.path.join(data_dir, "external", obs)
+data_dir = str(getattr(config, "DATA_DIR", config.PROJ_ROOT / "data"))
+obs = getattr(config, "obs", "CHIRPS")
 
-# Path to observational NetCDF files
-obs_dir = data_dir + "/external/CHIRPS"
+# Dynamic Observation Path (supports gs:// URIs and /app/data local paths)
+obs_dir = str(getattr(config, "obs_dir", getattr(config, "OBS_DIR", config.EXTERNAL_DATA_DIR / "CHIRPS")))
 
 # Pattern to find files. {} is replaced by date/year components.
-obs_file_pattern = ("{}.nc",)
+obs_file_pattern = getattr(config, "obs_file_pattern", ("{}.nc",))
 
 # Variable name for rainfall in the NetCDF file.
-obs_var = "precip"
+obs_var = getattr(config, "obs_var", "precip")
 
 # Multiplier for unit conversion (e.g., 1000 to convert m to mm). None if no change.
-obs_unit_cvt = None
+obs_unit_cvt = getattr(config, "obs_unit_cvt", None)
 
 # ------------------------------------------------------------------------------
 # 3. REFERENCE MODEL (BENCHMARK) SETTINGS
 # ------------------------------------------------------------------------------
 # The baseline to compare against. Use "climatology" or a specific model name.
-ref_model = "climatology"
+ref_model = getattr(config, "ref_model", "climatology")
 
 # Directory for the reference model data.
-ref_model_dir = data_dir + "/external/CHIRPS"
+ref_model_dir = str(getattr(config, "ref_model_dir", obs_dir))
 
 # File naming pattern for the reference model.
-ref_model_file_pattern = "{}.nc"
+ref_model_file_pattern = getattr(config, "ref_model_file_pattern", "{}.nc")
 
 # Variable name for rainfall in the reference dataset.
-ref_model_var = "precip"
+ref_model_var = getattr(config, "ref_model_var", obs_var)
 
 # Unit conversion factor for the reference model.
-ref_model_unit_cvt = None
+ref_model_unit_cvt = getattr(config, "ref_model_unit_cvt", None)
 
 # ------------------------------------------------------------------------------
 # 4. FORECAST MODEL SETTINGS
 # ------------------------------------------------------------------------------
-# List of directories corresponding to the 'model_list'.
-AIFS = os.path.join(data_dir, "external", "AIFS/0p25")
-FuXi = os.path.join(data_dir, "external", "FuXi")
-Graphcast = os.path.join(data_dir, "external", "Graphcast")
+model_list = getattr(config, "model_list", ("AIFS", "fuxi", "graphcast"))
 
-model_dir_list = (AIFS,)
-
+# Dynamic Forecast Model Directories
+model_dir_list = getattr(
+    config, 
+    "model_dir_list", 
+    (str(config.EXTERNAL_DATA_DIR / "aifs_single"),)
+)
 
 # Variable names for rainfall in each forecast model (e.g., 'tp' for Total Precip).
-model_var_list = ("tp", )
+model_var_list = getattr(config, "model_var_list", ("tp",))
 
 # Unit conversion factors for each forecast model.
-unit_cvt_list = (None, )
+unit_cvt_list = getattr(config, "unit_cvt_list", (None,))
 
 # File patterns for each forecast model.
-file_pattern_list = ("{}.nc", )
+file_pattern_list = getattr(config, "file_pattern_list", ("{}.nc",))
 
 # ------------------------------------------------------------------------------
 # 5. REGION DEFINITIONS
 # ------------------------------------------------------------------------------
 # Target geographic region for evaluation.
-region = "Ethiopia"
+region = getattr(config, "region", "Ethiopia")
 
-# Regional mask in .NetCDF format with 1s and 0s
-#nc_mask = data_dir+"jjas_100mm_rainfall_mask_0p25.nc"
-
-nc_mask = os.path.join(data_dir, "external", "jjas_100mm_rainfall_mask_0p25.nc")
-
+# Regional mask in NetCDF format
+nc_mask = str(getattr(config, "nc_mask", getattr(config, "JJAS_MASK_FILE", config.EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc")))
 
 # Shapefile directory to define region boundary, None if not drawing boundary using shapefile
-
-shpfile_dir = os.path.join(data_dir, "external", "shapefile")
+shpfile_dir = str(getattr(config, "shpfile_dir", config.EXTERNAL_DATA_DIR / "shapefile"))
 
 # Mask/boundary as region polygons, if True must define in params/region_def
-polygon = False
+polygon = getattr(config, "polygon", False)
 
 # ------------------------------------------------------------------------------
 # 6. ONSET CRITERIA (Physics Logic)
 # ------------------------------------------------------------------------------
-# Rain threshold (mm) to identify the first potential wet day.
-wet_init = 1
-
-# Rainfall threshold (mm) used only if no spatial thresh_file is provided.
-wet_threshold = 20
-
-# Minimum number of days the accumulated rainfall must stay above threshold (Wet Spell).
-wet_spell = 3
-
-# Maximum allowed rainfall (mm) to define a dry day/spell.
-dry_threshold = 1
-
-# Maximum number of consecutive dry days allowed after onset.
-dry_spell = 7
-
-# Search window (days) after onset to check for the dry spell. Must be >= dry_spell.
-dry_extent = 0
-
-# Path to a NetCDF file containing spatial thresholds. None = Use scalar.
-thresh_file = None
-
-# Variable name for the threshold inside the thresh_file.
-thresh_var = None
-
-# Probability threshold (0.0 - 1.0) for determining onset in ensemble members.
-onset_percentage_threshold = 0.5
+wet_init = getattr(config, "wet_init", 1)
+wet_threshold = getattr(config, "wet_threshold", 20)
+wet_spell = getattr(config, "wet_spell", 3)
+dry_threshold = getattr(config, "dry_threshold", 1)
+dry_spell = getattr(config, "dry_spell", 7)
+dry_extent = getattr(config, "dry_extent", 21)
+thresh_file = getattr(config, "thresh_file", None)
+thresh_var = getattr(config, "thresh_var", None)
+onset_percentage_threshold = getattr(config, "onset_percentage_threshold", 0.5)
 
 # ------------------------------------------------------------------------------
 # 7. TEMPORAL SETTINGS (Dates & Years)
 # ------------------------------------------------------------------------------
-# Date range for the evaluation period.
-start_date = (2019, 5, 1)
-end_date = (2022, 7, 31)
+start_date = getattr(config, "start_date", (2019, 5, 1))
+end_date = getattr(config, "end_date", (2022, 7, 31))
 
-# Start and end years for calculating long-term climatology.
-start_year_clim = 2015
-end_year_clim = 2022
+start_year_clim = getattr(config, "start_year_clim", 2015)
+end_year_clim = getattr(config, "end_year_clim", 2022)
 
-# List of forecast initialization days (day of week, 0->Monday).
-init_days = (0, 3)
-init_type = "weekly"
-
-# Year used for filtering or standardizing date formats.
-date_filter_year = 2024
+init_days = getattr(config, "init_days", (0, 3))
+init_type = getattr(config, "init_type", "weekly")
+date_filter_year = getattr(config, "date_filter_year", 2024)
 
 # ------------------------------------------------------------------------------
 # 8. EVALUATION & VERIFICATION PARAMETERS
 # ------------------------------------------------------------------------------
-# Range of days after initialization to consider for validation.
-verification_window_list = ((1, 15), (16, 30))
-
-# Allowed error margin (in days) when comparing forecast to obs onset.
-tolerance_days_list = (3, 5)
-
-# Total number of days to look ahead in the forecast.
-max_forecast_day = 30
-
-# Time windows for grouping statistics (e.g., Week 1, Week 2).
-day_bins = ((1, 5), (6, 10), (11, 15), (16, 20), (21, 25), (26, 30))
+verification_window_list = getattr(config, "verification_window_list", ((1, 15), (16, 30)))
+tolerance_days_list = getattr(config, "tolerance_days_list", (3, 5))
+max_forecast_day = getattr(config, "max_forecast_day", 30)
+day_bins = getattr(config, "day_bins", ((1, 5), (6, 10), (11, 15), (16, 20), (21, 25), (26, 30)))
 
 # ------------------------------------------------------------------------------
 # 9. METRICS SELECTION
 # ------------------------------------------------------------------------------
-# --- Deterministic Metrics ---
-FAR = True  # False Alarm Ratio
-MAE = True  # Mean Absolute Error
-MR  = True  # Miss Rate (Hit Rate complement)
+FAR = getattr(config, "FAR", True)
+MAE = getattr(config, "MAE", True)
+MR = getattr(config, "MR", True)
 
-# --- Probabilistic Metrics ---
-probabilistic = False  # Set True to enable ensemble evaluation
-members = "All"  # Ensemble members to be included in evaluation
+probabilistic = getattr(config, "probabilistic", False)
+members = getattr(config, "members", "All")
 
-BS          = True  # Brier Skill Score
-RPS         = True  # Ranked Probability Skill Score
-AUC         = True  # Area Under Curve (ROC)
-Reliability = True  # Reliability Diagram data generation
-skill_score = True  # Generic Skill Score calculation
+BS = getattr(config, "BS", True)
+RPS = getattr(config, "RPS", True)
+AUC = getattr(config, "AUC", True)
+Reliability = getattr(config, "Reliability", True)
+skill_score = getattr(config, "skill_score", True)
 
 # ------------------------------------------------------------------------------
 # 10. OUTPUT & GRAPHICS SETTINGS
 # ------------------------------------------------------------------------------
-# Folders for output data and plots
-dir_out = os.path.join(data_dir, "ROMP_OUT", "et/output")
-dir_fig = os.path.join(data_dir, "ROMP_OUT", "et/figure")
+dir_out = str(getattr(config, "ROMP_OUT_DIR", config.DATA_DIR / "ROMP_OUT" / "et" / "output"))
+dir_fig = str(getattr(config, "ROMP_FIG_DIR", config.DATA_DIR / "ROMP_OUT" / "et" / "figure"))
 
-# Save file and figure options
-save_fig = True                 # Generate and save PNG/PDF figures
-save_nc_spatial_far_mr_mae = True # Save spatial metrics as NetCDF
-save_csv_score = True             # Save skill scores as CSV
-save_nc_climatology = True        # Save calculated climatology to NetCDF
+save_fig = getattr(config, "save_fig", True)
+save_nc_spatial_far_mr_mae = getattr(config, "save_nc_spatial_far_mr_mae", True)
+save_csv_score = getattr(config, "save_csv_score", True)
+save_nc_climatology = getattr(config, "save_nc_climatology", True)
 
-# Graphics configuration
-plot_spatial_far_mr_mae = True     # Generate spatial maps of far, mr, mae
-plot_heatmap_bss_auc = True        # Generate score heatmaps
-plot_reliability = True            # Generate reliability curve plots
-plot_climatology_onset = True      # Spatial map of climatology onset
-plot_panel_heatmap_error = True    # Panel heatmap of mae, mr, far 
-plot_panel_heatmap_skill = True    # Panel heatmap of skill score 
-plot_bar_bss_rpss_auc = True       # Bar plot of skill score 
+plot_spatial_far_mr_mae = getattr(config, "plot_spatial_far_mr_mae", True)
+plot_heatmap_bss_auc = getattr(config, "plot_heatmap_bss_auc", True)
+plot_reliability = getattr(config, "plot_reliability", True)
+plot_climatology_onset = getattr(config, "plot_climatology_onset", True)
+plot_panel_heatmap_error = getattr(config, "plot_panel_heatmap_error", True)
+plot_panel_heatmap_skill = getattr(config, "plot_panel_heatmap_skill", True)
+plot_bar_bss_rpss_auc = getattr(config, "plot_bar_bss_rpss_auc", True)
 
-# Interactive plot
-show_plot = False                  # Show individual model plot
-show_panel = True                  # Show panel plot
+show_plot = getattr(config, "show_plot", False)
+show_panel = getattr(config, "show_panel", True)
 
 # ------------------------------------------------------------------------------
-# 11. PARALLELIZATION SETTINGS
+# 11. PARALLELIZATION & DEBUG SETTINGS
 # ------------------------------------------------------------------------------
-parallel = True  # Compute with multi-cores in parallel
+parallel = getattr(config, "parallel", True)
+debug = getattr(config, "debug", False)
 
-# ------------------------------------------------------------------------------
-# 12. DEBUG SETTINGS
-# ------------------------------------------------------------------------------
-debug = False  # Run ROMP in debug mode for developers
-
-# ------------------------------------------------------------------------------
-# PARAMS RESERVED FOR FUTURE VERSIONS
-# ------------------------------------------------------------------------------
-mok = (5, 15)
-years = None
-years_clim = None
-fallback_date = None
+# Reserved Parameters
+mok = getattr(config, "mok", (5, 15))
+years = getattr(config, "years", None)
+years_clim = getattr(config, "years_clim", None)
+fallback_date = getattr(config, "fallback_date", None)
