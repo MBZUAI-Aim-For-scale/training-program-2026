@@ -365,7 +365,7 @@ Specify the target model using the `--model` flag alongside the corresponding ev
 * **Deterministic Track** (e.g., GraphCast, FuXi, AIFS Single v2)
 
 ```{bash}
-python run_momp.py --mode det --model GraphCast
+docker exec -it ai_weather python run_momp.py --mode det --model AIFS
 
 ```
 
