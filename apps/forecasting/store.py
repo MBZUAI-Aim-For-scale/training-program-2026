@@ -18,7 +18,8 @@ from pathlib import Path
 
 import pandas as pd
 
-OUTPUT_DIR = Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().parent.parent / "outputs"))
+# <repo>/outputs, which docker-compose.yml mounts at /app/outputs (so runs survive a new container)
+OUTPUT_DIR = Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().parents[2] / "outputs"))
 JOBS_DIR = OUTPUT_DIR / "_jobs"
 BUCKET = os.environ.get("DEMO3_BUCKET", "").rstrip("/")
 
