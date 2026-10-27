@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Start Demo 4 on a Spark from the image built by demos/demo4/docker/Dockerfile.
 #   bash demos/demo4/docker/run.sh          code baked into the image (what each country's Spark runs)
-#   DEV=1 bash demos/demo4/docker/run.sh    use the code in this repo instead, so edits show up live
+#   DEV=1 bash demos/demo4/docker/run.sh    use the code in this folder (and run_momp.py)
+#                                           instead, so edits show up live
 # Then open http://localhost:8503 on the Spark (or tunnel: ssh -L 8503:localhost:8503 <spark>).
 # Benchmarking needs no GPU, so the container gets none.
 set -euo pipefail
@@ -10,8 +11,9 @@ DATA="${DEMO_DATA:-$HOME/data}"                  # external/: benchmark inputs, 
 mkdir -p "$DATA/external" "$DATA/ROMP_OUT"
 
 code=()
-# The repo replaces /app, but the image's /app/.venv stays (an anonymous volume is filled from the image)
-[ "${DEV:-0}" = 1 ] && code=(-v "$here:/app" -v /app/.venv)
+# Only the code folders are mounted over the image's copies; its /app/.venv and .streamlit stay
+[ "${DEV:-0}" = 1 ] && code=(-v "$here/demos/demo4/ui:/app/ui" -v "$here/demos/demo4/apps:/app/apps"
+                            -v "$here/demos/demo4/ai_weather:/app/ai_weather" -v "$here/run_momp.py:/app/run_momp.py")
 # Settings such as DEMO_BUCKET or ROMP_REGION go in the repo's .env (one KEY=value per line)
 envfile=()
 [ -f "$here/.env" ] && envfile=(--env-file "$here/.env")
