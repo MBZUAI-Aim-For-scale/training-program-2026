@@ -227,6 +227,11 @@ def get_model_display_label(model_key: str) -> str:
 
 
 class DynamicModelLabelsDict(dict):
+    """Dict wrapper that resolves unknown key lookups dynamically.
+
+    Prevents NameError while formatting future models on the fly.
+    """
+
     def __getitem__(self, key):
         return get_model_display_label(key)
 
@@ -238,6 +243,7 @@ class DynamicModelLabelsDict(dict):
         return res if res != "Unknown Model" else (default if default is not None else str(key))
 
 
+# Explicitly defined for legacy imports and lookups across the app
 MODEL_DISPLAY_LABELS = DynamicModelLabelsDict(MODEL_DISPLAY_OVERRIDES)
 
 # ----------------------------------------------------------------------
@@ -296,8 +302,15 @@ DEFAULT_FIGURE_HUMAN_LABELS = {
     "spatial_metrics_prob_16-30.png": "Spatial Metrics: Probabilistic (Days 16-30)",
 }
 
+
 FIGURE_HUMAN_LABELS: Dict[str, str] = getattr(config, "FIGURE_HUMAN_LABELS", DEFAULT_FIGURE_HUMAN_LABELS)
 STATIC_FIGURE_HUMAN_LABELS = FIGURE_HUMAN_LABELS
+
+FIGURE_HUMAN_LABELS: Dict[str, str] = getattr(
+    config, "FIGURE_HUMAN_LABELS", DEFAULT_FIGURE_HUMAN_LABELS
+)
+STATIC_FIGURE_HUMAN_LABELS = FIGURE_HUMAN_LABELS  # Compatibility alias
+
 
 DEFAULT_FIGURE_TYPE_TOKENS = {
     "Spatial Metrics": ["spatial_metrics", "spatial"],
@@ -320,6 +333,9 @@ def classify_figure_type(filename: str) -> str:
 
 def format_figure_label(path_str: str) -> str:
     filename = Path(path_str).name
+
+
+    # 1. Explicit lookup
     if filename in FIGURE_HUMAN_LABELS:
         return FIGURE_HUMAN_LABELS[filename]
 
@@ -328,6 +344,7 @@ def format_figure_label(path_str: str) -> str:
     if fig_type == "Other":
         fig_type = Path(filename).stem.replace("_", " ").title()
 
+    # 2. Extract metrics
     metrics_found = []
     if "mae_far_mr" in stem:
         metrics_found.append("MAE / FAR / MR")
@@ -345,6 +362,7 @@ def format_figure_label(path_str: str) -> str:
 
     metric_str = ", ".join(metrics_found)
 
+    # 3. Extract model/subject (sorted by string length descending to match longest key first)
     subject = None
     if "climatology" in stem or "clim" in stem:
         subject = "Climatology"
@@ -365,6 +383,7 @@ def format_figure_label(path_str: str) -> str:
                     subject = MODEL_DISPLAY_OVERRIDES[k]
                     break
 
+    # 4. Extract lead window
     window = None
     if "1-15" in stem or "1_15" in stem:
         window = "Days 1-15"
@@ -377,6 +396,7 @@ def format_figure_label(path_str: str) -> str:
         if match:
             window = f"{match.group(1)}-day"
 
+    # 5. Assemble title cleanly
     title_head = fig_type
     if metric_str and metric_str not in fig_type:
         title_head = f"{fig_type}: {metric_str}"
@@ -428,21 +448,24 @@ def _find_var(ds: xr.Dataset, keywords: List[str]) -> Optional[str]:
                 return str(v)
     return None
 
-
 def normalize_aifs_precipitation_dataset(ds: xr.Dataset) -> xr.Dataset:
     var_aliases = ["tp", "tp06", "tp24", "pr", "precip", "total_precipitation"]
     target_var = "RAINFALL"
 
+    # 1. Rename variable to RAINFALL if needed
     for alias in var_aliases:
         if alias in ds.data_vars and target_var not in ds.data_vars:
             ds = ds.rename({alias: target_var})
             break
 
+    # 2. Convert meters (m) to millimeters (mm)
     if target_var in ds.data_vars:
         da = ds[target_var]
         units = str(da.attrs.get("units", "")).lower()
         max_val = float(da.max().values) if da.size > 0 else 0.0
 
+
+        # If max precipitation value is < 1.0 (indicating meters) or units attribute is 'm'
         if units in ["m", "meters", "meter"] or max_val < 1.0:
             ds[target_var] = ds[target_var] * 1000.0
             ds[target_var].attrs["units"] = "mm"
@@ -461,6 +484,7 @@ def preprocess_aifs_benchmark_file(file_path: str) -> str:
             "RAINFALL" in ds.data_vars and float(ds["RAINFALL"].max().values) < 1.0
         ):
             ds_corrected = normalize_aifs_precipitation_dataset(ds)
+            # Save back scaled NetCDF file
             ds_corrected.to_netcdf(str(p))
             ds_corrected.close()
         ds.close()
@@ -468,7 +492,6 @@ def preprocess_aifs_benchmark_file(file_path: str) -> str:
         st.warning(f"Note on preprocessing {p.name}: {e}")
 
     return str(p)
-
 
 def _safe_open_dataset(path_str: str) -> xr.Dataset:
     path = Path(path_str)
@@ -484,10 +507,14 @@ def _safe_open_dataset(path_str: str) -> xr.Dataset:
         except Exception as e:
             last_err = e
             try:
+
+                # Fallback disabling time decoding if non-standard calendar/units cause errors
                 return xr.open_dataset(str(path), engine=engine, decode_times=False)
             except Exception:
                 continue
 
+
+    # Final fallback default open
     try:
         return xr.open_dataset(str(path))
     except Exception:
@@ -500,7 +527,7 @@ def _render_variable_plot(ds: xr.Dataset, var_name: str, title: str):
         da = ds[var_name].squeeze()
         if "time" in da.dims:
             da = da.isel(time=0)
-
+        
         fig, ax = plt.subplots(figsize=(8, 4))
         da.plot(ax=ax, cmap="YlGnBu")
         ax.set_title(f"{title} - {var_name}")
@@ -516,6 +543,97 @@ def format_nc_label(path_str: str) -> str:
     return Path(path_str).stem.replace("_", " ").title()
 
 
+
+def classify_figure_type(filename: str) -> str:
+    fname = str(filename).lower()
+    for label, tokens in FIGURE_TYPE_TOKENS.items():
+        for token in tokens:
+            if token in fname:
+                return label
+    return "Other"
+
+
+def format_figure_label(path_str: str) -> str:
+    name = Path(path_str).name
+    if name in FIGURE_HUMAN_LABELS:
+        return FIGURE_HUMAN_LABELS[name]
+    stem = Path(path_str).stem.lower()
+    if stem.startswith("panel_portrait"):
+        label = "Panel Portrait"
+    elif stem.startswith("spatial_metrics"):
+        label = "Spatial Metrics"
+    elif "reliability" in stem:
+        label = "Reliability Diagram"
+    elif "skill_scores_heatmap" in stem or "heatmap" in stem:
+        label = "Skill Scores Heatmap"
+    elif "climatology_onset" in stem:
+        label = "Climatology Onset"
+    else:
+        label = Path(path_str).stem.replace("_", " ").title()
+
+    metric = None
+    if "mae_far_mr" in stem:
+        metric = "MAE / FAR / MR"
+    elif "mae" in stem:
+        metric = "MAE"
+    elif "far" in stem:
+        metric = "FAR"
+    elif "mr" in stem:
+        metric = "Miss Rate"
+
+    subject = None
+    if "climatology" in stem:
+        subject = "Climatology"
+    elif "aifs_ens" in stem:
+        subject = "AIFS Ensemble"
+    elif "prob" in stem:
+        subject = "Probabilistic"
+    elif "aifs" in stem:
+        subject = "AIFS"
+    elif "fuxi" in stem:
+        subject = "FuXi"
+    elif "graphcast" in stem:
+        subject = "GraphCast"
+    elif "gencast" in stem:
+        subject = "GenCast"
+
+    window = None
+    if "1-15" in stem:
+        window = "Days 1-15"
+    elif "16-30" in stem:
+        window = "Days 16-30"
+    elif "30day" in stem:
+        window = "30-day"
+
+    parts = [label]
+    if metric:
+        parts.append(metric)
+    details = []
+    if subject:
+        details.append(subject)
+    if window:
+        details.append(window)
+    if details:
+        parts.append("- " + " - ".join(details))
+    return " ".join(parts)
+
+
+def render_benchmark_figure(path_str: str) -> None:
+    """Safely render a benchmark figure, skipping corrupt or empty files."""
+    path = Path(path_str)
+    if not path.exists():
+        st.warning(f"Figure not found: {path.name}")
+        return
+    if path.stat().st_size == 0:
+        st.warning(f"Figure is empty (0 bytes): {path.name}")
+        return
+    try:
+        st.image(path_str, use_container_width=True)
+        st.caption(format_figure_label(path_str))
+    except Exception as e:
+        st.warning(f"Could not display figure {path.name}: {type(e).__name__}")
+
+
 # ======================================================================
 # Fast Auto-detection & Metadata Caching
 # ======================================================================
@@ -528,11 +646,11 @@ def _extract_time_range_from_nc(nc_path: str):
             )
             if not time_name or time_name not in ds:
                 return None, None
-
+            
             vals = np.asarray(ds[time_name].values).ravel()
             if vals.size == 0:
                 return None, None
-
+            
             try:
                 ds_decoded = xr.open_dataset(nc_path, decode_cf=True, decode_times=True)
                 da = ds_decoded[time_name]
@@ -735,7 +853,7 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
     if "aifs" in fname:
         return "AIFS Single v2"
 
-    # 2. Parent directory fallback (if model name not in filename)
+    # 1. Check parent folder name first if stored in model subdirectories
     if nc_path.parent != ROMP_DEMO_OUT_DIR:
         if any(k in parent_name for k in ["aifs_ens", "aifs_ensemble"]):
             return "AIFS Ensemble v2"
@@ -749,6 +867,20 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
             return "GenCast"
         if any(k in parent_name for k in ["climatology", "traditional"]):
             return "Traditional Climatology"
+
+    # 2. Check explicit filename prefixes
+    if "climatology" in fname or "traditional" in fname:
+        return "Traditional Climatology"
+    if "aifs_ens" in fname or "aifs_ensemble" in fname:
+        return "AIFS Ensemble v2"
+    if "gencast" in fname:
+        return "GenCast"
+    if "graphcast" in fname:
+        return "GraphCast"
+    if "fuxi" in fname:
+        return "FuXi"
+    if "aifs" in fname:
+        return "AIFS Single v2"
 
     return None
 
@@ -1214,8 +1346,76 @@ def load_metric_values_by_window_cached(nc_path_str: str, file_mtime: float = 0.
                 if wdim:
                     nw = int(ds[var].sizes[wdim])
                     wls = [dw] if nw == 1 else (["Days 1–15", "Days 16–30"] if nw == 2 else [f"Window {i + 1}" for i in range(nw)])
+
                     for i, wl in enumerate(wls[:nw]):
                         val = _extract_spatial_mean(ds[var].isel({wdim: i}), is_frac)
+                        if val is not None:
+                            res.setdefault(wl, {})[mn] = val
+                else:
+                    val = _extract_spatial_mean(ds[var], is_frac)
+                    if val is not None:
+                        res.setdefault(dw, {})[mn] = val
+    except Exception:
+        pass
+    return res
+
+WINDOW_TOLERANCE_DAYS = {
+    "Days 1–15": 3,
+    "Days 16–30": 5,
+}
+
+def _extract_spatial_mean(da, convert_fraction=False):
+    while len(da.dims) > 2:
+        da = da.isel({da.dims[0]: 0})
+    arr = np.asarray(da.values, dtype=float)
+    if not np.isfinite(arr).any():
+        return None
+    val = float(np.nanmean(arr))
+    return val / 100.0 if convert_fraction and val > 1.5 else val
+
+
+@st.cache_data(show_spinner=False, ttl=120)
+def load_metric_values_by_window_cached(nc_path_str: str):
+    nc_path = Path(nc_path_str)
+    dw = _map_infer_window_label(nc_path)
+    res: Dict[str, Dict[str, float]] = {}
+
+    try:
+        with xr.open_dataset(nc_path) as ds:
+            for mn, kws, is_frac in [
+                (
+                    "Mean Absolute Error days",
+                    ["mean_absolute_error", "mean_mae", "mae"],
+                    False,
+                ),
+                (
+                    "Miss Rate fraction",
+                    ["miss_rate", "miss", "mr"],
+                    True,
+                ),
+                (
+                    "False Alarm Rate fraction",
+                    ["false_alarm_rate", "false_alarm", "far"],
+                    True,
+                ),
+            ]:
+                var = _find_var(ds, kws)
+                if not var:
+                    continue
+                wdim = _map_find_window_dim(ds[var])
+                if wdim:
+                    nw = int(ds[var].sizes[wdim])
+                    if nw == 1:
+                        wls = [dw]
+                    elif nw == 2:
+                        wls = ["Days 1–15", "Days 16–30"]
+                    else:
+                        wls = [f"Window {i + 1}" for i in range(nw)]
+                    for i, wl in enumerate(wls[:nw]):
+                        val = _extract_spatial_mean(
+                            ds[var].isel({wdim: i}),
+                            is_frac,
+                        )
                         if val is not None:
                             res.setdefault(wl, {})[mn] = val
                 else:
@@ -1291,6 +1491,7 @@ def build_metrics_table_html(table, models, windows):
                     diff = val - cv
                     if abs(diff) > 1e-6:
                         better = (diff > 0) if higher_better else (diff < 0)
+                        better = diff < 0
                         intensity = min(abs(diff) / scale, 1.0)
                         alpha = 0.08 + (0.35 * intensity)
                         color = "34,197,94" if better else "239,68,68"
@@ -1338,7 +1539,50 @@ def _distribution_cell_style(value, baseline_value, scale, higher_better, is_bas
     return f"background-color:rgba({color},{alpha:.2f});color:{text_color};font-weight:{font_weight};"
 
 
-@st.cache_data(show_spinner=False, ttl=300)
+
+@st.cache_data(show_spinner=False, ttl=120)
+def compute_metric_distribution_stats() -> pd.DataFrame:
+    outs = discover_map_outputs()
+    unique_outputs = {}
+    for item in outs:
+        model_label = item.get("model_label")
+        if not model_label:
+            continue
+        path = item.get("path")
+        if not path:
+            continue
+        for wl in item.get("windows", []):
+            unique_outputs.setdefault((model_label, wl), path)
+
+    rows = []
+    for (model_label, wl), path in unique_outputs.items():
+        for metric_key, metric_meta in MAP_METRICS.items():
+            da = load_map_da_cached(path, metric_key, wl, "", "")
+            if da is None:
+                continue
+            arr = np.asarray(da.values, dtype=float).ravel()
+            arr = arr[np.isfinite(arr)]
+            if arr.size == 0:
+                continue
+            rows.append(
+                {
+                    "Model": model_label,
+                    "Lead Window": wl,
+                    "Metric": metric_key,
+                    "Mean": float(np.mean(arr)),
+                    "Min": float(np.min(arr)),
+                    "Median": float(np.median(arr)),
+                    "P75": float(np.percentile(arr, 75)),
+                    "P90": float(np.percentile(arr, 90)),
+                    "Max": float(np.max(arr)),
+                    "fraction": bool(metric_meta.get("fraction", False)),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+
+@st.cache_data(show_spinner=False, ttl=60)
 def compute_metric_distribution_stats() -> pd.DataFrame:
     outs = discover_map_outputs()
     unique_outputs = {}
@@ -1376,6 +1620,200 @@ def compute_metric_distribution_stats() -> pd.DataFrame:
             )
     return pd.DataFrame(rows)
 
+def build_grouped_distribution_cards_html(dist_df: pd.DataFrame) -> str:
+    """
+    Renders spatial metric distribution cards grouped by Model and Lead Window.
+    Color coding: Green = better (lower than climatology), Red = worse.
+    Bolding: Bold = best (minimum) value across all evaluated models.
+    """
+    if dist_df is None or dist_df.empty:
+        return "<p>No spatial metric distribution data available.</p>"
+
+    # Sort ordering
+    metric_order = {"False Alarm Rate": 0, "Miss Rate": 1, "Mean Absolute Error": 2}
+    model_order = {
+        "AIFS Single v2": 0,
+        "FuXi": 1,
+        "GraphCast": 2,
+        "AIFS Ensemble v2": 3,
+        "GenCast": 4,
+        "Traditional Climatology": 5,
+    }
+    window_order = {"Days 1–15": 0, "Days 16–30": 1}
+
+    df = dist_df.copy()
+    df["metric_sort"] = df["Metric"].map(lambda m: metric_order.get(m, 999))
+    df["model_sort"] = df["Model"].map(lambda m: model_order.get(m, 999))
+    df["window_sort"] = df["Lead Window"].map(lambda w: window_order.get(w, 999))
+    df = df.sort_values(["model_sort", "window_sort", "metric_sort"])
+
+    stat_cols = ["Mean", "Min", "Median", "P75", "P90", "Max"]
+
+    # Pre-calculate Best (Minimum) and Climatology baseline values
+    best_vals = {}
+    clim_vals = {}
+
+    for (window, metric), g in df.groupby(["Lead Window", "Metric"]):
+        clim_row = g[g["Model"].str.lower().str.contains("clim")]
+        for stat in stat_cols:
+            vals = pd.to_numeric(g[stat], errors="coerce").dropna()
+            if not vals.empty:
+                best_vals[(window, metric, stat)] = float(vals.min())
+            if not clim_row.empty and pd.notna(clim_row[stat].values[0]):
+                clim_vals[(window, metric, stat)] = float(clim_row[stat].values[0])
+
+    # Updated CSS stylesheet with theme-adaptive (light & dark mode) contrast
+            css = """
+            <style>
+            .all-metrics-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 0.88rem;
+                margin-bottom: 1rem;
+            }
+            .all-metrics-table th, .all-metrics-table td {
+                border: 1px solid #cbd5e1;
+                padding: 7px 12px;
+                text-align: right;
+            }
+            .all-metrics-table th {
+                background: #f1f5f9;
+                color: #0f172a;
+                font-weight: 700;
+                text-transform: uppercase;
+                font-size: 0.8rem;
+            }
+            .all-metrics-table td:first-child, .all-metrics-table th:first-child {
+                text-align: left;
+                font-weight: 600;
+            }
+            .all-metrics-table td:last-child, .all-metrics-table th:last-child {
+                text-align: center;
+                color: #64748b;
+            }
+            
+            /* Light Theme Styles */
+            .val-better {
+                background-color: rgba(34, 197, 94, 0.22) !important;
+                color: #15803d !important;
+                font-weight: 600;
+            }
+            .val-worse {
+                background-color: rgba(239, 68, 68, 0.22) !important;
+                color: #b91c1c !important;
+            }
+            .val-neutral {
+                background-color: rgba(241, 245, 249, 0.6) !important;
+                color: #334155 !important;
+            }
+
+            /* Dark Theme Overrides */
+            @media (prefers-color-scheme: dark) {
+                .all-metrics-table th {
+                    background: #1e293b !important;
+                    color: #f8fafc !important;
+                }
+                .all-metrics-table td, .all-metrics-table th {
+                    border-color: #334155 !important;
+                }
+                .val-better {
+                    background-color: rgba(34, 197, 94, 0.28) !important;
+                    color: #4ade80 !important;
+                    font-weight: 600;
+                }
+                .val-worse {
+                    background-color: rgba(239, 68, 68, 0.28) !important;
+                    color: #f87171 !important;
+                }
+                .val-neutral {
+                    background-color: rgba(51, 65, 85, 0.4) !important;
+                    color: #cbd5e1 !important;
+                }
+            }
+            </style>
+            """
+
+    html_parts = [css]
+
+    for (model_label, window_label), group_df in df.groupby(["Model", "Lead Window"], sort=False):
+        display_model = "Climatology" if "clim" in model_label.lower() else model_label
+        title_model = display_model.replace(" ", "_").upper()
+        title_window = window_label.upper()
+
+        tolerance_days = WINDOW_TOLERANCE_DAYS.get(window_label)
+        if tolerance_days is None:
+            if any(t in window_label.lower() for t in ["16-30", "16–30", "16_30"]):
+                tolerance_days = 5
+            else:
+                tolerance_days = 3
+
+        is_clim = "clim" in model_label.lower()
+
+        html_parts.append(f"""
+        <div class="dist-card">
+            <div class="dist-header">{title_model} - {title_window}</div>
+            <div class="dist-subheader">+/{tolerance_days} day tolerance</div>
+            <table class="dist-table">
+                <thead>
+                    <tr>
+                        <th>METRIC</th>
+                        <th>MEAN</th>
+                        <th>MIN</th>
+                        <th>MEDIAN</th>
+                        <th>P75</th>
+                        <th>P90</th>
+                        <th>MAX</th>
+                        <th>UNIT</th>
+                    </tr>
+                </thead>
+                <tbody>
+        """)
+
+        for _, row in group_df.iterrows():
+            metric = row["Metric"]
+            is_fraction = bool(row.get("fraction", "rate" in metric.lower()))
+            unit_str = "fraction" if is_fraction else "days"
+
+            html_parts.append(f"<tr><td>{metric}</td>")
+
+            for stat in stat_cols:
+                val = row.get(stat, np.nan)
+                if pd.isna(val) or not np.isfinite(val):
+                    html_parts.append("<td>-</td>")
+                    continue
+
+                val_float = float(val)
+                val_str = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
+
+                # 1. Bold best (minimum) value
+                best_v = best_vals.get((window_label, metric, stat))
+                if best_v is not None and abs(val_float - best_v) < 1e-5:
+                    val_str = f"<b>{val_str}</b>"
+
+                # 2. Color code vs Climatology baseline
+                clim_v = clim_vals.get((window_label, metric, stat))
+                if is_clim or clim_v is None:
+                    cls_name = "val-neutral"
+                else:
+                    diff = val_float - clim_v
+                    if abs(diff) < 1e-5:
+                        cls_name = "val-neutral"
+                    elif diff < 0:
+                        cls_name = "val-better"  # Lower than climatology (Green)
+                    else:
+                        cls_name = "val-worse"   # Higher than climatology (Red)
+
+                html_parts.append(f'<td class="{cls_name}">{val_str}</td>')
+
+            html_parts.append(f"<td>{unit_str}</td></tr>")
+
+        html_parts.append("""
+                </tbody>
+            </table>
+        </div>
+        """)
+
+    return "".join(html_parts)
 
 # ======================================================================
 # Reference / Benchmark Outputs Helpers
@@ -1419,8 +1857,13 @@ def _onset_config_kwargs() -> Dict[str, Any]:
     return out
 
 
+
 @st.cache_data(show_spinner=False, ttl=600)
 def _discover_dataset_structure(obs_dir_path: str):
+    """
+    Cached dataset inspector: Scans files once every 10 minutes (ttl=600)
+    to prevent blocking the Streamlit main execution thread.
+    """
     if config.is_uri(obs_dir_path):
         try:
             file_paths = config.glob(obs_dir_path.rstrip("/") + "/*.nc")
@@ -1435,6 +1878,7 @@ def _discover_dataset_structure(obs_dir_path: str):
 
     for fp in file_paths:
         fname = Path(fp).name
+        # Find 4-digit years in filename (e.g., 1980–2030)
         matches = list(re.finditer(r"(19\d{2}|20\d{2})", fname))
         for m in matches:
             year = int(m.group(1))
@@ -1451,8 +1895,13 @@ def _discover_dataset_structure(obs_dir_path: str):
 
 @st.cache_data(show_spinner=False, ttl=600)
 def _prepare_local_obs_dir(remote_or_local_path: str) -> str:
+    """
+    Cached local dir preparer: Ensures local copies exist without 
+    re-downloading on every UI rerun.
+    """
     path_str = str(remote_or_local_path)
 
+    # 1. Check local data candidates first
     local_candidates = [
         Path(path_str) if not config.is_uri(path_str) else None,
         Path(getattr(config, "PROJECT_ROOT", ".")) / "data" / "external" / "CHIRPS_regridded_025",
@@ -1466,6 +1915,7 @@ def _prepare_local_obs_dir(remote_or_local_path: str) -> str:
             if list(cand.glob("*.nc")):
                 return str(cand.resolve())
 
+    # 2. Cache remote files locally if given a GCS URI
     if config.is_uri(path_str):
         cache_dir = Path(getattr(config, "PROJECT_ROOT", ".")) / "data" / "external" / "CHIRPS_cache"
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -1542,7 +1992,6 @@ def _available_years():
     base_kwargs, obs_dir = _get_onset_base_kwargs()
     _, years = _discover_dataset_structure(obs_dir)
     return years or list(range(2015, 2024))
-
 
 @st.cache_data(show_spinner=False, ttl=300)
 def _snap_to_grid(lat, lon, data_dir_str):
@@ -1668,6 +2117,7 @@ def _analyze_onset_streamlit(year, lat, lon):
     grid_lat, grid_lon = _snap_to_grid(lat, lon, str(CHIRPS_DIR))
     pngs: List[bytes] = []
 
+    # Clean kwargs to guarantee no duplicated year argument
     for k in ["year", "years", "lat", "lon", "lat_select", "lon_select"]:
         base_kwargs.pop(k, None)
 
@@ -1743,6 +2193,9 @@ def _locate_run_momp() -> Optional[Path]:
 
 
 def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
+    """
+    Run `argv` in `cwd` using posix_spawn on Unix to prevent memory fragmentation and fork-safety issues.
+    """
     import select
     import signal
     import time
@@ -2065,8 +2518,336 @@ def render_shared_settings(ground_truth: str = "CHIRPS") -> Dict[str, Any]:
     }
 
 
+# <<<<<<< HEAD
+# @st.dialog("Figure Inspector", width="large")
+# def _open_figure_modal(path_str: str) -> None:
+# =======
+# ======================================================================
+# PDF Report Helpers
+# ======================================================================
+def _pdf_safe_text(value: Any) -> str:
+    text = str(value)
+    replacements = {
+        "\u2013": "-", "\u2014": "-", "\u00b7": "-", "\u2713": "Yes",
+        "\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text.encode("latin-1", "ignore").decode("latin-1")
+
+
+def _normalize_dataframe_for_pdf(df: pd.DataFrame) -> pd.DataFrame:
+    if df is None or df.empty:
+        return pd.DataFrame()
+    out = pd.DataFrame(index=df.index)
+    seen = set()
+    for col in df.columns:
+        base = str(col).strip() or "column"
+        name = base
+        suffix = 1
+        while name in seen:
+            suffix += 1
+            name = f"{base}_{suffix}"
+        seen.add(name)
+
+        def _fmt(x):
+            try:
+                if pd.isna(x):
+                    return ""
+            except Exception:
+                pass
+            if isinstance(x, (int, np.integer)):
+                return str(int(x))
+            if isinstance(x, (float, np.floating)):
+                return f"{x:.3f}"
+            return str(x)
+
+        out[name] = df[col].map(_fmt)
+    return out
+
+
+class BenchmarkReportPDF(FPDF):
+    MIN_COL_WIDTH = 18
+
+    def _usable_width(self) -> float:
+        return getattr(self, "epw", self.w - self.l_margin - self.r_margin)
+
+    def header(self):
+        if self.page_no() > 1:
+            self.set_font("Helvetica", "B", 9)
+            self.set_text_color(15, 23, 42)
+            self.set_x(self.l_margin)
+            self.cell(0, 8, _pdf_safe_text("Forecast Benchmarking Report"))
+            self.ln(4)
+            self.set_draw_color(226, 232, 240)
+            self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+            self.ln(4)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font("Helvetica", "I", 8)
+        self.set_text_color(100, 116, 139)
+        self.set_x(self.l_margin)
+        self.cell(0, 10, f"Page {self.page_no()}", align="C")
+
+    def ensure_space(self, height: float = 12):
+        if self.get_y() + height > self.h - self.b_margin:
+            self.add_page()
+            self.set_x(self.l_margin)
+
+    def section_title(self, title: str):
+        self.ensure_space(18)
+        self.set_x(self.l_margin)
+        self.set_font("Helvetica", "B", 12)
+        self.set_text_color(15, 23, 42)
+        self.multi_cell(0, 7, _pdf_safe_text(title))
+        self.set_draw_color(59, 130, 246)
+        line_y = self.get_y() + 1
+        self.line(self.l_margin, line_y, self.l_margin + 45, line_y)
+        self.ln(4)
+
+    def sub_title(self, title: str):
+        self.ensure_space(12)
+        self.set_x(self.l_margin)
+        self.set_font("Helvetica", "B", 10)
+        self.set_text_color(30, 41, 59)
+        self.multi_cell(0, 6, _pdf_safe_text(title))
+        self.ln(1)
+
+    def paragraph(self, text: str):
+        self.ensure_space(10)
+        self.set_x(self.l_margin)
+        self.set_font("Helvetica", "", 9)
+        self.set_text_color(51, 65, 85)
+        self.multi_cell(0, 5, _pdf_safe_text(text))
+        self.ln(2)
+
+    def key_value_lines(self, items: List[tuple]):
+        for key, value in items:
+            self.ensure_space(8)
+            self.set_x(self.l_margin)
+            self.set_font("Helvetica", "", 9)
+            self.set_text_color(51, 65, 85)
+            self.multi_cell(0, 6, _pdf_safe_text(f"{key}: {value}"))
+
+    def _fit_text(self, text: str, width: float) -> str:
+        try:
+            text = _pdf_safe_text(text)
+        except Exception:
+            text = ""
+        if width <= 6 or not text:
+            return ""
+        max_width = max(1.0, width - 2)
+        try:
+            if self.get_string_width(text) <= max_width:
+                return text
+            while text and self.get_string_width(text + "..") > max_width:
+                text = text[:-1]
+            return text + ".." if text else ""
+        except Exception:
+            return ""
+
+    def dataframe_table(self, df: pd.DataFrame):
+        if df is None or df.empty:
+            return
+        table_df = _normalize_dataframe_for_pdf(df)
+        all_cols = [str(c) for c in table_df.columns]
+        if not all_cols:
+            return
+        usable_width = self._usable_width()
+        max_cols_per_table = max(1, int(usable_width // self.MIN_COL_WIDTH))
+        col_chunks = [all_cols[i:i + max_cols_per_table] for i in range(0, len(all_cols), max_cols_per_table)]
+        
+        for chunk_idx, cols in enumerate(col_chunks):
+            if not cols:
+                continue
+            if chunk_idx > 0:
+                self.ln(2)
+                self.set_x(self.l_margin)
+                self.set_font("Helvetica", "I", 7)
+                self.set_text_color(100, 116, 139)
+                start_col = chunk_idx * max_cols_per_table + 1
+                end_col = chunk_idx * max_cols_per_table + len(cols)
+                self.cell(0, 5, _pdf_safe_text(f"Table continued - columns {start_col} to {end_col}"))
+                self.ln(6)
+            n_cols = len(cols)
+            widths = [usable_width / n_cols] * n_cols
+            row_height = 6
+            header_font = 8 if n_cols <= 3 else (7 if n_cols <= 5 else 6)
+            body_font = 7 if n_cols <= 3 else (6 if n_cols <= 5 else 5)
+
+            def draw_header():
+                self.set_x(self.l_margin)
+                self.set_font("Helvetica", "B", header_font)
+                self.set_fill_color(241, 245, 249)
+                self.set_text_color(15, 23, 42)
+                for i, col_name in enumerate(cols):
+                    cell_width = widths[i]
+                    label = self._fit_text(col_name, cell_width) if cell_width > 6 else ""
+                    self.cell(cell_width, row_height + 1, label, border=1, align="C", fill=True)
+                self.ln(row_height + 1)
+
+            self.ensure_space(25)
+            draw_header()
+            self.set_font("Helvetica", "", body_font)
+            self.set_text_color(30, 41, 59)
+            for _, row in table_df.iterrows():
+                if self.get_y() + row_height > self.h - self.b_margin - 2:
+                    self.add_page()
+                    draw_header()
+                    self.set_font("Helvetica", "", body_font)
+                    self.set_text_color(30, 41, 59)
+                self.set_x(self.l_margin)
+                for i, col_name in enumerate(cols):
+                    cell_width = widths[i]
+                    txt = self._fit_text(row.get(col_name, ""), cell_width) if cell_width > 6 else ""
+                    self.cell(cell_width, row_height, txt, border=1)
+                self.ln(row_height)
+            self.ln(3)
+
+    def add_image_path(self, image_path: str, caption: str = ""):
+        image_path = Path(image_path)
+        if not image_path.exists():
+            return
+        try:
+            with Image.open(image_path) as img:
+                img_w, img_h = img.size
+            if img_w <= 0 or img_h <= 0:
+                return
+            usable_width = self._usable_width()
+            max_w = max(20, usable_width - 10)
+            target_h = max_w * img_h / img_w
+            if self.get_y() + target_h + 18 > self.h - self.b_margin:
+                self.add_page()
+            available_h = self.h - self.get_y() - self.b_margin - 18
+            if target_h > available_h and available_h > 10:
+                scale = available_h / target_h
+                target_w = max_w * scale
+                target_h = available_h
+            else:
+                target_w = max_w
+            if target_w < 15 or target_h < 15:
+                return
+            x = self.l_margin + (usable_width - target_w) / 2
+            start_y = self.get_y()
+            self.image(str(image_path), x=x, y=start_y, w=target_w, h=target_h)
+            self.set_y(start_y + target_h + 2)
+            self.set_x(self.l_margin)
+            if caption:
+                self.set_font("Helvetica", "I", 8)
+                self.set_text_color(71, 85, 105)
+                self.multi_cell(0, 5, _pdf_safe_text(caption), align="C")
+                self.ln(4)
+        except Exception:
+            self.paragraph(f"Could not embed image: {image_path.name}")
+
+
+def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
+    pdf = BenchmarkReportPDF(orientation="L", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.add_page()
+
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_text_color(15, 23, 42)
+    pdf.set_x(pdf.l_margin)
+    pdf.multi_cell(0, 12, "Forecast Benchmarking Report", align="C")
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(71, 85, 105)
+    pdf.set_x(pdf.l_margin)
+    pdf.multi_cell(0, 7, _pdf_safe_text(context.get("generated_at", "")), align="C")
+    pdf.ln(6)
+
+    pdf.section_title("Executive Summary")
+    active_rows = context.get("active_rows", [])
+    shared_settings = context.get("shared_settings", {})
+    det_count = sum(1 for r in active_rows if r.get("Category") == "Deterministic")
+    prob_count = sum(1 for r in active_rows if r.get("Category") == "Probabilistic")
+    pdf.key_value_lines([
+        ("Ground Truth", context.get("ground_truth", "")),
+        ("Benchmark Coverage", context.get("benchmark_coverage", "")),
+        ("Forecast Window", context.get("forecast_window", "")),
+        ("Baseline Forecast", shared_settings.get("baseline_forecast", "climatology")),
+        ("Models Evaluated", len(active_rows)),
+        ("Deterministic Models", det_count),
+        ("Probabilistic Models", prob_count),
+    ])
+
+    if active_rows:
+        models_df = pd.DataFrame([
+            {
+                "Model": r.get("Model", ""),
+                "Category": r.get("Category", ""),
+                "Type": r.get("Type", ""),
+                "Coverage": r.get("Coverage", ""),
+                "Date Range": r.get("Date Range", ""),
+            }
+            for r in active_rows
+        ])
+        if not models_df.empty:
+            pdf.section_title("Models Evaluated")
+            pdf.dataframe_table(models_df)
+
+    if shared_settings:
+        pdf.section_title("Shared Settings")
+        pdf.key_value_lines([(str(k).replace("_", " ").title(), v) for k, v in shared_settings.items()])
+
+    map_outputs = context.get("map_outputs", [])
+    if map_outputs:
+        outputs_df = pd.DataFrame([
+            {
+                "Model": o.get("model_label", ""),
+                "Windows": ", ".join(o.get("windows", [])),
+                "File": Path(o.get("path", "")).name,
+            }
+            for o in map_outputs
+        ])
+        if not outputs_df.empty:
+            pdf.section_title("Available Model Outputs")
+            pdf.dataframe_table(outputs_df)
+
+    scores_df = context.get("scores_df")
+    if scores_df is not None and not scores_df.empty:
+        pdf.section_title("Verification Scores")
+        pdf.dataframe_table(scores_df)
+
+    distribution_stats = context.get("distribution_stats")
+    if distribution_stats is not None and not distribution_stats.empty:
+        pdf.section_title("Detailed Metric Distributions")
+        pdf.dataframe_table(distribution_stats)
+
+    figures = context.get("figures", {})
+    has_figures = any(paths for paths in figures.values())
+    if has_figures:
+        pdf.section_title("Benchmark Output Figures")
+        for category, paths in figures.items():
+            if not paths:
+                continue
+            pdf.sub_title(category)
+            type_groups: Dict[str, List[str]] = {}
+            for path_str in paths:
+                path = Path(path_str)
+                if not path.exists():
+                    continue
+                ftype = classify_figure_type(path.name)
+                type_groups.setdefault(ftype, []).append(str(path))
+            for ftype, fpaths in type_groups.items():
+                pdf.paragraph(f"{ftype} ({len(fpaths)})")
+                for path_str in fpaths:
+                    pdf.add_image_path(path_str, format_figure_label(path_str))
+
+    pdf.section_title("Notes")
+    pdf.paragraph(
+        "This report was generated automatically from the benchmark dashboard. "
+        "Metrics are computed from model output files available at generation time."
+    )
+
+    return bytes(pdf.output())
+
 @st.dialog("Figure Inspector", width="large")
 def _open_figure_modal(path_str: str) -> None:
+    """
+    Modal overlay dialog for high-resolution figure viewing and direct downloading.
+    """
     path = Path(path_str)
     if path.exists() and path.stat().st_size > 0:
         st.image(str(path), use_container_width=True)
@@ -2089,6 +2870,10 @@ def render_benchmark_figure_with_download(
     key_suffix: str = "", 
     enable_zoom: bool = True
 ) -> None:
+    """
+    Safely renders a benchmark figure thumbnail with embedded Download 
+    and Zoom/Expand modal trigger buttons.
+    """
     path = Path(path_str)
 
     if not path.exists() or path.stat().st_size == 0:
@@ -2102,6 +2887,7 @@ def render_benchmark_figure_with_download(
         with open(path, "rb") as f:
             img_bytes = f.read()
 
+        # Action bar: Download and Zoom controls side-by-side
         btn_col1, btn_col2 = st.columns([1, 1])
 
         with btn_col1:
@@ -2124,8 +2910,6 @@ def render_benchmark_figure_with_download(
                     _open_figure_modal(str(path))
     except Exception as e:
         st.warning(f"Could not display figure {path.name}: {type(e).__name__} - {e}")
-
-
 # ======================================================================
 # Main Page
 # ======================================================================
@@ -2365,6 +3149,8 @@ def page() -> None:
                     mm = MAP_METRICS[ml]
                     sub_tabs = st.tabs(["Values", "Skill", "Difference", "Swipe Compare"])
                     
+
+                    # Sub-tab 1: Values
                     with sub_tabs[0]:
                         fig = plot_map(
                             base_da, 
@@ -2492,6 +3278,8 @@ def page() -> None:
                                         vmax=vmax,
                                         admin_gdf=admin_sub
                                     )
+                                    lf = plot_map(base_da, f"Left: {model_label} ({wl})", cmap=mm["cmap"], unit=mm["unit"], vmin=vmin, vmax=vmax)
+                                    rf = plot_map(rda, f"Right: {rm} ({rw})", cmap=mm["cmap"], unit=mm["unit"], vmin=vmin, vmax=vmax)
                                     
                                     if lf and rf:
                                         lb = fig_to_bytes(lf, False)
@@ -2529,11 +3317,14 @@ def page() -> None:
         st.caption(
             "Distribution statistics computed directly from gridded model outputs. "
             "Green = better than baseline, Red = worse than baseline. Bold = best value."
+            "Green = better (lower than baseline), Red = worse (higher than baseline). Bold = best value."
+
         )
         stats_df = compute_metric_distribution_stats()
         if stats_df.empty:
             info_box("No distribution statistics could be computed from the available outputs.", "amber")
         else:
+
             def _norm(s):
                 return str(s).replace("–", "-").strip().lower()
 
@@ -2649,7 +3440,135 @@ def page() -> None:
                 html_blocks.append(card_html)
                 
             st.markdown("".join(html_blocks), unsafe_allow_html=True)
+            # Normalize string helper to prevent Unicode en-dash / hyphen key lookup misses
+            def _norm(s):
+                return str(s).replace("–", "-").strip().lower()
 
+            stat_cols = ["Mean", "Min", "Median", "P75", "P90", "Max"]
+            
+            # Pre-calculate Climatology baseline & Minimum (Best) values
+            best_vals = {}
+            baseline_vals = {}
+            
+            for (window, metric), g in stats_df.groupby(["Lead Window", "Metric"]):
+                win_k = _norm(window)
+                met_k = _norm(metric)
+                
+                # Check for Climatology / Baseline model
+                clim_mask = g["Model"].apply(lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))
+                clim_row = g[clim_mask]
+                
+                for stat in stat_cols:
+                    stat_k = _norm(stat)
+                    vals = pd.to_numeric(g[stat], errors="coerce").dropna()
+                    
+                    if not vals.empty:
+                        best_vals[(win_k, met_k, stat_k)] = float(vals.min())
+                        
+                    if not clim_row.empty:
+                        clim_v = pd.to_numeric(clim_row[stat], errors="coerce").dropna()
+                        if not clim_v.empty:
+                            baseline_vals[(win_k, met_k, stat_k)] = float(clim_v.iloc[0])
+                    elif not vals.empty:
+                        # Fallback baseline if no explicit Climatology row exists
+                        baseline_vals[(win_k, met_k, stat_k)] = float(vals.mean())
+
+            # Sort ordering
+            metric_order = {"false alarm rate": 0, "miss rate": 1, "mean absolute error": 2}
+            model_order = {"aifs single v2": 0, "fuxi": 1, "graphcast": 2, "aifs ensemble v2": 3, "gencast": 4, "traditional climatology": 5, "climatology": 5}
+            window_order = {"days 1-15": 0, "days 16-30": 1}
+            
+            df_sorted = stats_df.copy()
+            df_sorted["metric_sort"] = df_sorted["Metric"].apply(lambda m: metric_order.get(_norm(m), 999))
+            df_sorted["model_sort"] = df_sorted["Model"].apply(lambda m: model_order.get(_norm(m), 999))
+            df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lambda w: window_order.get(_norm(w), 999))
+            df_sorted = df_sorted.sort_values(["model_sort", "window_sort", "metric_sort"])
+
+            html_blocks = []
+            for (model_label, window_label), group_df in df_sorted.groupby(["Model", "Lead Window"], sort=False):
+                win_k = _norm(window_label)
+                is_clim = any(k in _norm(model_label) for k in ["clim", "trad", "base", "ref"])
+                
+                display_model = "CLIMATOLOGY" if is_clim else str(model_label).replace(" ", "_").upper()
+                display_window = str(window_label).upper()
+                tolerance_days = 5 if "16" in win_k else 3
+                
+                rows_html = []
+                for _, row in group_df.iterrows():
+                    metric = str(row["Metric"])
+                    met_k = _norm(metric)
+                    is_fraction = bool(row.get("fraction", False)) or any(k in met_k for k in ["rate", "far", "mr"])
+
+                    cells_html = [f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; font-weight:600; background-color:#ffffff; color:#0f172a;">{metric}</td>']
+                    
+                    for stat in stat_cols:
+                        stat_k = _norm(stat)
+                        val = row.get(stat, np.nan)
+                        
+                        if pd.isna(val) or not np.isfinite(val):
+                            cells_html.append('<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:#ffffff; color:#94a3b8;">-</td>')
+                            continue
+
+                        val_float = float(val)
+                        formatted = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
+
+                        # Apply bolding if minimum value across models
+                        best_v = best_vals.get((win_k, met_k, stat_k))
+                        if best_v is not None and abs(val_float - best_v) <= 1e-5:
+                            formatted = f"<b>{formatted}</b>"
+
+                        # Explicit color coding vs baseline
+                        base_v = baseline_vals.get((win_k, met_k, stat_k))
+                        
+                        if is_clim or base_v is None:
+                            bg_color = "#f1f5f9"
+                            text_color = "#334155"
+                            font_weight = "normal"
+                        else:
+                            diff = val_float - base_v
+                            if abs(diff) <= 1e-5:
+                                bg_color = "#f1f5f9"
+                                text_color = "#334155"
+                                font_weight = "normal"
+                            elif diff < 0:
+                                # LOWER than baseline = BETTER (Green)
+                                bg_color = "#dcfce7"
+                                text_color = "#15803d"
+                                font_weight = "600"
+                            else:
+                                # HIGHER than baseline = WORSE (Red)
+                                bg_color = "#fee2e2"
+                                text_color = "#b91c1c"
+                                font_weight = "normal"
+
+                        cell_style = f"border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:{bg_color} !important; color:{text_color} !important; font-weight:{font_weight};"
+                        cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
+                        
+                    unit_str = "fraction" if is_fraction else "days"
+                    cells_html.append(f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; color:#64748b; background-color:#ffffff;">{unit_str}</td>')
+                    rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+                    
+                card_html = (
+                    f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
+                    f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">{display_model} - {display_window}</div>'
+                    f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">+/-{tolerance_days} day tolerance</div>'
+                    f'<table style="width:100%; border-collapse:collapse; font-size:0.88rem;">'
+                    f'<thead><tr style="background-color:#f1f5f9; color:#0f172a; text-transform:uppercase; font-size:0.8rem;">'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left;">METRIC</th>'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEAN</th>'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MIN</th>'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEDIAN</th>'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P75</th>'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P90</th>'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MAX</th>'
+                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center;">UNIT</th>'
+                    f'</tr></thead><tbody>'
+                    f'{"".join(rows_html)}'
+                    f'</tbody></table></div>'
+                )
+                html_blocks.append(card_html)
+                
+            st.markdown("".join(html_blocks), unsafe_allow_html=True)
     # Tab 3: Benchmark Outputs
     with res_tabs[2]:
         st.markdown("MOMP benchmark output figures and datasets.")
@@ -2658,32 +3577,46 @@ def page() -> None:
         if not momp_figures:
             info_box("No MOMP output figures found. Run a benchmark first.", "amber")
         else:
+            # Gather non-empty categories
             avail_cats = [cat for cat in REFERENCE_CATEGORY_ORDER if momp_figures.get(cat)]
             if not avail_cats:
                 avail_cats = [cat for cat, paths in momp_figures.items() if paths]
 
+            # Dropdown & Layout Controls Row
             fc1, fc2, fc3, fc4 = st.columns([1.2, 1.2, 1.5, 1.0])
 
-            selected_cat = fc1.selectbox("Category", ["All Categories"] + avail_cats, key="fig_sel_cat")
+            selected_cat = fc1.selectbox(
+                "Category", 
+                ["All Categories"] + avail_cats, 
+                key="fig_sel_cat"
+            )
 
+            # Filter paths by category
             if selected_cat == "All Categories":
                 cat_paths = [p for paths in momp_figures.values() for p in paths]
             else:
                 cat_paths = momp_figures.get(selected_cat, [])
 
+            # Group paths by figure type for second dropdown
             type_groups: Dict[str, List[str]] = {}
             for path_str in cat_paths:
                 ftype = classify_figure_type(Path(path_str).name)
                 type_groups.setdefault(ftype, []).append(path_str)
 
             avail_types = sorted(type_groups.keys())
-            selected_type = fc2.selectbox("Figure Type", ["All Figure Types"] + avail_types, key="fig_sel_type")
+            selected_type = fc2.selectbox(
+                "Figure Type", 
+                ["All Figure Types"] + avail_types, 
+                key="fig_sel_type"
+            )
 
+            # Filter paths by figure type
             if selected_type == "All Figure Types":
                 filtered_paths = cat_paths
             else:
                 filtered_paths = type_groups.get(selected_type, [])
 
+            # Map formatted human labels back to file paths
             label_to_path: Dict[str, str] = {}
             fig_options = ["Show All Figures in Selection"]
             for p in filtered_paths:
@@ -2693,11 +3626,22 @@ def page() -> None:
                 label_to_path[lbl] = p
                 fig_options.append(lbl)
 
-            selected_fig_label = fc3.selectbox("Select Figure", fig_options, key="fig_sel_item")
-            view_mode = fc4.radio("Layout View", ["Grid", "Full Width"], horizontal=True, key="fig_view_mode")
+            selected_fig_label = fc3.selectbox(
+                "Select Figure", 
+                fig_options, 
+                key="fig_sel_item"
+            )
+
+            view_mode = fc4.radio(
+                "Layout View",
+                ["Grid", "Full Width"],
+                horizontal=True,
+                key="fig_view_mode",
+            )
 
             st.divider()
 
+            # Render single selected figure or batch selection according to view mode
             if selected_fig_label != "Show All Figures in Selection":
                 target_path = label_to_path.get(selected_fig_label)
                 if target_path:
@@ -2712,7 +3656,7 @@ def page() -> None:
                         for idx, p in enumerate(filtered_paths):
                             render_benchmark_figure_with_download(p, key_suffix=f"full_{idx}")
                             st.divider()
-                    else:
+                    else:  # Grid View (2 Columns)
                         for i in range(0, len(filtered_paths), 2):
                             cols = st.columns(2)
                             for j, col in enumerate(cols):
@@ -2731,6 +3675,7 @@ def page() -> None:
             sel = st.selectbox("Dataset", nc_files, format_func=format_nc_label, key="nc_explorer_sel")
             try:
                 ds = _safe_open_dataset(sel)
+                # Filter out coordinate variables or time-only bounds
                 vars_list = [v for v in ds.data_vars if "time" not in v.lower() and "bounds" not in v.lower()]
                 if vars_list:
                     vn = st.selectbox("Variable", vars_list, key="nc_explorer_var")
@@ -2741,7 +3686,6 @@ def page() -> None:
                 info_box(f"Could not open dataset: {e}", "amber")
         else:
             info_box("No reference datasets available.", "amber")
-
     # Tab 4: Onset Analysis
     if OTS_AVAILABLE and "Onset Analysis" in tab_labels:
         with res_tabs[tab_labels.index("Onset Analysis")]:

@@ -349,35 +349,115 @@ python runners/fgn_convert.py --date 2024-10-08
 - **Model variant**: `WeatherNextCyclones_Mini` (1° resolution, the only Mini weights published).
 - **Full 0.25° model**: Does not fit in Spark memory.
 
-## 7. ROMP/MOMP Benchmarking Configuration
+## 7. ROMP/MOMP Benchmarking Environment & Execution
 
-The ROMP (Rainy season Onset Metrics Package) pipeline has its own configuration system.
+The ROMP/MOMP (Rainy season Onset Metrics Package) benchmarking pipeline is fully containerized using Docker to eliminate complex driver and Python dependency setup. All underlying tools—including the `momp-run` CLI engine and `run_momp.py` execution wrapper—are pre-installed and GPU-accelerated inside the runtime container.
 
-### 7.1 Installation
+---
 
-Install ROMP and its dependencies:
+### 7.1 Docker Stack Setup & Connection
 
+1. **SSH into the server** (from your local terminal):
 ```bash
-# From the ai_weather root directory
-uv pip install pyproject.toml
+ssh <you>@country-spark
+
 ```
 
-This installs the `momp-run` command-line tool and all required dependencies for running onset benchmarks.
 
-> #### Installation Verification
->
-> After installation, verify that `momp-run` is available:
->
-> ```bash
-> momp-run --help
-> ```
->
-> This should display the command-line options for the ROMP runner.
-{: .tip}
+2. **Clone the repository and navigate to the project root**:
+```bash
+git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026
 
-### 7.2 Configuration File Structure
+```
 
-ROMP uses configuration files (e.g., `notebooks/config_et.in`) to define:
+
+3. **Initialize environment configuration**:
+```bash
+cp .env.example .env
+cat <<EOF > .env
+DEMO_BUCKET=<bucket>/demo
+DEMO3_BUCKET=<bucket>/demo3
+DEMO4_BUCKET=<bucket>/demo4
+EOF
+
+```
+
+
+4. **Launch the container stack**:
+```bash
+bash docker/run.sh rebuild
+
+```
+
+
+> #### Fast Container Start
+> 
+> 
+> Rebuilding (`rebuild`) is only necessary when modifying system-level Docker layers. For daily runs or live development, use:
+> * `bash docker/run.sh start` — Fast startup using cached build layers.
+> * `DEV=1 bash docker/run.sh start` — Mounts host source code directly for real-time edits without rebuilding.
+> {: .tip}
+> 
+> 
+
+
+5. **Create the SSH tunnel** (run in a new terminal window on your local machine):
+```bash
+ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
+
+```
+
+
+6. **Access web interfaces**:
+* **Streamlit Benchmarking UI**: `http://localhost:8501`
+* **Jupyter Lab Workstation**: `http://localhost:8888`
+
+
+
+---
+
+### 7.2 Command-Line Execution (`run_momp.py`)
+
+The `run_momp.py` script serves as the unified execution engine for ROMP/MOMP. It wraps `momp-run`, managing model configurations, GCS data streaming, GPU acceleration, and logging for both terminal and Streamlit workflows.
+
+#### Step 1: Access the Container Environment
+
+Enter the active container's interactive shell:
+
+```bash
+docker exec -it ai_weather bash
+
+```
+
+
+
+#### Step 2: Install missing library if any
+
+* **Run a Specific Deterministic Model** (e.g., GraphCast, FuXi, AIFS Single v2):
+```bash
+uv pip install hd5py
+
+```
+
+
+
+#### Step 3: Execute Benchmark Runs
+
+* **Run a Specific Deterministic Model** (e.g., GraphCast, FuXi, AIFS Single v2):
+```bash
+python run_momp.py --mode det --model GraphCast
+
+```
+
+
+
+> #### Output Persistence
+> 
+> 
+> All benchmark results (spatial 2D maps, CSV skill tables, and NetCDF metric grids) generated inside `/app/ai_weather/data/ROMP_OUT/` are automatically mirrored to `./ai_weather/data/ROMP_OUT/` on your host server.
+> {: .note}
+
 
 | Parameter | Example Value | Purpose |
 | --- | --- | --- |

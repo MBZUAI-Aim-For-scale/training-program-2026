@@ -28,12 +28,73 @@ keypoints:
 
 This lesson documents the complete ROMP (Rainy season Onset Metrics Package) / MOMP benchmarking workflow. It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCast, AIFS-ENS) against observational rainfall data (e.g., CHIRPS, ENACTS) for rainy season onset in Ethiopia's Kiremt season, and it is designed to transfer to other regions and seasons.
 
+
 > #### Prerequisites
 > 
-> - Complete the environment setup in [Demo 1: Setting Up AI Weather Forecasting Lab](/ai_weather/01-setup/) before proceeding.
-> - ROMP must be installed (`uv pip install pyproject.toml`). See [Demo 1, Section 7](/ai_weather/01-setup#7-rompmomp-benchmarking-configuration).
-> - Familiarity with the Demo 3 Streamlit interface and NetCDF output format.
-{: .prereq}
+> * Complete the Docker container setup in [Demo 1: Setting Up AI Weather Forecasting Lab](https://www.google.com/search?q=/training-program-2026/01-setup/) before proceeding.
+> * The container stack must be running (`bash docker/run.sh start`). ROMP and all model environments are pre-installed inside the container.  See [Demo 1, Section 7](/training-program-2026/01-setup#7-rompmomp-benchmarking-configuration).
+> * Familiarity with the Demo 3 Streamlit interface (`http://localhost:8501`) and NetCDF output format.
+> {: .prereq}
+
+
+## Environment Setup
+
+1. **SSH into the server** (from your local machine)
+
+
+```{bash}
+ssh <you>@country-spark
+
+```
+
+
+2. **Clone the repository and navigate to the project directory**
+
+```{bash}
+git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026
+
+```
+
+
+3. **Initialize environment configuration**
+
+```{bash}
+cp .env.example .env
+cat <<EOF > .env
+DEMO_BUCKET=<bucket>/demo
+DEMO3_BUCKET=<bucket>/demo3
+DEMO4_BUCKET=<bucket>/demo4
+EOF
+
+```
+
+
+4. **Start the container stack**
+
+```{bash}
+bash docker/run.sh rebuild
+
+```
+
+
+*(For subsequent runs without rebuilding, use `bash docker/run.sh start`, or `DEV=1 bash docker/run.sh start` for live host code mounting).*
+
+5. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
+
+```{bash}
+ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
+
+```
+
+*(Leave this terminal window open while working).*
+
+6. **Access dashboards**:
+
+* **Streamlit UI**: `http://localhost:8501`
+
+
+
 
 ## Learning Objectives
 
@@ -95,17 +156,6 @@ We want your feedback, in person and online, to improve this package.
 | Region-agnostic detection | The same detection code runs for any domain and season window. |
 | Lead-time evaluation | Skill is reported per verification window and per lead-time bin. |
 | Configuration-driven experiments | Each run is fully described by its config file, so results can be reproduced. |
-
-### ROMP Workflow
-
-```
-config file  ->  load observations + model reforecasts
-             ->  apply the SAME onset definition to both
-             ->  match forecast onset to observed onset (per grid cell, per year, per init date)
-             ->  compute metrics (DET or PROB track)
-             ->  skill scores vs. climatology (or a named reference model)
-             ->  maps, tables, heatmaps and reliability diagrams
-```
 
 ### ROMP Specifications
 
@@ -274,63 +324,92 @@ Two verification windows are evaluated for each model to assess short-lead versu
 | Days 1–15 after initialization | 15 days | 3 days |
 | Days 16–30 after initialization | 15 days | 5 days |
 
-## Running ROMP Benchmarks
 
-### Command-Line Execution
+## Command-Line Execution (`run_momp.py`)
 
-ROMP benchmarks are executed using the `momp-run` command:
+The `run_momp.py` script serves as the core execution engine for ROMP/MOMP benchmarking. It acts as the high-level Python wrapper for `momp-run`, powering both headless command-line workflows and the backend of the interactive Streamlit dashboard.
 
-```bash
-# Deterministic evaluation
-momp-run -p notebooks/config.in --mode det
+---
 
-# Probabilistic evaluation
-momp-run -p notebooks/config.in --mode prob
+### Step 1: Access the Container Environment
+
+You can run benchmarks interactively inside the running container or execute single-line commands directly from the host server terminal.
+
+#### Option A: Interactive Shell (Recommended)
+
+Enter the container's interactive `bash` shell to run multiple commands sequentially:
+
+```{bash}
+docker exec -it ai_weather bash
+
 ```
 
-> #### Track Separation
+#### Option B: One-Line Host Execution
+
+Execute a benchmark directly from the host without staying inside the container shell:
+
+```{bash}
+docker exec -it ai_weather python run_momp.py --mode det --model GraphCast
+
+```
+
+
+### Step 2: Model Execution Syntax
+
+`run_momp.py` supports targeted single-model benchmarks as well as full multi-model batch evaluations across deterministic and probabilistic tracks.
+
+#### 1. Single Model Execution
+
+Specify the target model using the `--model` flag alongside the corresponding evaluation track:
+
+* **Deterministic Track** (e.g., GraphCast, FuXi, AIFS Single v2)
+
+```{bash}
+docker exec -it ai_weather python run_momp.py --mode det --model AIFS
+
+```
+
+
+* **Probabilistic / Ensemble Track** (e.g., AIFS Ensemble v2, GenCast):
+
+```{bash}
+python run_momp.py --mode prob --model AIFS_ENS
+
+```
+
+
+
+#### 2. Full Batch Execution (All Models)
+
+Omitting the `--model` argument triggers batch evaluation across all registered models for that specific mode:
+
+* **Batch All Deterministic Models**:
+
+```{bash}
+python run_momp.py --mode det
+
+```
+
+
+* **Batch All Probabilistic Models**:
+
+```{bash}
+python run_momp.py --mode prob
+
+```
+
+### Benchmark Track Reference
+
+| Flag | Track Mode | Target Models | Output Metric Focus |
+| --- | --- | --- | --- |
+| `--mode det` | **Deterministic** | `GraphCast`, `FuXi`, `AIFS2` | MAE, RMSE, Pearson Correlation, False Alarm Rate, Miss Rate |
+| `--mode prob` | **Probabilistic** | `AIFS_ENS`, `GenCast` | CRPS, Spread-Skill Ratio, Reliability Diagrams, PIT Histograms |
+
+> #### Architecture Note
 > 
-> Deterministic and probabilistic tracks use non-comparable metric families and must never be mixed within a single evaluation run. Always specify the mode explicitly with `--mode det` or `--mode prob`.
-{: .warning}
-
-### Configuration Options
-
-The `-p` flag specifies the path to your configuration file. Common configuration files:
-
-| Config File | Purpose |
-| --- | --- |
-| `notebooks/config_et.in` | Ethiopia Kiremt season benchmark |
-| `notebooks/config_in.in` | India monsoon benchmark |
-
-### Output Location
-
-Results are written to the `data/ROMP_OUT/` directory, organized by:
-
-- Country/region code (e.g., `et/` for Ethiopia)
-- Output subdirectory containing:
-  - Spatial metric maps (PNG)
-  - Skill score tables (CSV)
-  - Reliability diagrams (PNG)
-  - NetCDF files with gridded metrics
-
-### Example Workflow
-
-```bash
-# 1. Navigate to the ai_weather directory
-cd ai_weather
-
-# 2. Run deterministic benchmark for Ethiopia
-momp-run -p notebooks/config.in --mode det
-
-# 3. Check results
-ls data/ROMP_OUT/et/output/
-
-# 4. Run probabilistic benchmark
-momp-run -p notebooks/config.in --mode prob
-
-# 5. View probabilistic results
-ls data/ROMP_OUT/et/output/*AIFS_ENS*.csv
-```
+> 
+> `run_momp.py` shares the exact same logging, configuration parsing, and NetCDF output pipeline as the Streamlit UI. Running a benchmark via CLI will make its generated metrics, spatial maps, and output tables instantly available in the Streamlit dashboard (`http://localhost:8501`).
+> {: .tip}
 
 > #### Troubleshooting
 > 
@@ -339,18 +418,35 @@ ls data/ROMP_OUT/et/output/*AIFS_ENS*.csv
 
 ## Deterministic Evaluation
 
-### ROMP Run Summary
+### ROMP Benchmark Execution Summary
 
-- **Package**: Rainy Season Onset Metrics Package (ROMP), v0.0.1
-- **Run Mode**: Deterministic (`DET`)
-- **Project**: Test ROMP run with sample data
-- **Start Time**: 2026-09-28 13:42:33
-- **Models Evaluated**: AIFS, FuXi, GraphCast
-- **Reference Dataset**: ENACTS
-- **Evaluation Years**: 2015–2022
-- **Computational Resources**: 6 cores (of 10 available CPUs)
-- **Spatial Grid**: 49 latitudes × 61 longitudes at 0.2° resolution
-- **Spatial Products Generated**: FAR, Miss Rate, yearly MAE, and mean MAE maps (Note: CMZ averages were not calculated as 0.2° resolution is unsupported for this specific aggregation).
+> #### Execution Metadata
+> 
+> 
+> * **Framework & Version**: Rainy Season Onset Metrics Package (ROMP / MOMP), v0.0.1
+> * **Execution Runtime**: Docker Container (`ai_weather` stack on NVIDIA DGX Spark)
+> * **Evaluation Track**: Deterministic (`--mode det`)
+> * **Target Models**: `AIFS`, `FuXi`, `GraphCast`
+> * **Ground Truth Reference**: ENACTS
+> * **Evaluation Window**: 2015–2022
+> * **Compute Allocation**: Containerized Multiprocessing (6 Cores of 10 available host CPUs, GPU acceleration enabled)
+> * **Spatial Domain**: 49 latitudes × 61 longitudes at 0.2° grid resolution
+> * **Output Artifacts**: Spatial 2D maps (FAR, Miss Rate, Yearly MAE, Mean MAE) & gridded NetCDF files (`.nc`)
+> 
+> 
+> *Note: CMZ (Climatological Micro-Zone) spatial averages were bypassed as 0.2° resolution is unsupported for this specific aggregation.*
+> {: .note}
+
+---
+
+### Key Execution Parameters
+
+| Field | Configuration Detail |
+| --- | --- |
+| **Start Time** | `2026-09-28 13:42:33 UTC` |
+| **Output Path** | `/app/ai_weather/data/ROMP_OUT/` (Mounted to host `./ai_weather/data/ROMP_OUT/`) |
+| **Execution Script** | `python run_momp.py --mode det` |
+
 
 ### How to Read the Spatial Metric Maps
 
@@ -366,6 +462,9 @@ For each model and verification window the pipeline writes a three-panel map (`s
 > 
 > Blank (white) grid cells inside the country outline mean the metric is undefined there (for example, no matched onset events, so MAE cannot be computed). Blank does not mean "perfect". Compare each model against the climatology reference maps (Figures 5a–5b) before drawing conclusions.
 {: .warning}
+
+
+
 
 ### AIFS Results
 
