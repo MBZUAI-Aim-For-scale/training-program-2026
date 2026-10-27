@@ -13,8 +13,7 @@ One NetCDF file per run, global field (regions are cropped at plot time):
     z500      geopotential at 500 hPa [m2 s-2]
 
 Coordinates also carry `valid_time` (datetime64 along lead_time) and a scalar
-`init_time`. Global attributes: model, model_name, init_source, members,
-synthetic (0/1), created.
+`init_time`. Global attributes: model, model_name, init_source, members, created.
 """
 from __future__ import annotations
 
@@ -42,7 +41,7 @@ def standardize(ds: xr.Dataset) -> xr.Dataset:
 
 
 def finalize(ds: xr.Dataset, *, model_key: str, model_name: str, init: pd.Timestamp,
-             init_source: str, synthetic: bool = False) -> xr.Dataset:
+             init_source: str) -> xr.Dataset:
     ds = standardize(ds)
     if not set(VARIABLES) & set(ds.data_vars):
         raise ValueError("runner output contains none of the expected variables")
@@ -65,7 +64,7 @@ def finalize(ds: xr.Dataset, *, model_key: str, model_name: str, init: pd.Timest
     )
     ds.attrs.update(
         model=model_key, model_name=model_name, init_source=init_source,
-        members=int(ds.sizes["ensemble"]), synthetic=int(synthetic),
+        members=int(ds.sizes["ensemble"]),
         missing_variables=",".join(missing),
         created=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )

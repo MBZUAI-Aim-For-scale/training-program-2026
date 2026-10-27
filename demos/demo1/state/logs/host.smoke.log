@@ -10,6 +10,193 @@ try:
 except Exception as e:
     print("SMOKE flash_attn unavailable:", e)
 
+Unable to find image 'nvcr.io/nvidia/pytorch:25.03-py3' locally
+25.03-py3: Pulling from nvidia/pytorch
+2cc418b42d5d: Pulling fs layer
+99bf4d75d53b: Pulling fs layer
+56e1b89a5698: Pulling fs layer
+69fbe38eb239: Pulling fs layer
+fb84f81d011a: Pulling fs layer
+5b17151e9710: Pulling fs layer
+95aee456ddeb: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+69458d2612d2: Pulling fs layer
+58f537c310dd: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+488546d79be9: Pulling fs layer
+5a59de1077ef: Pulling fs layer
+64e6149c87b6: Pulling fs layer
+f9128797ec9a: Pulling fs layer
+a79115e426a0: Pulling fs layer
+141529ee388c: Pulling fs layer
+76f12d4f9876: Pulling fs layer
+54c41548ff48: Pulling fs layer
+9347d2c6b88f: Pulling fs layer
+db9595573c66: Pulling fs layer
+0ea8e595bfa5: Pulling fs layer
+401f24ce4f44: Pulling fs layer
+3e9c152cbbba: Pulling fs layer
+8c7ddd46b4d3: Pulling fs layer
+082efba21e48: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+abea52fb7ba8: Pulling fs layer
+e93efb287e09: Pulling fs layer
+e40082895cb8: Pulling fs layer
+7c0a34154a13: Pulling fs layer
+53e2b830a814: Pulling fs layer
+db9ae5b42936: Pulling fs layer
+96fe4dc0d6ef: Pulling fs layer
+1fa31fff18ed: Pulling fs layer
+f3922fed5b1c: Pulling fs layer
+ff0dc5c9aede: Pulling fs layer
+23a0ad37f5b3: Pulling fs layer
+f71c5d44674e: Pulling fs layer
+b4e2180b3ace: Pulling fs layer
+9330e7096a34: Pulling fs layer
+a5aa6a28afbc: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+57a015cda828: Pulling fs layer
+7183c7fdc740: Pulling fs layer
+7e7803cd40b7: Pulling fs layer
+0d657f76b5ae: Pulling fs layer
+ebce38133960: Pulling fs layer
+7a3e5d6a8cb7: Pulling fs layer
+d18146a222f0: Pulling fs layer
+ee101c9665e9: Pulling fs layer
+304c1a4e8506: Pulling fs layer
+f0a415162e30: Pulling fs layer
+45dd1a4ab662: Pulling fs layer
+787eeb4d2148: Pulling fs layer
+ceb4da2a45e5: Pulling fs layer
+ae70b7a0d48d: Pulling fs layer
+e4d2ebfddfbe: Pulling fs layer
+65280a51cc29: Pulling fs layer
+469d3777deed: Pulling fs layer
+e897ed52fae7: Pulling fs layer
+416eac053621: Pulling fs layer
+7a2b2f818ff4: Pulling fs layer
+abea52fb7ba8: Already exists
+ae70b7a0d48d: Already exists
+7e7803cd40b7: Already exists
+69458d2612d2: Already exists
+ee101c9665e9: Already exists
+9347d2c6b88f: Already exists
+401f24ce4f44: Already exists
+e40082895cb8: Already exists
+4f4fb700ef54: Already exists
+f9128797ec9a: Already exists
+57a015cda828: Already exists
+65280a51cc29: Already exists
+469d3777deed: Already exists
+082efba21e48: Already exists
+96fe4dc0d6ef: Already exists
+f71c5d44674e: Already exists
+f0a415162e30: Already exists
+787eeb4d2148: Already exists
+7183c7fdc740: Already exists
+64e6149c87b6: Already exists
+69fbe38eb239: Already exists
+2cc418b42d5d: Already exists
+76f12d4f9876: Already exists
+488546d79be9: Already exists
+a79115e426a0: Already exists
+7a3e5d6a8cb7: Already exists
+b4e2180b3ace: Already exists
+7a2b2f818ff4: Already exists
+7c0a34154a13: Already exists
+99bf4d75d53b: Already exists
+e4d2ebfddfbe: Already exists
+db9595573c66: Already exists
+e93efb287e09: Download complete
+e897ed52fae7: Download complete
+a5aa6a28afbc: Download complete
+f3922fed5b1c: Download complete
+ceb4da2a45e5: Download complete
+0d657f76b5ae: Download complete
+db9ae5b42936: Download complete
+5b17151e9710: Download complete
+5b17151e9710: Pull complete
+4f4fb700ef54: Pull complete
+fb84f81d011a: Download complete
+3e9c152cbbba: Download complete
+9330e7096a34: Download complete
+1fa31fff18ed: Download complete
+45dd1a4ab662: Download complete
+304c1a4e8506: Download complete
+141529ee388c: Download complete
+58f537c310dd: Download complete
+58f537c310dd: Pull complete
+141529ee388c: Pull complete
+8c7ddd46b4d3: Download complete
+416eac053621: Download complete
+56e1b89a5698: Download complete
+56e1b89a5698: Pull complete
+69fbe38eb239: Pull complete
+ebce38133960: Download complete
+ff0dc5c9aede: Download complete
+23a0ad37f5b3: Download complete
+d18146a222f0: Download complete
+53e2b830a814: Download complete
+5a59de1077ef: Download complete
+54c41548ff48: Download complete
+0ea8e595bfa5: Download complete
+95aee456ddeb: Download complete
+95aee456ddeb: Pull complete
+488546d79be9: Pull complete
+7a2b2f818ff4: Pull complete
+2cc418b42d5d: Pull complete
+a79115e426a0: Pull complete
+fb84f81d011a: Pull complete
+69458d2612d2: Pull complete
+5a59de1077ef: Pull complete
+96fe4dc0d6ef: Pull complete
+7c0a34154a13: Pull complete
+9330e7096a34: Pull complete
+7e7803cd40b7: Pull complete
+7183c7fdc740: Pull complete
+0d657f76b5ae: Pull complete
+469d3777deed: Pull complete
+7a3e5d6a8cb7: Pull complete
+e897ed52fae7: Pull complete
+d18146a222f0: Pull complete
+416eac053621: Pull complete
+304c1a4e8506: Pull complete
+f9128797ec9a: Pull complete
+ee101c9665e9: Pull complete
+65280a51cc29: Pull complete
+f0a415162e30: Pull complete
+787eeb4d2148: Pull complete
+a5aa6a28afbc: Pull complete
+54c41548ff48: Pull complete
+9347d2c6b88f: Pull complete
+db9595573c66: Pull complete
+401f24ce4f44: Pull complete
+082efba21e48: Pull complete
+64e6149c87b6: Pull complete
+ebce38133960: Pull complete
+ff0dc5c9aede: Pull complete
+57a015cda828: Pull complete
+ceb4da2a45e5: Pull complete
+45dd1a4ab662: Pull complete
+76f12d4f9876: Pull complete
+0ea8e595bfa5: Pull complete
+abea52fb7ba8: Pull complete
+e40082895cb8: Pull complete
+3e9c152cbbba: Pull complete
+db9ae5b42936: Pull complete
+e4d2ebfddfbe: Pull complete
+f3922fed5b1c: Pull complete
+1fa31fff18ed: Pull complete
+8c7ddd46b4d3: Pull complete
+e93efb287e09: Pull complete
+53e2b830a814: Pull complete
+23a0ad37f5b3: Pull complete
+ae70b7a0d48d: Pull complete
+f71c5d44674e: Pull complete
+b4e2180b3ace: Pull complete
+99bf4d75d53b: Pull complete
+Digest: sha256:64887d431df52013f766878a546fad94716cbe0b39d991c3ea5c63a1a7d14c61
+Status: Downloaded newer image for nvcr.io/nvidia/pytorch:25.03-py3
 
 =============
 == PyTorch ==
@@ -39,7 +226,7 @@ and the Product-Specific Terms for NVIDIA AI Products
 (found at https://www.nvidia.com/en-us/agreements/enterprise-software/product-specific-terms-for-ai-products/).
 WARNING: Detected NVIDIA GB10 GPU, which may not yet be supported in this version of the container
 
-SMOKE matmul ok on NVIDIA GB10 -10508.626953125
+SMOKE matmul ok on NVIDIA GB10 -12029.9912109375
 SMOKE flash_attn ok (1, 128, 8, 64)
 
 [ok] CUDA matmul + flash-attention ok

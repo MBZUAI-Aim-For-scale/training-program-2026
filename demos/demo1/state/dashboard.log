@@ -1255,3 +1255,141 @@ Traceback (most recent call last):
   File "/home/pchoudhary/ai_weather/demos/demo1-setup/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 473, in send
     raise RuntimeError(f"Expected ASGI message 'http.response.start', but got '{message['type']}'.")
 RuntimeError: Expected ASGI message 'http.response.start', but got 'http.response.body'.
+2026-10-23 13:16:02.139 Uvicorn server started on 127.0.0.1:8500
+
+  You can now view your Streamlit app in your browser.
+
+  URL: http://127.0.0.1:8500
+
+Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_path_security_middleware.py", line 174, in __call__
+    await self.app(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/sessions.py", line 91, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_gzip_middleware.py", line 144, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_gzip_middleware.py", line 131, in __call__
+    await responder(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/gzip.py", line 104, in __call__
+    await self.app(scope, receive, self.send_with_compression)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/routing.py", line 678, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/routing.py", line 699, in app
+    await route.handle(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/routing.py", line 459, in handle
+    await self.app(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_static_routes.py", line 125, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/staticfiles.py", line 105, in __call__
+    await response(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/responses.py", line 399, in __call__
+    async with create_collapsing_task_group() as task_group:
+  File "/usr/lib/python3.12/contextlib.py", line 231, in __aexit__
+    await self.gen.athrow(value)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 112, in create_collapsing_task_group
+    raise exc from exc.__cause__ or context
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/anyio/_core/_tasks.py", line 327, in _run_coro
+    retval = await self._coro
+             ^^^^^^^^^^^^^^^^
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/responses.py", line 402, in stream_file
+    await send_file()
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/responses.py", line 437, in _handle_simple
+    await send({"type": "http.response.body", "body": chunk, "more_body": more_body})
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 39, in sender
+    await send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_gzip_middleware.py", line 105, in send_with_compression
+    await super().send_with_compression(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/gzip.py", line 125, in send_with_compression
+    await self.send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/sessions.py", line 89, in send_wrapper
+    await send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 161, in _send
+    await send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 473, in send
+    raise RuntimeError(f"Expected ASGI message 'http.response.start', but got '{message['type']}'.")
+RuntimeError: Expected ASGI message 'http.response.start', but got 'http.response.body'.
+Exception in ASGI application
+Traceback (most recent call last):
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 422, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 63, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/applications.py", line 96, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_path_security_middleware.py", line 174, in __call__
+    await self.app(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/sessions.py", line 91, in __call__
+    await self.app(scope, receive, send_wrapper)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_gzip_middleware.py", line 144, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_gzip_middleware.py", line 131, in __call__
+    await responder(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/gzip.py", line 104, in __call__
+    await self.app(scope, receive, self.send_with_compression)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/routing.py", line 678, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/routing.py", line 699, in app
+    await route.handle(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/routing.py", line 459, in handle
+    await self.app(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_static_routes.py", line 125, in __call__
+    await super().__call__(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/staticfiles.py", line 105, in __call__
+    await response(scope, receive, send)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/responses.py", line 399, in __call__
+    async with create_collapsing_task_group() as task_group:
+  File "/usr/lib/python3.12/contextlib.py", line 231, in __aexit__
+    await self.gen.athrow(value)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 112, in create_collapsing_task_group
+    raise exc from exc.__cause__ or context
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/anyio/_core/_tasks.py", line 327, in _run_coro
+    retval = await self._coro
+             ^^^^^^^^^^^^^^^^
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/responses.py", line 402, in stream_file
+    await send_file()
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/responses.py", line 437, in _handle_simple
+    await send({"type": "http.response.body", "body": chunk, "more_body": more_body})
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 39, in sender
+    await send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/streamlit/web/server/starlette/starlette_gzip_middleware.py", line 105, in send_with_compression
+    await super().send_with_compression(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/gzip.py", line 125, in send_with_compression
+    await self.send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/sessions.py", line 89, in send_wrapper
+    await send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 161, in _send
+    await send(message)
+  File "/home/mesfind/training-program-2026/demos/demo1/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 473, in send
+    raise RuntimeError(f"Expected ASGI message 'http.response.start', but got '{message['type']}'.")
+RuntimeError: Expected ASGI message 'http.response.start', but got 'http.response.body'.

@@ -14,5 +14,8 @@ SOURCE = os.environ.get("DEMO3_IFS_SOURCE", "aws")
 
 def run(init, lead_hours, members, report):
     from earth2studio.models.px import AIFS2ENS
-    from wave_source import source_for
-    return run_e2s(AIFS2ENS, source_for(init, SOURCE), init, lead_hours, members, report, ensemble=True)
+    from wave_source import INIT_SOURCE, available, source_for
+    ds = run_e2s(AIFS2ENS, source_for(init, SOURCE), init, lead_hours, members, report, ensemble=True)
+    if available(init):  # recorded as what this run started from
+        ds.attrs["run_init_source"] = INIT_SOURCE
+    return ds

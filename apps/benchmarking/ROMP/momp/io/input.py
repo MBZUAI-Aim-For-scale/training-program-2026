@@ -61,13 +61,15 @@ def _normalize_admin_name(value):
     return re.sub(r"[^a-z0-9]", "", str(value).strip().lower())
 
 
-def _download_admin_boundaries(region):
+def _download_admin_boundaries(region, configured_dir=None):
     """Stage the configured region's administrative boundaries from the demo bucket."""
-    bucket = os.getenv("DEMO_BUCKET", "").strip().removeprefix("gs://").strip("/")
-    if not bucket:
-        return None
-
-    remote_dir = f"gs://{bucket}/demo4/DATA/{region}/shapefile"
+    if storage.is_uri(configured_dir):
+        remote_dir = str(configured_dir).rstrip("/")
+    else:
+        bucket = os.getenv("DEMO_BUCKET", "").strip().removeprefix("gs://").strip("/")
+        if not bucket:
+            return None
+        remote_dir = f"gs://{bucket}/demo4/DATA/{region}/shapefile"
     remote_files = storage.glob(f"{remote_dir}/**")
     boundary_files = [
         path for path in remote_files
@@ -105,7 +107,7 @@ def _build_admin_grid_index(admin_names, latitudes, longitudes, shapefile_dir, r
         boundary_files = []
 
     if not boundary_files:
-        downloaded_dir = _download_admin_boundaries(region)
+        downloaded_dir = _download_admin_boundaries(region, shapefile_dir)
         if downloaded_dir is not None:
             boundary_files = [
                 path

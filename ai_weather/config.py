@@ -414,6 +414,23 @@ def _pick(label: str, local_candidates: List[tuple], remote_uri: str) -> str:
     return str(first)
 
 
+def _pick_shapefile_dir(local_dir: Path, remote_uri: str) -> str:
+    """Choose a local administrative boundary directory or its configured GCS location."""
+    local_dir = _match_case(Path(local_dir))
+    if DATA_MODE != "bucket" and local_dir.is_dir() and any(
+        path.is_file() and path.suffix.lower() in {".shp", ".geojson", ".json"}
+        for path in local_dir.rglob("*")
+    ):
+        DATA_SOURCES["administrative boundary"] = "local"
+        return str(local_dir)
+    if DATA_MODE != "local" and (BUCKET_OK or bool(os.getenv("ROMP_SHAPEFILE_URI"))):
+        DATA_SOURCES["administrative boundary"] = "bucket"
+        return remote_uri
+    DATA_SOURCES["administrative boundary"] = "missing"
+    _MISSING_ITEMS.append(f"administrative boundary: {local_dir}")
+    return str(local_dir)
+
+
 LOCAL_MODEL_DIRS = {
     "aifs_single": EXTERNAL_DATA_DIR / "aifs_single",
     "fuxi": EXTERNAL_DATA_DIR / "fuxi",
@@ -453,7 +470,12 @@ JJAS_MASK_FILE = _pick(
 JJAS_DIR = JJAS_MASK_FILE
 MONSOON_DIR = PROCESSED_DATA_DIR / "Monsoon" / "2026"
 
-
+SHAPEFILE_MASK_FILE = _pick_shapefile_dir(
+    EXTERNAL_DATA_DIR / "shapefile",
+    os.getenv("ROMP_SHAPEFILE_URI")
+    or f"{BUCKET_ROOT}/DATA/{region}/shapefile",
+)
+shapefile = SHAPEFILE_MASK_FILE
 def _find_apps_dir(proj_root: Path) -> Path:
     marker = Path("benchmarking") / "ROMP" / "momp" / "driver.py"
     for base in (proj_root, CURRENT_FILE.parent, PKG_DIR):
@@ -598,7 +620,7 @@ ref_model_file_pattern = _obs["pattern"]
 ref_model_var = _obs["var"]
 ref_model_unit_cvt = None
 nc_mask = resolve_path(JJAS_MASK_FILE)
-shpfile_dir = str(EXTERNAL_DATA_DIR / "shapefile")
+shpfile_dir = SHAPEFILE_MASK_FILE
 polygon = False
 
 wet_init = 1

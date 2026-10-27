@@ -1,4 +1,4 @@
 $ docker info --format {{.ServerVersion}}|{{.SecurityOptions}}
-28.4.0|[name=apparmor name=seccomp,profile=builtin name=cgroupns]
+29.6.2|[name=seccomp,profile=builtin name=rootless name=cgroupns]
 
-[ok] Docker 28.4.0
+[ok] Docker 29.6.2 (rootless)

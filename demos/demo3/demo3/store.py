@@ -22,7 +22,7 @@ OUTPUT_DIR = Path(os.environ.get("DEMO3_OUTPUT_DIR", Path(__file__).resolve().pa
 JOBS_DIR = OUTPUT_DIR / "_jobs"
 BUCKET = os.environ.get("DEMO3_BUCKET", "").rstrip("/")
 
-_NAME = re.compile(r"^(\d{8}T\d{2})_(\d+)h_m(\d+)(?:_synthetic)?\.nc$")
+_NAME = re.compile(r"^(\d{8}T\d{2})_(\d+)h_m(\d+)\.nc$")
 
 
 @dataclass(frozen=True)
@@ -31,11 +31,9 @@ class RunRequest:
     init: pd.Timestamp
     lead_hours: int
     members: int
-    synthetic: bool = False
 
     def path(self) -> Path:
-        tag = "_synthetic" if self.synthetic else ""
-        return OUTPUT_DIR / self.model / f"{self.init:%Y%m%dT%H}_{self.lead_hours}h_m{self.members}{tag}.nc"
+        return OUTPUT_DIR / self.model / f"{self.init:%Y%m%dT%H}_{self.lead_hours}h_m{self.members}.nc"
 
 
 def find_saved(req: RunRequest) -> Path | None:
@@ -46,7 +44,7 @@ def find_saved(req: RunRequest) -> Path | None:
     best = None
     for p in folder.glob("*.nc"):
         m = _NAME.match(p.name)
-        if not m or ("_synthetic" in p.name) != req.synthetic:
+        if not m:
             continue
         init, lead, members = m.group(1), int(m.group(2)), int(m.group(3))
         if init == f"{req.init:%Y%m%dT%H}" and members == req.members and lead >= req.lead_hours:
@@ -55,7 +53,7 @@ def find_saved(req: RunRequest) -> Path | None:
     return best[1] if best else None
 
 
-def find_any(model: str, init: pd.Timestamp, lead_hours: int, synthetic: bool = False) -> Path | None:
+def find_any(model: str, init: pd.Timestamp, lead_hours: int) -> Path | None:
     """A saved run of this model and start time covering the lead time, with any member
     count (most members first, then the shortest lead). Used when comparing models."""
     folder = OUTPUT_DIR / model
@@ -64,7 +62,7 @@ def find_any(model: str, init: pd.Timestamp, lead_hours: int, synthetic: bool = 
     best = None
     for p in folder.glob("*.nc"):
         m = _NAME.match(p.name)
-        if not m or ("_synthetic" in p.name) != synthetic:
+        if not m:
             continue
         lead, members = int(m.group(2)), int(m.group(3))
         if m.group(1) == f"{init:%Y%m%dT%H}" and lead >= lead_hours:
@@ -81,7 +79,7 @@ def list_saved() -> pd.DataFrame:
             m = _NAME.match(p.name)
             if m:
                 rows.append(dict(model=p.parent.name, init=m.group(1), lead_h=int(m.group(2)),
-                                 members=int(m.group(3)), synthetic="_synthetic" in p.name,
+                                 members=int(m.group(3)),
                                  size_mb=round(p.stat().st_size / 1e6, 1), path=str(p)))
     return pd.DataFrame(rows)
 
@@ -122,7 +120,7 @@ def find_remote(req: RunRequest) -> tuple[str, int] | None:
     best = None
     for model, name, size in remote_runs():
         m = _NAME.match(name)
-        if model != req.model or ("_synthetic" in name) != req.synthetic:
+        if model != req.model:
             continue
         if (m.group(1) == f"{req.init:%Y%m%dT%H}" and int(m.group(3)) == req.members
                 and int(m.group(2)) >= req.lead_hours):

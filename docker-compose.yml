@@ -1,0 +1,38 @@
+services:
+  ai_weather:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: ai_weather:latest
+    container_name: ai_weather
+    restart: unless-stopped
+    ipc: host
+    env_file:
+      - .env
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, utility]
+    ports:
+      - "127.0.0.1:8501:8501" # Streamlit Dashboard
+      - "127.0.0.1:8888:8888" # Jupyter Lab (optional)
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/run/gcp-key.json}
+      - ROMP_DEMO_OUT_DIR=/app/ai_weather/data/ROMP_OUT
+    volumes:
+      # Code Mount (aligned with Dockerfile WORKDIR /app)
+      - ./:/app
+      # Host Output & Cache Mounts
+      - ${OUTPUTS:-./outputs}:/app/outputs
+      - ${ROMP_OUT:-./ai_weather/data/ROMP_OUT}:/app/ai_weather/data/ROMP_OUT
+      - ${CACHE:-~/.cache/ai_weather}:/root/.cache
+      # GCP Credentials Mount
+      - ${GCP_KEY_PATH:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/run/gcp-key.json}:ro

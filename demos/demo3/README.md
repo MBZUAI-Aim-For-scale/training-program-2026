@@ -4,7 +4,7 @@ A Streamlit app, running on the DGX Spark, for running AI weather models. Partic
 
 **Status:**
 - All 7 models run live on the Spark from one Docker image (`docker/`), and saved runs load instantly.
-- The event movie tab (forecast vs observations) is Panchali's `demo3/event_movie/forecast_event_movie.py`.
+- The event movie (forecast vs observations) is Panchali's `demo3/event_movie/forecast_event_movie.py`.
 - Results are Panchali's event movie (forecast next to ERA5 observations, day by day) and event-track map, for heat or precipitation; plus how the forecast was made (load, inputs, run, save, with times on the Spark), maps of z500 / 2 m temperature / rainfall, and a NetCDF download.
 - Each model card lists what it needs on the Spark: weight size, peak GPU memory, output size, grid and inputs.
 - **Onset** use case: onset maps (forecast vs observed), the rainfall series and an onset movie, by a choice of definitions (ICPAC, Moron–Robertson, Moron–Robertson with MOK filter), each adjustable.
@@ -58,7 +58,7 @@ demo3/compare.py       the time-series comparison of the loaded models
 demo3/data/            ROMP's MWset: local 5-day wet-spell amounts for Moron–Robertson
 demo3/event_movie/     Panchali's forecast_event_movie.py (unchanged) + the Spark adapter
 demo3/theme.py         styling, matching the Demo 5 platform
-runners/run_model.py   runner entry point (+ synthetic output generator)
+runners/run_model.py   runner entry point
 runners/fgn_convert.py FGN starting conditions from ECMWF open data (see the FGN section)
 runners/sync_bucket.py push/pull saved runs to/from a shared bucket
 timings.json           measured Spark runtimes shown in brackets in the app
@@ -79,7 +79,7 @@ Each run is one NetCDF file covering the whole globe:
 | `t2m` | 2 m temperature, in **K** |
 | `z500` | 500 hPa geopotential, in **m² s⁻²** (divide by 9.80665 to get height in m) |
 | coords | `valid_time` (along lead_time), `init_time` |
-| attrs | `model`, `model_name`, `init_source`, `members`, `synthetic` |
+| attrs | `model`, `model_name`, `init_source`, `members` |
 
 ## Results: the event movie
 
@@ -89,8 +89,6 @@ Demo 3's output files, and fetches ERA5 observations from Google's ARCO copy (ca
 `outputs/_obs_cache/`) when the cluster's ERA5 folder isn't there. The use case picks the
 movie: **Heat** = daily max 2 m temperature, **Precipitation** = daily rainfall. Each movie is
 rendered once per request and saved under `outputs/_movies/`.
-
-To get test data without a GPU, turn on **Use synthetic output** in the sidebar and press Run. This writes a fake file in exactly this format.
 
 ## Results: onset
 

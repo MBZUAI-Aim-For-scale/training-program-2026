@@ -24,6 +24,7 @@ WAVE_VARS = ("swh", "mwp", "cos_mwd", "sin_mwd", "cdww",
 WAVE_DIR = Path(os.environ.get("DEMO3_WAVE_DIR", Path.home() / ".cache" / "wave"))
 WAVE_BUCKET = os.environ.get("DEMO3_WAVE_BUCKET", "gs://aim4scale_training_2026/wave/n320")
 FIRST, LAST = datetime(2000, 1, 1), datetime(2025, 12, 31)
+INIT_SOURCE = "ECMWF wave dataset (ocean waves) + ERA5 (Google's copy)"
 LAT = np.linspace(90, -90, 721)
 LON = np.arange(0, 360, 0.25)
 
