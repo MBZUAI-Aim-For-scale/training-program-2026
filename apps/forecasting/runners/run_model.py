@@ -3,13 +3,8 @@
 Invoked by the app (apps/forecasting/jobs.py) with the interpreter of the model's own
 environment:
 
-<<<<<<< HEAD
     python apps/forecasting/runners/run_model.py --model graphcast --init 2025-07-01T00 \
-        --lead-hours 240 --members 1 --out out.nc --status job.json [--synthetic]
-=======
-    python runners/run_model.py --model graphcast --init 2025-07-01T00 \
         --lead-hours 240 --members 1 --out out.nc --status job.json
->>>>>>> 23b041097d9af714f0ee41bb9efa9883b1e5cbdd
 
 A real model is added by creating runners/runner_<model_key>.py with
 
@@ -37,11 +32,7 @@ import pandas as pd
 # The largest JAX model needs ~18 GB; 35% (~42 GB) leaves room for everything else.
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.35")
 
-<<<<<<< HEAD
-APP_ROOT = Path(__file__).resolve().parent.parent
-=======
 APP_ROOT = Path(__file__).resolve().parent  # runners/: each model's runner_<key>.py
->>>>>>> 23b041097d9af714f0ee41bb9efa9883b1e5cbdd
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT.parents[2]))  # the repository root, for apps.forecasting
 
@@ -87,7 +78,8 @@ def main() -> int:
         ds = runner.run(init, a.lead_hours, a.members, report)
         t_post = time.time()
         report("Post-processing and saving…", 0.97)
-        source = ds.attrs.get("fgn_init_source") or model.init_source  # FGN: sample or converter
+        # what this run started from, when it depends on the date (AIFS v2, FGN), else the model's usual
+        source = ds.attrs.get("run_init_source") or ds.attrs.get("fgn_init_source") or model.init_source
         ds = contract.finalize(ds, model_key=a.model, model_name=model.name, init=init,
                                init_source=source)
         contract.write(ds, a.out)
