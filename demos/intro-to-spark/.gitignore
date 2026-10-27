@@ -1,0 +1,3 @@
+labs/outputs/*
+!labs/outputs/.gitkeep
+*.zarr/
