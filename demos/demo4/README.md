@@ -25,8 +25,8 @@ cd training-program-2026
 ```bash
 cp .env.example .env
 cat <<EOF > .env
-DEMO_BUCKET=<bucket>/demo
-DEMO3_BUCKET=<bucket>/demo3
+DEMO_BUCKET=<bucket>
+DEMO3_BUCKET=gs://<bucket>/demo3
 DEMO4_BUCKET=<bucket>/demo4
 EOF
 
