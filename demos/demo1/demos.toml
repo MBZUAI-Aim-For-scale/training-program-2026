@@ -24,10 +24,10 @@ port = 8502
 
 [[demo]]
 id = "demo4"
-title = "Demo 4 · Forecasting & benchmarking"
-image = "ai_weather"
-container = "ai_weather"
+title = "Demo 4 · Benchmarking"
+image = "demo4"
+container = "demo4"
 context = "."
-dockerfile = "docker/Dockerfile"
-run = ["bash", "docker/run.sh", "start"]
-port = 8501
+dockerfile = "demos/demo4/docker/Dockerfile"
+run = ["bash", "demos/demo4/docker/run.sh"]
+port = 8503
