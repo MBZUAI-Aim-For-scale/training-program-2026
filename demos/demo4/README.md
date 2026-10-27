@@ -43,7 +43,7 @@ bash docker/run.sh rebuild
 *(For subsequent runs without rebuilding, use `bash docker/run.sh start` or `DEV=1 bash docker/run.sh start` for live code editing).*
 5. **Create the SSH tunnel** (from your local machine):
 ```bash
-ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
+ssh -L 8501:localhost:8501  <you>@country-spark
 
 ```
 
