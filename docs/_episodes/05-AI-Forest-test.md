@@ -26,15 +26,15 @@ keypoints:
 
 # Putting Your Forecast to the Test
 
-In [Demo 3](https://github.com/mesfind/ai_weather/blob/main/docs/_episodes/03-forecast.md) you ran AI models and produced one forecast for one event. In [Demo 4](https://github.com/mesfind/ai_weather/blob/main/docs/_episodes/04-weather-model.md) you benchmarked rainy-season onset and met calibration with IDR for the first time. This demo answers the question a forecaster asks before using any of it operationally: **over years of past forecasts, how good is this model here, in my regions, in my seasons, and for the thresholds my warnings use?**
+In [Demo 3](training-program-2026/03-forecast) you ran AI models and produced one forecast for one event. In [Demo 4](training-program-2026/04-weather-model) you benchmarked rainy-season onset and met calibration with IDR for the first time. This demo answers the question a forecaster asks before using any of it operationally: **over years of past forecasts, how good is this model here, in my regions, in my seasons, and for the thresholds my warnings use?**
 
 You will do this with **ForecastCheck**, a local verification framework. Each agency runs its own copy, on its own machine, with its own regions and thresholds. You will work in the use-case track you chose in Demo 3: **Heat** (temperature exceedance; Senegal and Sierra Leone) or **Rainfall** (precipitation exceedance; Kenya and Rwanda). You will fetch your country's data from the cloud, score GraphCast and IFS against observations, calibrate them with IDR, and read the results in a dashboard. Both tracks run the same commands; where they differ, this lesson shows a box for each.
 
 > #### Prerequisites
 >
-> - An account on the DGX Spark and the SSH tunnel from [Demo 1](https://github.com/mesfind/ai_weather/blob/main/docs/_episodes/01-setup.md). ForecastCheck runs in the Spark's rootless Docker, as in Demos 1–3. You do **not** need a GPU or a Google Cloud account.
-> - Your use case from [Demo 3](https://github.com/mesfind/ai_weather/blob/main/docs/_episodes/03-forecast.md): temperature exceedance (what a hot-day threshold is) or precipitation exceedance (what a heavy-rain threshold is), and what a lead time is.
-> - The IDR section of [Demo 4](https://github.com/mesfind/ai_weather/blob/main/docs/_episodes/04-weather-model.md) (what calibration can and cannot fix).
+> - An account on the DGX Spark and the SSH tunnel from [Demo 1](training-program-2026/01-setup). ForecastCheck runs in the Spark's rootless Docker, as in Demos 1–3. You do **not** need a GPU or a Google Cloud account.
+> - Your use case from [Demo 3](training-program-2026/03-forecast): temperature exceedance (what a hot-day threshold is) or precipitation exceedance (what a heavy-rain threshold is), and what a lead time is.
+> - The IDR section of [Demo 4](training-program-2026/04-weather-model.md) (what calibration can and cannot fix).
 {: .prereq}
 
 ## Learning Objectives
@@ -92,7 +92,7 @@ Every season list also includes the whole year. Each country has a page in `docs
 >
 > **Rainfall track.** Both countries are verified against **CHIRPS**, a satellite rainfall product adjusted with rain gauges, the public truth both share. A national service usually holds better rainfall truth (its own gauges, or a gridded product corrected with them, such as ENACTS) that cannot be published. Section 4.2 shows how to add such data if your trainer gives it to you.
 >
-> Either way, how far to trust the truth is the subject of [Demo 6](https://github.com/mesfind/ai_weather/blob/main/docs/_episodes/06-ground-truth-challenge.md).
+> Either way, how far to trust the truth is the subject of [Demo 6](training-program-2026/06-ground-truth-challenge).
 {: .tip}
 
 ## 2. ForecastCheck in One Picture
@@ -100,7 +100,7 @@ Every season list also includes the whole year. Each country has a page in `docs
 ForecastCheck has three stages. They never call each other: each one writes NetCDF files under `data/`, and the next one finds them there. The dashboard only shows what exists on disk.
 
 ```
-                 cloud bucket  gs://aim4scale_training_2026/demo5/{SEN|SLE}-local-engine
+                 cloud bucket  gs://<bucket>/demo5/{SEN|SLE}-local-engine
                       │
                       │  bash docker/run.sh fetch
                       ▼
@@ -212,7 +212,7 @@ bash docker/run.sh stop
 Each country has one folder in the bucket. The forecasts and the truth have already been put on the same grid, so ForecastCheck only has to match dates. A Heat-track folder looks like this:
 
 ```
-gs://aim4scale_training_2026/demo5/SEN-local-engine/
+gs://<bucket>/demo5/SEN-local-engine/
 ├── raw/gridded/temperature_2m_max/{year}/{graphcast|ifs|…}/{24,72,120,168,216}h.nc forecasts
 ├── raw/gridded/temperature_2m_min/…
 ├── target/gridded/temperature_2m_max/{CHIRTS|ERA5}/{year}.nc                       truth
@@ -225,7 +225,7 @@ A file such as `raw/gridded/temperature_2m_max/2022/graphcast/72h.nc` holds ever
 A Rainfall-track folder has the same shape with one variable, `precipitation`, and one truth, `CHIRPS`:
 
 ```
-gs://aim4scale_training_2026/demo5/KMD-local-engine/
+gs://<bucket>/demo5/KMD-local-engine/
 ├── raw/gridded/precipitation/{year}/{graphcast|ifs}/{24,72,120,168,216}h.nc   forecasts
 ├── target/gridded/precipitation/CHIRPS/{year}.nc                              truth
 └── assets/dem.nc                                                              elevation
@@ -238,7 +238,7 @@ Rainfall in the forecast files is in **mm/hr** (the day's total divided by 24); 
 The bucket is read-only and private to the training. On the DGX Spark a key that can read it is already installed; the `export` line of Section 3 tells the Google Cloud tools where it is, **by its path**:
 
 ```bash
-export GOOGLE_APPLICATION_CREDENTIALS=/etc/fleet-gcs-key.json
+export GOOGLE_APPLICATION_CREDENTIALS=<key>.json
 ```
 
 Never open the key, paste its contents into a file or a chat, or copy it elsewhere: the path is all anyone needs. The variable lasts for the current terminal; set it again in a new one.
@@ -778,7 +778,7 @@ Every number in the dashboard is true *for a given truth product, year, area and
 >
 > **Rainfall track.** Every rainfall number here is measured against one satellite product. If your service holds its own gauges, or a gridded product corrected with them, add it as in Section 4.2 and score the same forecasts against it: the bias, the CRPS and the heavy-rain AUC can all move.
 >
-> That is the ground truth challenge of [Demo 6](https://github.com/mesfind/ai_weather/blob/main/docs/_episodes/06-ground-truth-challenge.md).
+> That is the ground truth challenge of [Demo 6](training-program-2026/06-ground-truth-challenge).
 {: .tip}
 
 ## Troubleshooting
