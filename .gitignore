@@ -8,7 +8,8 @@
 /ai_weather/.agents/
 /ai_weather/.github/workflows
 /ai_weather/.mplcache/
-/ai_weather/
+ai_weather/*
+!ai_weather/config.py
 /ai_weather/anaconda_projects/db
 reports/slides/.quarto/
 # macOS
