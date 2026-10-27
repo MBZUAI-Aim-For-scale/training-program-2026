@@ -416,7 +416,7 @@ def render_benchmark_figure(path_str: str) -> None:
         st.warning(f"Figure unavailable or empty: {path.name}")
         return
     try:
-        st.image(str(path), use_container_width=True)
+        st.image(str(path), width='stretch')
         st.caption(format_figure_label(str(path)))
     except Exception as e:
         st.warning(f"Could not display figure {path.name}: {type(e).__name__} - {e}")
@@ -628,7 +628,7 @@ def render_benchmark_figure(path_str: str) -> None:
         st.warning(f"Figure is empty (0 bytes): {path.name}")
         return
     try:
-        st.image(path_str, use_container_width=True)
+        st.image(path_str, width='stretch')
         st.caption(format_figure_label(path_str))
     except Exception as e:
         st.warning(f"Could not display figure {path.name}: {type(e).__name__}")
@@ -2850,7 +2850,7 @@ def _open_figure_modal(path_str: str) -> None:
     """
     path = Path(path_str)
     if path.exists() and path.stat().st_size > 0:
-        st.image(str(path), use_container_width=True)
+        st.image(str(path), width='stretch')
         st.caption(format_figure_label(str(path)))
         with open(path, "rb") as f:
             img_bytes = f.read()
@@ -2861,7 +2861,7 @@ def _open_figure_modal(path_str: str) -> None:
             mime="image/png",
             key=f"dl_modal_btn_{path.stem}",
             type="primary",
-            use_container_width=True,
+            width='stretch',
         )
 
 
@@ -2881,7 +2881,7 @@ def render_benchmark_figure_with_download(
         return
 
     try:
-        st.image(str(path), use_container_width=True)
+        st.image(str(path), width='stretch')
         st.caption(format_figure_label(str(path)))
 
         with open(path, "rb") as f:
@@ -2897,7 +2897,7 @@ def render_benchmark_figure_with_download(
                 file_name=path.name,
                 mime="image/png",
                 key=f"dl_btn_{path.stem}_{key_suffix}",
-                use_container_width=True,
+                width='stretch',
             )
 
         with btn_col2:
@@ -2905,7 +2905,7 @@ def render_benchmark_figure_with_download(
                 if st.button(
                     "Zoom Modal", 
                     key=f"zoom_btn_{path.stem}_{key_suffix}", 
-                    use_container_width=True
+                    width='stretch'
                 ):
                     _open_figure_modal(str(path))
     except Exception as e:
@@ -2978,7 +2978,7 @@ def page() -> None:
                 selection_mode="multi-row",
                 on_select="rerun",
                 key="model_table_selection",
-                use_container_width=True,
+                width='stretch',
             )
             try:
                 sel_idx = table.selection.rows
@@ -3064,14 +3064,14 @@ def page() -> None:
                     c2.metric("Warning", summary.get("Warning", 0))
                     c3.metric("No data", summary.get("No data", 0))
                     c4.metric("Error", summary.get("Error", 0))
-                    st.dataframe(inventory_to_dataframe(m_inv + o_inv), hide_index=True, use_container_width=True)
+                    st.dataframe(inventory_to_dataframe(m_inv + o_inv), hide_index=True, width='stretch')
                 except Exception as e:
                     st.warning(f"Could not load inventory: {e}")
 
     # Run Benchmark Action
     st.markdown('<div class="run-section">', unsafe_allow_html=True)
     c1, _ = st.columns([1, 2])
-    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", use_container_width=True, disabled=not coverage_ready)
+    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready)
     st.markdown("</div>", unsafe_allow_html=True)
 
     if run_clicked and active_rows:
@@ -3165,7 +3165,7 @@ def page() -> None:
                         df = compute_model_comparison_cached(ml, wl, ual, uan)
                         if not df.empty:
                             df["Selected"] = np.where(df["Model"] == model_label, "Yes", "")
-                            st.dataframe(df, use_container_width=True, hide_index=True)
+                            st.dataframe(df, width='stretch', hide_index=True)
 
                     with sub_tabs[1]:
                         thr = mm["threshold"]
@@ -3289,7 +3289,7 @@ def page() -> None:
                                             lc1, lc2 = st.columns(2)
                                             lc1.markdown(f"**Left Map (0–{sp}%):** {model_label} - {wl}")
                                             lc2.markdown(f"**Right Map ({sp}–100%):** {rm} - {rw}")
-                                            st.image(comp, use_container_width=True)
+                                            st.image(comp, width='stretch')
                             else:
                                 info_box(f"Output for {rm} ({rw}) not available.", "amber")
 
@@ -3755,7 +3755,7 @@ def page() -> None:
                     f"Snapped to Grid: Lat {meta['grid_lat']:.4f}, Lon {meta['grid_lon']:.4f}"
                 )
                 for img_bytes in st.session_state["onset_pngs"]:
-                    st.image(img_bytes, use_container_width=True)
+                    st.image(img_bytes, width='stretch')
 
     # Tab 5: Skill vs Baseline
     if PHASE_4_AVAILABLE and "Skill vs Baseline" in tab_labels:
@@ -3766,7 +3766,7 @@ def page() -> None:
                 if not scores.empty:
                     skill_df = compute_skill_vs_baseline(scores, baseline_model="Climatology")
                     if not skill_df.empty:
-                        st.dataframe(skill_df, hide_index=True, use_container_width=True)
+                        st.dataframe(skill_df, hide_index=True, width='stretch')
                     else:
                         info_box("No climatology baseline found for skill comparison.", "amber")
                 else:
@@ -3790,9 +3790,9 @@ def page() -> None:
                         st.error(f"Error: {e}")
             if "unc_df" in st.session_state:
                 st.markdown("**Metric Uncertainty**")
-                st.dataframe(st.session_state["unc_df"], hide_index=True, use_container_width=True)
+                st.dataframe(st.session_state["unc_df"], hide_index=True, width='stretch')
                 st.markdown("**Significance vs Baseline**")
-                st.dataframe(st.session_state["sig_df"], hide_index=True, use_container_width=True)
+                st.dataframe(st.session_state["sig_df"], hide_index=True, width='stretch')
 
     # Tab 7: Benchmark Report & Export
     if (PDF_AVAILABLE or PHASE_6_AVAILABLE) and "Benchmark Report & Export" in tab_labels:

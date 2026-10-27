@@ -305,7 +305,7 @@ def _action_button(demo: Dict[str, Any], kind: str, busy: bool) -> None:
             key=f"aistop-{demo['n']}",
             type="secondary",
             help=f"Stop the running '{container_name}' container",
-            use_container_width=True,
+            width='stretch',
         ):
             _stop_containers([container_name])
         return
@@ -329,7 +329,7 @@ def _action_button(demo: Dict[str, Any], kind: str, busy: bool) -> None:
         type="primary",
         disabled=disabled,
         help=why,
-        use_container_width=True,
+        width='stretch',
     ):
         _launch(demo)
 
@@ -408,7 +408,7 @@ def _live_status():
         st.subheader("Environment & Demo Workspaces")
     with c_mgmt:
         if running_demos:
-            with st.popover("🛑 Bulk Stop Controls", use_container_width=True):
+            with st.popover("🛑 Bulk Stop Controls", width='stretch'):
                 st.markdown("**Stop Running Containers**")
                 c_options = {f"Demo {d['n']}: {d['container']}": d["container"] for d in running_demos}
                 selected_labels = st.multiselect(
@@ -416,11 +416,11 @@ def _live_status():
                     options=list(c_options.keys()),
                     default=list(c_options.keys()),
                 )
-                if st.button("Stop Selected", key="stop-selected-btn", type="primary", use_container_width=True):
+                if st.button("Stop Selected", key="stop-selected-btn", type="primary", width='stretch'):
                     selected_containers = [c_options[lbl] for lbl in selected_labels]
                     _stop_containers(selected_containers)
                 st.divider()
-                if st.button("Shutdown All (shutdown.sh)", key="stop-all-btn", type="secondary", use_container_width=True):
+                if st.button("Shutdown All (shutdown.sh)", key="stop-all-btn", type="secondary", width='stretch'):
                     _shutdown_all()
 
     busy = _setup_running()
