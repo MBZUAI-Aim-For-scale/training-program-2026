@@ -485,14 +485,14 @@ def launch_card(demo: dict):
                 st.link_button("Follow progress ↗" if mine else "Launch ↗", f"?demo={demo['n']}&launch=1",
                                type="primary", width="stretch",
                                help="Opens a new tab that starts the container and then shows the demo")
-                note = ("Opens a new tab that starts the demo's container and switches to the demo once its "
-                        "page answers. The first launch builds the image, which can take an hour.")
+                note = ""
             if demo.get("container"):
                 st.button(f"Stop Demo {demo['n']}", key=f"stop-{demo['n']}", width="stretch",
                           disabled=kind != "running" or bool(mine), on_click=stop, args=([demo],),
                           help="Stops the demo's container; its tabs close themselves" if kind == "running"
                           else "The demo isn't running")
-        st.markdown(f'<div class="d1-launch-note">{note}</div>', unsafe_allow_html=True)
+        if note:
+            st.markdown(f'<div class="d1-launch-note">{note}</div>', unsafe_allow_html=True)
         if steps and (mine or any(s["status"] == "failed" for s in steps)):
             st.markdown(progress(steps, run["state"]), unsafe_allow_html=True)
 
