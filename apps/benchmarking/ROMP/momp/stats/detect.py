@@ -315,6 +315,7 @@ def compute_onset_for_deterministic_model(
             p_model[admin_dim].values,
             onset_da,
             kwargs.get("shpfile_dir"),
+            region=kwargs.get("region", "Ethiopia"),
         )
     else:
         lats = p_model.lat.values
@@ -479,6 +480,7 @@ def compute_onset_for_all_members(
             p_model[admin_dim].values,
             onset_da,
             kwargs.get("shpfile_dir"),
+            region=kwargs.get("region", "Ethiopia"),
         )
     else:
         lats = p_model.lat.values

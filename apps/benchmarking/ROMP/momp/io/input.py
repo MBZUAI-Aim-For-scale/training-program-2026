@@ -6,6 +6,7 @@ Data loading utilities for observation and model forecast datasets.
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -60,8 +61,35 @@ def _normalize_admin_name(value):
     return re.sub(r"[^a-z0-9]", "", str(value).strip().lower())
 
 
+def _download_admin_boundaries(region):
+    """Stage the configured region's administrative boundaries from the demo bucket."""
+    bucket = os.getenv("DEMO_BUCKET", "").strip().removeprefix("gs://").strip("/")
+    if not bucket:
+        return None
+
+    remote_dir = f"gs://{bucket}/demo4/DATA/{region}/shapefile"
+    remote_files = storage.glob(f"{remote_dir}/**")
+    boundary_files = [
+        path for path in remote_files
+        if path.lower().endswith((".shp", ".geojson", ".json", ".shx", ".dbf", ".prj", ".cpg"))
+    ]
+    if not boundary_files:
+        return None
+
+    local_dir = Path(tempfile.gettempdir()) / "momp_admin_boundaries" / re.sub(r"[^a-zA-Z0-9_-]", "_", region)
+    local_dir.mkdir(parents=True, exist_ok=True)
+    fs = storage.gcs_fs()
+    for remote_path in boundary_files:
+        relative = remote_path[len(remote_dir):].lstrip("/")
+        target = local_dir / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if not target.exists():
+            fs.get(storage._strip(remote_path), str(target))
+    return local_dir
+
+
 @lru_cache(maxsize=8)
-def _build_admin_grid_index(admin_names, latitudes, longitudes, shapefile_dir):
+def _build_admin_grid_index(admin_names, latitudes, longitudes, shapefile_dir, region="Ethiopia"):
     import geopandas as gpd
 
     source = Path(shapefile_dir).expanduser()
@@ -75,6 +103,15 @@ def _build_admin_grid_index(admin_names, latitudes, longitudes, shapefile_dir):
         ]
     else:
         boundary_files = []
+
+    if not boundary_files:
+        downloaded_dir = _download_admin_boundaries(region)
+        if downloaded_dir is not None:
+            boundary_files = [
+                path
+                for pattern in ("*.geojson", "*.json", "*.shp")
+                for path in downloaded_dir.rglob(pattern)
+            ]
 
     boundary_files.sort(
         key=lambda path: (
@@ -131,7 +168,7 @@ def _build_admin_grid_index(admin_names, latitudes, longitudes, shapefile_dir):
     return grid_index.reshape(lon_grid.shape)
 
 
-def admin_forecast_grid_index(admin_names, grid, shpfile_dir=None):
+def admin_forecast_grid_index(admin_names, grid, shpfile_dir=None, region="Ethiopia"):
     if shpfile_dir is None:
         shpfile_dir = getattr(params, "shpfile_dir", None)
     if not shpfile_dir:
@@ -141,6 +178,7 @@ def admin_forecast_grid_index(admin_names, grid, shpfile_dir=None):
         tuple(float(value) for value in grid.lat.values),
         tuple(float(value) for value in grid.lon.values),
         str(shpfile_dir),
+        str(region),
     )
 
 
