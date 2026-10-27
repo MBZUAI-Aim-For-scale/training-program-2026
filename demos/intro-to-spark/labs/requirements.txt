@@ -1,0 +1,8 @@
+# Use with a Spark-compatible torch (NGC container or system CUDA 13 build). Do NOT let pip replace torch.
+jupyterlab
+matplotlib
+numpy
+pandas
+xarray
+zarr
+earth2studio[sfno,data]
