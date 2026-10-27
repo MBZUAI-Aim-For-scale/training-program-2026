@@ -1,16 +1,22 @@
-import pandas as pd
+"""
+momp/utils/standard.py
+Standardization and dimension formatting utilities for NetCDF datasets.
+"""
 
+import pandas as pd
+import xarray as xr
 
 # Standard dimension order: time-like dims first, then spatial
 _STANDARD_DIM_ORDER = ["init_time", "time", "member", "step", "lat", "lon"]
 
-def dim_order_fmt(ds):
+
+def dim_order_fmt(ds: xr.Dataset) -> xr.Dataset:
     """
     Transpose all variables in ds so their dimensions follow the standard order:
         (init_time, time, member, step, lat, lon)
 
     Only the dimensions actually present in each variable are used — missing ones
-    are skipped.  For example, a variable with dims (lat, lon, init_time, step)
+    are skipped. For example, a variable with dims (lat, lon, init_time, step)
     becomes (init_time, step, lat, lon).
 
     Any dimension not listed in _STANDARD_DIM_ORDER is appended at the end in
@@ -34,93 +40,112 @@ def dim_order_fmt(ds):
     return ds.assign(new_vars)
 
 
-def dim_fmt(ds):
-    """Standardize dimension names"""
+def _promote_coords(ds: xr.Dataset) -> xr.Dataset:
+    """Promotes candidate coordinate variables from data_vars into active coords."""
+    coord_candidates = [
+        "lat", "latitude", "lon", "longitude", "time", "date",
+        "init_time", "step", "day", "prediction_timedelta",
+        "member", "number", "sample", "adm3_name", "woreda", "district"
+    ]
+    for dv in list(ds.data_vars):
+        if dv.lower() in coord_candidates or any(c in dv.lower() for c in ["lat", "lon", "time", "step", "member"]):
+            ds = ds.set_coords(dv)
+    return ds
+
+
+def dim_fmt(ds: xr.Dataset) -> xr.Dataset:
+    """Standardize dimension names for observation datasets."""
+    ds = _promote_coords(ds)
     coord_list = list(ds.coords.keys())
 
     if "lon" not in coord_list:
-        #print("lon NOT in coords  --> ")  # , model_name)
-        lat_coords = [variable for variable in coord_list if "lat" in variable.lower()][0]
-        lon_coords = [variable for variable in coord_list if "lon" in variable.lower()][0]
+        lat_coords = [variable for variable in coord_list if "lat" in variable.lower()]
+        lon_coords = [variable for variable in coord_list if "lon" in variable.lower()]
 
-        ds = ds.rename({lat_coords: "lat", lon_coords: "lon"})
+        if lat_coords and lon_coords:
+            ds = ds.rename({lat_coords[0]: "lat", lon_coords[0]: "lon"})
 
-#    if "time" not in coord_list:
-#        print("time NOT in coords --> ")  # , model_name)
-#        time_coords = [variable for variable in coord_list if "TIME" in variable][0]
-#        ds = ds.rename({time_coords: "time"})
+    coord_list = list(ds.coords.keys())
 
     if set(ds.dims) == {"lat", "lon"} and len(ds.dims) == 2:
         return ds
 
     if "time" not in coord_list:
-        keywords = ["time", 'date']
+        keywords = ["time", "date"]
         time_coords = [
             variable
             for variable in coord_list
             if any(keyword in variable.lower() for keyword in keywords)
-        ][0]
-        ds = ds.rename({time_coords: "time"})
+        ]
+        if time_coords:
+            ds = ds.rename({time_coords[0]: "time"})
 
-    #return ds
     return dim_order_fmt(ds)
 
 
-def dim_fmt_model(ds):
-    """Standardize dimension names for deterministic reforecast model data"""
+def dim_fmt_model(ds: xr.Dataset, preserve_admin=False) -> xr.Dataset:
+    """Standardize dimension names for deterministic reforecast model data."""
+    ds = _promote_coords(ds)
     coord_list = list(ds.coords.keys())
 
     if "lon" not in coord_list:
-        #print("lon NOT in coords  --> ")  # , model_name)
-        lat_coords = [variable for variable in coord_list if "lat" in variable.lower()][0]
-        lon_coords = [variable for variable in coord_list if "lon" in variable.lower()][0]
+        lat_coords = [variable for variable in coord_list if "lat" in variable.lower()]
+        lon_coords = [variable for variable in coord_list if "lon" in variable.lower()]
 
-        ds = ds.rename({lat_coords: "lat", lon_coords: "lon"})
+        if lat_coords and lon_coords:
+            ds = ds.rename({lat_coords[0]: "lat", lon_coords[0]: "lon"})
+        elif not preserve_admin:
+            # Support regional/tabular datasets indexed by administrative area (e.g., adm3_name)
+            spatial_candidates = ["adm3_name", "adm2_name", "adm1_name", "woreda", "district", "station", "location"]
+            for cand in spatial_candidates:
+                if cand in ds.coords or cand in ds.dims or cand in ds.data_vars:
+                    if cand in ds.data_vars:
+                        ds = ds.set_coords(cand)
+                    ds = ds.rename({cand: "lat"})
+                    ds = ds.expand_dims(lon=[0])
+                    break
+
+    coord_list = list(ds.coords.keys())
 
     if "init_time" not in coord_list:
-        #print("init_time NOT in coords --> ")  # , model_name)
-        time_coords = [variable for variable in coord_list if "time" in variable.lower()][0]
-        ds = ds.rename({time_coords: "init_time"})
+        time_coords = [variable for variable in coord_list if "time" in variable.lower()]
+        if time_coords:
+            ds = ds.rename({time_coords[0]: "init_time"})
+
+    coord_list = list(ds.coords.keys())
 
     if "step" not in coord_list:
-        keywords = ["day", "prediction_timedelta"]
+        keywords = ["day", "step", "prediction_timedelta", "lead"]
         step_coords = [
             variable
             for variable in coord_list
             if any(keyword in variable.lower() for keyword in keywords)
-        ][0]
-        ds = ds.rename({step_coords: "step"})
+        ]
+        if step_coords:
+            ds = ds.rename({step_coords[0]: "step"})
 
-    # convert TimedeltaIndex to integer (days)
-    if isinstance(ds.indexes["step"], pd.TimedeltaIndex):
+    # Convert TimedeltaIndex to integer days
+    if "step" in ds.indexes and isinstance(ds.indexes["step"], pd.TimedeltaIndex):
         ds = ds.assign_coords(step=ds.step.dt.days)
 
-    #return ds
     return dim_order_fmt(ds)
 
 
-def dim_fmt_model_ensemble(ds):
-    """Standardize dimension names for probabilistic reforecast model data"""
+def dim_fmt_model_ensemble(ds: xr.Dataset, preserve_admin=False) -> xr.Dataset:
+    """Standardize dimension names for probabilistic reforecast model data."""
 
-    ds = dim_fmt_model(ds)
+    ds = dim_fmt_model(ds, preserve_admin=preserve_admin)
 
-    # Look at coordinates AND dimensions: a member dimension may exist without a
-    # coordinate variable (e.g. after the coords were dropped or a squeeze).
-    names = list(dict.fromkeys(list(ds.coords.keys()) + list(ds.dims)))
+    coord_list = list(ds.coords.keys())
 
-    if "member" not in names:
-        keywords = ["number", "sample", "member", "ensemble", "realization", "realisation"]
-        candidates = [
-            name for name in names
-            if any(keyword in name.lower() for keyword in keywords)
+    if "member" not in coord_list:
+        keywords = ["number", "sample", "member"]
+        ensemble_coords = [
+            variable
+            for variable in coord_list
+            if any(keyword in variable.lower() for keyword in keywords)
         ]
-        if not candidates:
-            raise ValueError(
-                "dim_fmt_model_ensemble: no ensemble-member dimension found. "
-                f"coords={list(ds.coords)}, dims={dict(ds.sizes)}, "
-                f"variables={list(ds.data_vars)}. A probabilistic dataset needs a "
-                "member dimension named like 'number', 'sample', 'member' or 'ensemble'."
-            )
-        ds = ds.rename({candidates[0]: "member"})
+        if ensemble_coords:
+            ds = ds.rename({ensemble_coords[0]: "member"})
 
     return dim_order_fmt(ds)

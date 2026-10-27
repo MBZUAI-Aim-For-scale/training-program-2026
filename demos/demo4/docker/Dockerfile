@@ -16,7 +16,7 @@ SHELL ["/bin/bash", "-c"]
 
 # Fail fast: check that the requirements resolve before copying the code
 RUN pip install uv
-COPY docker/requirements.txt /tmp/requirements.txt
+COPY demos/demo4/docker/requirements.txt /tmp/requirements.txt
 # (to stdout: uv can't write its output file onto /dev/null inside a build)
 RUN uv pip compile /tmp/requirements.txt --python-version 3.12 --quiet > /dev/null
 
@@ -35,7 +35,7 @@ ENV VIRTUAL_ENV=/app/.venv \
 
 # Same effect as the ENV above; kept so the activation is explicit
 RUN source .venv/bin/activate \
- && uv pip install -r docker/requirements.txt
+ && uv pip install -r demos/demo4/docker/requirements.txt
 
 # Map outlines are fetched now so the page works without internet at the venue
 RUN python -c "\

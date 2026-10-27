@@ -12,66 +12,85 @@ from momp.lib.loader import get_cfg, get_setting
 from momp.utils.visual import portrait_plot
 
 
+def _portrait_metric_data(results, metric_key, scale=1.0):
+    values, labels, columns = nested_dict_to_array(results, metric_key)
+    baseline_index = next(
+        (i for i, label in enumerate(labels) if "climatology" in str(label).lower()),
+        None,
+    )
+    if baseline_index is None:
+        return values * scale, labels, columns, False
+
+    model_indices = [i for i in range(len(labels)) if i != baseline_index]
+    return (
+        (values[model_indices] - values[baseline_index]) * scale,
+        [labels[i] for i in model_indices],
+        columns,
+        True,
+    )
+
+
+def _symmetric_range(data):
+    finite = np.asarray(data, dtype=float)
+    finite = finite[np.isfinite(finite)]
+    limit = float(np.max(np.abs(finite))) if finite.size else 0.0
+    limit = limit or 1.0
+    return -limit, limit
+
+
 def panel_portrait_mae_far_mr(results, *, dir_fig, show_panel=True, **kwargs):
     """Generate 3-panel portrait plots for MAE, FAR, and Miss Rate anomalies."""
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8, 3))
 
-    # 1. Mean MAE data & anomaly wrt climatology
-    arr, row_labels, col_labels = nested_dict_to_array(results, "mean_mae")
-    data = arr[:-1] - arr[-1]
-    v = np.nanmax(np.abs(data)) if np.any(~np.isnan(data)) else 1.0
-    vrange = (-v, v)
+    data, row_labels, col_labels, has_baseline = _portrait_metric_data(results, "mean_mae")
+    title_prefix = r"$\Delta$ " if has_baseline else ""
 
     fig, ax1, im = portrait_plot(
         data,
         col_labels,
-        row_labels[:-1],
+        row_labels,
         fig=fig,
         ax=ax1,
-        vrange=vrange,
+        vrange=_symmetric_range(data),
         annotate=True,
         annotate_data=data,
-        title=r"$\Delta MAE$ (days)",
+        title=f"{title_prefix}MAE (days)",
         colorbar_off=True,
     )
 
-    # 2. False Alarm Rate anomaly relative to climatology
-    arr, row_labels, col_labels = nested_dict_to_array(results, "false_alarm_rate")
-    data = arr[:-1] - arr[-1]
-    v = np.nanmax(np.abs(data)) if np.any(~np.isnan(data)) else 1.0
-    vrange = (-v, v)
+    data, row_labels, col_labels, has_baseline = _portrait_metric_data(
+        results, "false_alarm_rate", scale=100
+    )
 
     fig, ax2, im = portrait_plot(
         data,
         col_labels,
-        row_labels[:-1],
+        row_labels,
         fig=fig,
         ax=ax2,
-        vrange=vrange,
+        vrange=_symmetric_range(data),
         annotate=True,
         annotate_data=data,
-        title=r"$\Delta FAR (\%)$",
+        title=f"{title_prefix}FAR (%)",
         colorbar_off=True,
     )
 
     ax2.set_xlabel("Forecast window (days)")
 
-    # 3. Miss Rate anomaly relative to climatology
-    arr, row_labels, col_labels = nested_dict_to_array(results, "miss_rate")
-    data = arr[:-1] - arr[-1]
-    v = np.nanmax(np.abs(data)) if np.any(~np.isnan(data)) else 1.0
-    vrange = (-v, v)
+    data, row_labels, col_labels, has_baseline = _portrait_metric_data(
+        results, "miss_rate", scale=100
+    )
 
     fig, ax3, im = portrait_plot(
         data,
         col_labels,
-        row_labels[:-1],
+        row_labels,
         fig=fig,
         ax=ax3,
-        vrange=vrange,
+        vrange=_symmetric_range(data),
         annotate=True,
         annotate_data=data,
-        title=r"$\Delta MR (\%)$",
+        title=f"{title_prefix}MR (%)",
         colorbar_off=True,
     )
 

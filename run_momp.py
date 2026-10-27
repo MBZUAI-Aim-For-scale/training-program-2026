@@ -1,11 +1,8 @@
 """
 run_momp.py
 MOMP / ROMP benchmarking execution script.
-Phase 0 + Phase 1 updates:
-Normalized catalog metadata handling
-Deterministic / Probabilistic categorization
-Benchmark spec support through --spec or ROMP_SPEC_PATH
-One model per run
+Executes evaluation pipelines for selected weather models.
+Parses Streamlit UI runtime parameters, spec files, and GCS catalog configs.
 """
 from __future__ import annotations
 import argparse
@@ -15,41 +12,56 @@ import fnmatch
 import importlib.metadata
 import json
 import os
-import runpy
 import subprocess
 import sys
 from datetime import date
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
-import config
 
 # ------------------------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
-ROMP_ROOT = Path(config.ROMP_ROOT).expanduser().resolve()
-MOMP_PKG_DIR = Path(config.MOMP_PKG_DIR).expanduser().resolve()
+if (PROJECT_ROOT / "ai_weather" / "config.py").is_file():
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+    from ai_weather import config
+
+    sys.modules["config"] = config
+else:
+    import config
+
+LOCAL_ROMP_ROOT = PROJECT_ROOT / "apps" / "benchmarking" / "ROMP"
+if (LOCAL_ROMP_ROOT / "momp" / "driver.py").is_file():
+    ROMP_ROOT = LOCAL_ROMP_ROOT
+else:
+    ROMP_ROOT = Path(config.ROMP_ROOT).expanduser().resolve()
+MOMP_PKG_DIR = ROMP_ROOT / "momp"
+
+config.ROMP_ROOT = ROMP_ROOT
+config.MOMP_PKG_DIR = MOMP_PKG_DIR
+config.work_dir = str(ROMP_ROOT)
+config.pkg_dir = str(MOMP_PKG_DIR)
 
 # Make `config` importable no matter where the script is launched from
 for _p in (PROJECT_ROOT, ROMP_ROOT):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-# Data locations come from config.py (DATA_DIR defaults to ~/data, NOT the project
-# folder), so defaults below must be built from these rather than "data/...".
+# Data locations come from config.py
 DATA_DIR = Path(config.DATA_DIR).expanduser()
 EXTERNAL_DATA_DIR = Path(config.EXTERNAL_DATA_DIR).expanduser()
 
-# Current config.py defines ROMP_OUT_DIR / ROMP_FIG_DIR; older versions used ROMP_DEMO_OUT_DIR / ROMP_DEMO_FIG_DIR.
-ROMP_OUT_DIR = Path(getattr(config, "ROMP_OUT_DIR", getattr(config, "ROMP_DEMO_OUT_DIR", PROJECT_ROOT / "romp_output")))
-ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_FIG_DIR", PROJECT_ROOT / "romp_figure")))
+ROMP_OUT_DIR = Path(getattr(config, "ROMP_OUT_DIR", getattr(config, "ROMP_DEMO_OUT_DIR", PROJECT_ROOT / "romp_output"))).expanduser()
+ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_FIG_DIR", PROJECT_ROOT / "romp_figure"))).expanduser()
 
 import momp  # noqa: E402,F401
 import momp.params as params  # noqa: E402
-from momp.lib.loader import get_cfg  # noqa: E402
+from momp.lib.loader import get_cfg, get_setting  # noqa: E402
+from momp.lib.assertion import ROMPValidator  # noqa: E402
 
 # ------------------------------------------------------------------------------
-# Lead windows / tolerances
+# Lead windows / tolerances (Length matched: 2 items each)
 # ------------------------------------------------------------------------------
 LEAD_SETTINGS = {
     "verification_window_list": ((1, 15), (16, 30)),
@@ -156,14 +168,18 @@ def _obs_meta(obs_key: str):
 def resolve_path(p):
     if p is None or str(p).strip() == "":
         return None
-    if config.is_uri(p):                      # gs:// (Google bucket) paths are used as they are
-        return str(p).strip().rstrip("/")
-    p = Path(str(p)).expanduser()
-    if p.is_absolute():
-        return str(p)
-    candidates = [PROJECT_ROOT / p, ROMP_ROOT / p]
-    if p.parts and p.parts[0].lower() == "data":
-        candidates.insert(0, DATA_DIR.joinpath(*p.parts[1:]))
+    s = str(p).strip()
+    if config.is_uri(s):
+        clean_path = config._strip(s)
+        return f"gs://{clean_path}"
+
+    p_obj = Path(s).expanduser()
+    if p_obj.is_absolute():
+        return str(p_obj)
+
+    candidates = [PROJECT_ROOT / p_obj, ROMP_ROOT / p_obj]
+    if p_obj.parts and p_obj.parts[0].lower() == "data":
+        candidates.insert(0, DATA_DIR.joinpath(*p_obj.parts[1:]))
     for cand in candidates:
         if cand.exists():
             return str(cand.resolve())
@@ -249,19 +265,36 @@ def patched_package_metadata():
 def apply_base_paths(cfg):
     cfg.work_dir = str(ROMP_ROOT)
     cfg.pkg_dir = str(MOMP_PKG_DIR)
-    cfg.obs_dir = resolve_path(
-        getattr(cfg, "obs_dir", None) or EXTERNAL_DATA_DIR / "ENACTS_regridded_025"
-    )
-    cfg.ref_model_dir = resolve_path(
-        getattr(cfg, "ref_model_dir", None) or EXTERNAL_DATA_DIR / "ENACTS"
-    )
-    cfg.nc_mask = resolve_path(
-        getattr(cfg, "nc_mask", None)
-        or EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc"
-    )
+
+    # Resolve paths dynamically from config.py
+    obs_dir = getattr(config, "obs_dir", None) or getattr(config, "OBS_DIR", None)
+    ref_dir = getattr(config, "ref_model_dir", None) or getattr(config, "obs_dir", None)
+    mask_file = getattr(config, "nc_mask", None) or getattr(config, "JJAS_MASK_FILE", None)
+
+    cfg.obs_dir = resolve_path(obs_dir) if obs_dir else resolve_path(EXTERNAL_DATA_DIR / "CHIRPS")
+    cfg.ref_model_dir = resolve_path(ref_dir) if ref_dir else cfg.obs_dir
+    cfg.nc_mask = resolve_path(mask_file) if mask_file else resolve_path(EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc")
+
+    cfg.verification_window_list = ((1, 15), (16, 30))
+    cfg.tolerance_days_list = (3, 5)
+
+    if hasattr(config, "obs_file_pattern"):
+        cfg.obs_file_pattern = config.obs_file_pattern
+    if hasattr(config, "obs_var"):
+        cfg.obs_var = config.obs_var
+    if hasattr(config, "ref_model_file_pattern"):
+        cfg.ref_model_file_pattern = config.ref_model_file_pattern
+    if hasattr(config, "ref_model_var"):
+        cfg.ref_model_var = config.ref_model_var
+    if hasattr(config, "region"):
+        cfg.region = config.region
+
     if getattr(cfg, "shpfile_dir", None):
         cfg.shpfile_dir = resolve_path(cfg.shpfile_dir)
-    cfg.ref_model = "climatology"
+    else:
+        cfg.shpfile_dir = resolve_path(EXTERNAL_DATA_DIR / "shapefile")
+
+    cfg.ref_model = getattr(config, "ref_model", "climatology")
     cfg.layout = ("model", "verification_window")
 
 # ------------------------------------------------------------------------------
@@ -303,10 +336,7 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
             cfg.obs_var = _clean_str(_meta_get(obs_meta, "var", "precip"))
     coverage = _clean_str(spec.get("benchmark_coverage", ""))
     if coverage:
-        if coverage.lower().startswith("ethiopia"):
-            cfg.region = "Ethiopia"
-        else:
-            cfg.region = coverage
+        cfg.region = coverage
     forecast_window = _clean_str(spec.get("forecast_window", ""))
     if forecast_window:
         _apply_forecast_window(cfg, forecast_window)
@@ -377,17 +407,62 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
         cfg.ensemble_forecast = bool(model_spec["ensemble_forecast"])
 
 # ------------------------------------------------------------------------------
-# NEW: Apply Advanced Temporal & Verification Parameters from Environment
+# Apply Advanced Temporal & Verification Parameters from Environment
 # ------------------------------------------------------------------------------
 def apply_env_vars_to_cfg(cfg):
-    """Apply advanced temporal and verification parameters from environment variables."""
+    """
+    Apply temporal, verification, and Streamlit UI parameters from environment variables.
+    """
     def _parse_tuple(val):
-        if not val: return None
+        if not val:
+            return None
         try:
             return ast.literal_eval(val)
         except Exception:
             return None
 
+    # Streamlit Date Evaluation Windows
+    if val := os.getenv("ROMP_EVAL_START"):
+        if t := _iso_to_tuple(val):
+            cfg.start_date = t
+    if val := os.getenv("ROMP_EVAL_END"):
+        if t := _iso_to_tuple(val):
+            cfg.end_date = t
+
+    # Streamlit Baseline Climatology Years
+    if val := os.getenv("ROMP_BASELINE_START_YEAR"):
+        try:
+            cfg.start_year_clim = int(val)
+        except ValueError:
+            pass
+    if val := os.getenv("ROMP_BASELINE_END_YEAR"):
+        try:
+            cfg.end_year_clim = int(val)
+        except ValueError:
+            pass
+
+    # Streamlit Forecast Window
+    if val := os.getenv("ROMP_FORECAST_WINDOW"):
+        _apply_forecast_window(cfg, val)
+
+    # Streamlit Regional Coverage
+    if val := os.getenv("ROMP_BENCHMARK_COVERAGE"):
+        cfg.region = str(val)
+
+    for key, env_name, converter in [
+        ("wet_threshold", "ROMP_WET_THRESHOLD", float),
+        ("wet_init", "ROMP_WET_INIT", float),
+        ("wet_spell", "ROMP_WET_SPELL", int),
+        ("dry_spell", "ROMP_DRY_SPELL", int),
+        ("dry_extent", "ROMP_DRY_EXTENT", int),
+    ]:
+        if val := os.getenv(env_name):
+            try:
+                setattr(cfg, key, converter(val))
+            except ValueError:
+                pass
+
+    # Verification and Advanced Temporal Settings
     if val := os.getenv("ROMP_INIT_TYPE"):
         cfg.init_type = val
     if val := os.getenv("ROMP_DATE_FILTER_YEAR"):
@@ -397,18 +472,57 @@ def apply_env_vars_to_cfg(cfg):
             pass
     if val := os.getenv("ROMP_VERIFICATION_WINDOW_LIST"):
         parsed = _parse_tuple(val)
-        if parsed: 
+        if parsed:
             cfg.verification_window_list = parsed
     if val := os.getenv("ROMP_TOLERANCE_DAYS_LIST"):
         parsed = _parse_tuple(val)
-        if parsed: 
+        if parsed:
             cfg.tolerance_days_list = parsed
     if val := os.getenv("ROMP_MAX_FORECAST_DAY"):
         try:
             cfg.max_forecast_day = int(val)
         except ValueError:
             pass
-            
+
+    if val := os.getenv("ROMP_INIT_DAYS"):
+        try:
+            cfg.init_days = tuple(sorted(set(int(day.strip()) for day in val.split(",") if day.strip())))
+        except ValueError:
+            pass
+
+    for key, env_name in [
+        ("run_years_concurrently", "ROMP_RUN_YEARS_CONCURRENTLY"),
+        ("ensemble_forecast", "ROMP_ENSEMBLE_FORECAST"),
+    ]:
+        if val := os.getenv(env_name):
+            normalized = val.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                setattr(cfg, key, True)
+            elif normalized in {"0", "false", "no", "off"}:
+                setattr(cfg, key, False)
+
+    if val := os.getenv("ROMP_GROUND_TRUTH"):
+        obs_key = _clean_str(val).upper()
+        obs_meta = _obs_meta(obs_key)
+        cfg.obs = obs_key
+        obs_settings = getattr(config, "_OBS_SETS", {}).get(obs_key, {})
+        if obs_meta:
+            obs_settings = {
+                "dir": _meta_get(obs_meta, "dir", ""),
+                "pattern": _meta_get(obs_meta, "file_pattern", "{}.nc"),
+                "var": _meta_get(obs_meta, "var", "precip"),
+            }
+        if obs_settings:
+            obs_dir = _clean_str(obs_settings.get("dir", ""))
+            if obs_dir:
+                cfg.obs_dir = resolve_path(obs_dir)
+            patterns = obs_settings.get("pattern", "{}.nc")
+            cfg.obs_file_pattern = tuple(patterns) if isinstance(patterns, (list, tuple)) else (str(patterns),)
+            cfg.obs_var = _clean_str(obs_settings.get("var", "precip"))
+            cfg.ref_model_dir = cfg.obs_dir
+            cfg.ref_model_file_pattern = cfg.obs_file_pattern
+            cfg.ref_model_var = cfg.obs_var
+
     for key, env_name in [
         ("mok", "ROMP_MOK"),
         ("years", "ROMP_YEARS"),
@@ -429,7 +543,7 @@ def configure_model(cfg, catalog_key: str, meta, mode):
     name = _model_name(meta, catalog_key)
     cfg.model_list = (name,)
     model_dir = resolve_path(_meta_get(meta, "dir", ""))
-    if not model_dir or not config.exists(model_dir):
+    if not model_dir or not _path_exists(model_dir):
         raise FileNotFoundError(
             f"Model data directory for '{name}' not found: {model_dir!r}. "
             "Check BENCHMARK_MODEL_CATALOG['dir'] in config.py."
@@ -462,11 +576,9 @@ def _path_exists(path) -> bool:
     """True if a local path or a gs:// object/folder exists."""
     return config.exists(str(path)) if config.is_uri(path) else Path(str(path)).expanduser().exists()
 
-
 def _list_nc(folder):
     """Names of the .nc files directly in a local folder or gs:// folder."""
     return sorted(Path(f).name for f in config.glob(config.join(folder, "*.nc")))
-
 
 def validate_paths(cfg):
     checks = {
@@ -475,7 +587,7 @@ def validate_paths(cfg):
         "nc_mask": getattr(cfg, "nc_mask", None),
         "thresh_file": getattr(cfg, "thresh_file", None),
     }
-    if getattr(cfg, "polygon", False):                 # the shapefile folder is only needed for polygons
+    if getattr(cfg, "polygon", False):
         checks["shpfile_dir"] = getattr(cfg, "shpfile_dir", None)
     for i, d in enumerate(getattr(cfg, "model_dir_list", ()) or ()):
         checks[f"model_dir_list[{i}]"] = d
@@ -490,28 +602,56 @@ def validate_paths(cfg):
             + f"\n(data root is {DATA_DIR})"
         )
     problems = []
-    def _first(x):
-        return x[0] if isinstance(x, (list, tuple)) and x else x
-    obs_dir = getattr(cfg, "obs_dir", None)
-    obs_pat = _first(getattr(cfg, "obs_file_pattern", None)) or "{}.nc"
+    
+    region_clean = getattr(cfg, "region", "Ethiopia").replace(" ", "_")
     sd, ed = getattr(cfg, "start_date", None), getattr(cfg, "end_date", None)
+    
+    # 1. Validate Observations
+    obs_dir = getattr(cfg, "obs_dir", None)
+    obs_pat_raw = getattr(cfg, "obs_file_pattern", None)
     if obs_dir and sd and ed:
-        names = _list_nc(obs_dir)                      # one listing, also for the bucket
-        absent = [y for y in range(sd[0], ed[0] + 1) if obs_pat.format(y) not in names]
+        names = _list_nc(obs_dir)
+        absent = []
+        for y in range(sd[0], ed[0] + 1):
+            patterns_to_try = []
+            if isinstance(obs_pat_raw, (list, tuple)):
+                patterns_to_try.extend(p.format(y) for p in obs_pat_raw if "{}" in p)
+            elif isinstance(obs_pat_raw, str) and "{}" in obs_pat_raw:
+                patterns_to_try.append(obs_pat_raw.format(y))
+            
+            patterns_to_try.extend([f"CHIRPS_{region_clean}_{y}.nc", f"{y}.nc"])
+            if not any(pat in names for pat in patterns_to_try):
+                absent.append(y)
+
         if absent:
             problems.append(
-                f"obs: no file '{obs_pat}' in {obs_dir} for years {absent}; "
+                f"obs: missing rainfall files in {obs_dir} for years {absent}; "
                 f"first files found: {names[:5] or 'none'}"
             )
+
+    # 2. Validate Reference Model
     ref_dir = getattr(cfg, "ref_model_dir", None)
-    ref_pat = _first(getattr(cfg, "ref_model_file_pattern", None)) or "{}.nc"
+    ref_pat_raw = getattr(cfg, "ref_model_file_pattern", None) or "{}.nc"
     if ref_dir:
         names = _list_nc(ref_dir)
-        if not any(fnmatch.fnmatch(n, ref_pat.replace("{}", "*")) for n in names):
+        patterns_to_check = []
+        if isinstance(ref_pat_raw, (list, tuple)):
+            patterns_to_check.extend(p.replace("{}", "*") for p in ref_pat_raw if "{}" in p)
+        elif isinstance(ref_pat_raw, str):
+            patterns_to_check.append(ref_pat_raw.replace("{}", "*"))
+        patterns_to_check.extend(["*.nc", f"CHIRPS_{region_clean}_*.nc"])
+
+        matched = any(
+            fnmatch.fnmatch(n, pat) 
+            for pat in patterns_to_check 
+            for n in names
+        )
+        if not matched:
             problems.append(
-                f"ref model: nothing matches '{ref_pat}' in {ref_dir}; "
+                f"ref model: nothing matches patterns {patterns_to_check} in {ref_dir}; "
                 f"first files found: {names[:5] or 'none'}"
             )
+
     if problems:
         raise FileNotFoundError("Data file check failed:\n  " + "\n  ".join(problems))
 
@@ -519,6 +659,9 @@ def sync_params(cfg):
     for attr in dir(cfg):
         if not attr.startswith("_"):
             setattr(params, attr, getattr(cfg, attr))
+    from momp.lib.loader import set_cfg
+
+    set_cfg(cfg)
 
 def print_summary(cfg):
     print(f"work_dir      : {cfg.work_dir} ")
@@ -550,9 +693,10 @@ def run_single_model(mode, catalog_key, meta):
         raise FileNotFoundError(f"Driver not found at {driver_path} ")
     config.setup_earthdata_auth()
     with patched_package_metadata():
-        cfg = get_cfg()
+        cfg = get_cfg(validate=False)
         apply_base_paths(cfg)
         configure_model(cfg, catalog_key, meta, mode)
+
         spec_path = os.getenv("ROMP_SPEC_PATH")
         spec_file = Path(spec_path).expanduser() if spec_path else None
         if spec_file and spec_file.exists():
@@ -562,19 +706,18 @@ def run_single_model(mode, catalog_key, meta):
             except Exception as exc:
                 print(f"Warning: could not apply benchmark spec: {exc}")
                 
-        # Apply environment variables for advanced settings
+        # Apply environment variables passed from Streamlit UI
         apply_env_vars_to_cfg(cfg)
+
+        ROMPValidator(vars(cfg)).validate()
         
         validate_paths(cfg)
         sync_params(cfg)
         print_summary(cfg)
         print(f"Running MOMP driver pipeline at {driver_path}...")
-        original_argv = sys.argv
-        sys.argv = [str(driver_path), "--mode", mode]
-        try:
-            runpy.run_path(str(driver_path), run_name="__main__")
-        finally:
-            sys.argv = original_argv
+        from momp.driver import run_momp
+
+        run_momp(cfg=cfg, setting=get_setting())
     print(f"\nMOMP [{mode.upper()}] {name}: completed.")
 
 def execute_momp_benchmark(mode="det", model_key=None, in_process=False):

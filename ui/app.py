@@ -75,16 +75,16 @@ ensure_light_theme_config()
 # ─── EXTENDED SYSTEM MODULE CONFIGURATION MATRIX ───────────────────────────
 PAGE_MODULE_MAPPING = {
     "Home": "ui.pages.home",
-    "AI_Setup": "ui.pages.ai_setup", 
-    "AI Forecast": "ui.pages.ai_forecasting", 
+    # "AI_Setup": "ui.pages.ai_setup", 
+    # "AI Forecast": "ui.pages.ai_forecasting", 
     "SM_Benchmarking": "ui.pages.short_medium_benchmarking",
 }
 
 PRIMARY_MENU_CONFIG = {
     "Home": {"target": "Home", "label": "Home"},
-    "AI Lab Setup": {"target": "AI_Setup", "label": "Demo1"},
-    "AI Forecast": {"target": "AI Forecast", "label": "Demo3"},
-    "AI Benchmarking": {"target": "SM_Benchmarking", "label": "Demo4"},
+    # "AI Lab Setup": {"target": "AI_Setup", "label": "Demo1"},
+    # "AI Forecast": {"target": "AI Forecast", "label": "Demo3"},
+    "AI Benchmarking": {"target": "SM_Benchmarking", "label": "Benchmarking"},
 }
 
 COMING_SOON = {

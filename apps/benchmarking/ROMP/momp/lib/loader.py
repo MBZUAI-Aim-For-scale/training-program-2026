@@ -238,30 +238,36 @@ def build_cfg(cli_args=None):
     return cfg
 
 
-def get_cfg(cli_args=None):
+def get_cfg(cli_args=None, validate=True):
     global _cfg
     if _cfg is None:
         _cfg = build_cfg(cli_args)
 
-    try:
-        validator = ROMPValidator(_cfg)
-        validator.validate()
-        print("Configuration validated!")
-    except ROMPConfigError as e:
-        print(f"Error: Invalid Config!!! {e}")
-        if not _cfg.get('debug'):
-            #raise
-            #raise ROMPConfigError("invalid config")
-            sys.exit(1)
+    if validate:
+        try:
+            validator = ROMPValidator(_cfg)
+            validator.validate()
+            print("Configuration validated!")
+        except ROMPConfigError as e:
+            print(f"Error: Invalid Config!!! {e}")
+            if not _cfg.get('debug'):
+                sys.exit(1)
 
     #return _cfg
     return SimpleNamespace(**_cfg)
 
 
-def get_setting(cli_args=None):
+def set_cfg(cfg):
+    """Replace the cached configuration used by subsequent MOMP stages."""
+    global _cfg, _setting
+    _cfg = dict(vars(cfg))
+    _setting = None
+
+
+def get_setting(cli_args=None, validate=True):
     global _setting
     if _setting is None:
-        cfg = get_cfg(cli_args)
+        cfg = get_cfg(cli_args, validate=validate)
         #_setting = init_dataclass(Setting, cfg)
         _setting = init_dataclass(Setting, vars(cfg))
     return _setting

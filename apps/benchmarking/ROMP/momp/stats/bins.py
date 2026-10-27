@@ -496,10 +496,10 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
 
 # This function creates the observed forecast pairs for multiple years (core monsoon zone grids) and combines them
 def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
-                                  thresh_file, thresh_var, wet_threshold,
+                                  thresh_file=None, thresh_var=None, wet_threshold,
                                   date_filter_year, init_days, start_date, end_date,
                                   model_dir, model_var, unit_cvt, file_pattern,
-                                  wet_init, wet_spell, dry_spell, dry_threshold, dry_extent, fallback_date, mok,
+                                  wet_init, wet_spell, dry_spell, dry_threshold, dry_extent, fallback_date=None, mok,
                                   members, onset_percentage_threshold, max_forecast_day, day_bins, **kwargs):
     """Main function to perform multi-year reliability analysis."""
 
@@ -549,7 +549,7 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
             print(f"Found onset in {(~pd.isna(onset_da.values)).sum()} out of {onset_da.size} grid points")
                         
             print("Computing onset for all ensemble members...")
-            onset_all_members, _ = compute_onset_for_all_members(p_model_slice, thresh_slice, onset_da, **kwargs)
+            onset_all_members = compute_onset_for_all_members(p_model_slice, thresh_slice, onset_da, **kwargs)
             print(f"Found onset in {onset_all_members['onset_day'].notna().sum()} member cases")
     
 #            print("onset_all_members = ", onset_all_members)

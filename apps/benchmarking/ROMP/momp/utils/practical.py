@@ -1,106 +1,110 @@
+"""
+momp/utils/practical.py
+Path resolution, resource management, and argument restoration helpers.
+"""
+
 import inspect
+import sys
+import tempfile
+import shutil
+import atexit
 from importlib import resources
 from pathlib import PurePosixPath, Path
 
+# Safe import for config and params
+try:
+    import config
+except ImportError:
+    try:
+        from ai_weather import config
+    except ImportError:
+        _curr = Path(__file__).resolve()
+        for _parent in _curr.parents:
+            if (_parent / "ai_weather" / "config.py").exists() or (_parent / "config.py").exists():
+                sys.path.insert(0, str(_parent / "ai_weather"))
+                sys.path.insert(0, str(_parent))
+                break
+        import config
 
-#def set_dir(path_str):
+import momp.params as params
+
+
 def set_dir(path_str, work_dir=None):
     """
-    Resolves a path string into an OS-agnostic Path or Traversable object.
-    Checks local filesystem first, then falls back to package resources.
+    Resolves a path string into an OS-agnostic Path or URI string.
+    Preserves GCS URIs (gs://) without path corruptions.
     """
-    # 1. Convert to an OS-agnostic Path object (handles \ and / automatically)
-    p = Path(path_str).expanduser()
+    if not path_str:
+        return ""
 
-    # 2. Priority 1: Check if the file exists locally (User Customization)
-    #if p.exists():
-    #    return p
-        #return p.expanduser().resolve()
+    s = str(path_str).strip()
+    if config.is_uri(s):
+        return f"gs://{config._strip(s)}"
 
-    # 3. Priority 2: Look inside the package resources
-    # Use joinpath(*p.parts) to navigate the package structure correctly
-    #package = "momp"
-    #resource_target = resources.files(package).joinpath(*p.parts)
+    p = Path(s).expanduser()
 
     if p.is_absolute():
         return p.resolve()
-
     elif not work_dir:
-        #resource_target = Path(path_str).expanduser().resolve()
-        resource_target = p.resolve()
+        return p.resolve()
     else:
         wd = Path(work_dir).expanduser().resolve()
-        resource_target = (wd / p).resolve()
-    
-    # We return the 'Traversable' object. Both Path and Traversable have an .exists() method.
-    return resource_target
+        return (wd / p).resolve()
 
 
 def set_dir3(path):
     """
-    Set absolute path for a resource inside the MOMP package
     Return a real filesystem Path for a resource inside the MOMP package.
     Accepts POSIX or Windows-style paths (e.g. 'data/input', 'data\\input').
     """
     package = "momp"
     base_dir = resources.files(package)
 
-    # Normalize path into components (OS-independent)
     if isinstance(path, Path):
         parts = path.parts
     else:
         parts = PurePosixPath(str(path).replace("\\", "/")).parts
 
+    target_dir = base_dir
     for part in parts:
-        target_dir = base_dir / part
+        target_dir = target_dir / part
 
     return resources.as_file(target_dir)
 
 
 def set_dir2(folder):
     """
-    original
-    set absolute directory path for a specific folder in MOMP
+    Set absolute directory path for a specific folder inside the MOMP package.
     """
     package = "momp"
     base_dir = resources.files(package)
     target_dir = (base_dir / folder).resolve()
-
     return target_dir
 
 
-# an safer version of set_dir, which can be called as p = set_dir("data/input")
-# Keep temp dirs alive for program lifetime
 _TEMP_DIRS = []
+
 
 def set_dir_safe(path: str) -> Path:
     """
     Return a stable filesystem Path for a resource inside the MOMP package.
-    Safe to assign: p = set_dir("data/input")
-    Works on Windows, macOS, Linux, including zipped packages.
+    Extracts zipped package resources into persistent temp directories if required.
     """
-    import tempfile
-    import shutil
-    import atexit
-
     package = "momp"
 
-    # Normalize path into parts
     parts = PurePosixPath(path.replace("\\", "/")).parts
 
     resource = resources.files(package)
     for part in parts:
         resource = resource / part
 
-    # If resource already exists on disk, return it directly
     try:
         real_path = Path(resource)
         if real_path.exists():
             return real_path
     except TypeError:
-        pass  # Not a real filesystem path
+        pass
 
-    # Otherwise extract to a persistent temp directory
     temp_dir = tempfile.mkdtemp(prefix="momp_")
     _TEMP_DIRS.append(temp_dir)
 
@@ -119,19 +123,56 @@ def set_dir_safe(path: str) -> Path:
 def restore_args(func, kwargs, bound_args):
     """
     Restore keyword-only parameters of `func` back into kwargs.
+    Maps plural model lists (e.g., model_dir_list) to singular parameter names 
+    and falls back to active attributes in momp.params when values are missing or None.
     """
     sig = inspect.signature(func)
-    new_kwargs = dict(kwargs)
+    new_kwargs = dict(kwargs) if kwargs else {}
+
+    # Extract dictionary view from bound_args or locals()
+    if hasattr(bound_args, "arguments"):
+        b_dict = bound_args.arguments
+    elif isinstance(bound_args, dict):
+        b_dict = bound_args
+    else:
+        b_dict = {}
 
     for name, param in sig.parameters.items():
-        if (
-            param.kind is param.KEYWORD_ONLY
-            and name in bound_args
-            and name not in new_kwargs
-        ):
-            new_kwargs[name] = bound_args[name]
+        if name in ("kwargs", "self"):
+            continue
+
+        val = new_kwargs.get(name)
+        if val is None:
+            val = b_dict.get(name)
+
+        # Map plural list parameters to singular names if missing or None
+        if val is None:
+            if name == "model_dir":
+                dirs = new_kwargs.get("model_dir_list") or getattr(params, "model_dir_list", None)
+                if dirs and len(dirs) > 0:
+                    val = dirs[0] if isinstance(dirs, (list, tuple)) else dirs
+            elif name == "file_pattern":
+                pats = new_kwargs.get("file_pattern_list") or getattr(params, "file_pattern_list", None)
+                if pats and len(pats) > 0:
+                    val = pats[0] if isinstance(pats, (list, tuple)) else pats
+            elif name == "model_var":
+                vars_ = new_kwargs.get("model_var_list") or getattr(params, "model_var_list", None)
+                if vars_ and len(vars_) > 0:
+                    val = vars_[0] if isinstance(vars_, (list, tuple)) else vars_
+            elif name in ("model", "model_name"):
+                models = new_kwargs.get("model_list") or getattr(params, "model_list", None)
+                if models and len(models) > 0:
+                    val = models[0] if isinstance(models, (list, tuple)) else models
+
+        # Fallback to momp.params
+        if val is None and hasattr(params, name):
+            val = getattr(params, name)
+
+        # Fallback to function signature default if specified
+        if val is None and param.default != inspect.Parameter.empty:
+            val = param.default
+
+        if val is not None:
+            new_kwargs[name] = val
 
     return new_kwargs
-
-
-

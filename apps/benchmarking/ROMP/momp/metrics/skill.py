@@ -1,6 +1,7 @@
 #from momp.io.output import save_score_results
 from momp.stats.climatology import compute_climatological_onset_dataset
 from momp.stats.bins import multi_year_forecast_obs_pairs, multi_year_climatological_forecast_obs_pairs
+from momp.io.input import available_forecast_years
 from momp.stats.score import calculate_brier_score, calculate_auc, calculate_rps, calculate_brier_score_climatology, calculate_auc_climatology, calculate_skill_scores
 from momp.utils.printing import tuple_to_str
 from momp.io.output import save_ref_score_results, load_ref_score_results
@@ -31,6 +32,14 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
 #    print("="*60)
 
     kwargs = restore_args(create_score_results, kwargs, locals())
+    years = available_forecast_years(
+        years,
+        model_dir=model_dir,
+        file_pattern=file_pattern,
+    )
+    if not years:
+        raise FileNotFoundError(f"No forecast files are available in {model_dir!r}")
+    kwargs["years"] = years
 #    from pprint import pprint
 #    print(kwargs)
 
@@ -165,12 +174,10 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
                       'unit_cvt': ref_model_unit_cvt
                       }
 
-        #ref_obs_df = multi_year_forecast_obs_pairs(**kwargs_ref)
-
         if parallel:
-            ref_obs_df_all = parallel_forecast_obs_pairs(**kwargs)
+            ref_obs_df_all = parallel_forecast_obs_pairs(**kwargs_ref)
         else:
-            ref_obs_df_all = multi_year_forecast_obs_pairs(**kwargs)
+            ref_obs_df_all = multi_year_forecast_obs_pairs(**kwargs_ref)
         ref_obs_df = extract_pd_bins(ref_obs_df_all, day_bins)
 
         if BS:

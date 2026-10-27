@@ -30,7 +30,7 @@ from momp.utils.printing import tuple_to_str_range
 from momp.stats.benchmark import ens_compute_metrics_multiple_years
 from momp.stats.parallel import parallel_metrics_multiple_years
 
-cfg, setting = get_cfg(), get_setting()
+cfg, setting = get_cfg(validate=False), get_setting(validate=False)
 
 
 #def ens_compute_metrics_multiple_years(*, obs_dir, obs_file_pattern, obs_var, 
