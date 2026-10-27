@@ -1,4 +1,5 @@
 import os
+import logging
 # Fix gRPC C-core fork safety issues when using multiprocessing with gcsfs
 os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "1"
 os.environ["GRPC_POLL_STRATEGY"] = "poll"
@@ -7,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import warnings
 from pathlib import Path
@@ -68,7 +70,8 @@ def _pick_data_dir() -> Path:
     candidates = [PROJ_ROOT / "data", Path.home() / "data", Path("/app/data")]
 
     for c in candidates:
-        if (c / "external").is_dir():
+        external = c / "external"
+        if external.is_dir() and next(external.rglob("*.nc"), None) is not None:
             return c.resolve()
     for c in candidates:
         if c.is_dir():
@@ -80,6 +83,7 @@ DATA_DIR = _pick_data_dir()
 EXTERNAL_DATA_DIR = DATA_DIR / "external"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 ENACTS_DIR = EXTERNAL_DATA_DIR / "ENACTS_regridded_025"
+CHIRPS_025_DIR = EXTERNAL_DATA_DIR / "CHIRPS_regridded_025"
 
 # Region (country) and observation dataset
 region = os.getenv("ROMP_REGION", "Ethiopia").strip()
@@ -150,8 +154,8 @@ def _model_uri(key: str) -> str:
     )
 
 
-# Standard CHIRPS observation path in GCS
-OBS_URI = f"gs://{DEMO_BUCKET}/CHIRPS_Country_Yearly/{region}"
+# Standard CHIRPS observation path in GCS (0.25-degree regridded)
+OBS_URI = f"gs://{DEMO_BUCKET}/demo4/DATA/{region}/{obs}"
 
 # ==============================================================================
 # 3. URI SANITIZATION & GCS STORAGE HELPERS
@@ -338,6 +342,52 @@ def _has_nc(p: Path, recursive: bool = True) -> bool:
     return next(p.rglob("*.nc") if recursive else p.glob("*.nc"), None) is not None
 
 
+_REMOTE_PROBE_UNAVAILABLE = False
+
+
+def _remote_has_data(remote_uri: str) -> bool:
+    global _REMOTE_PROBE_UNAVAILABLE
+    if not is_uri(remote_uri):
+        return False
+    if _REMOTE_PROBE_UNAVAILABLE:
+        return False
+
+    result = []
+    finished = threading.Event()
+    gcs_logger = logging.getLogger("gcsfs")
+    previous_log_level = gcs_logger.level
+    gcs_logger.setLevel(logging.CRITICAL + 1)
+
+    def probe():
+        try:
+            fs = gcs_fs()
+            if remote_uri.lower().endswith(".nc"):
+                result.append((fs.exists(_strip(remote_uri)), True))
+            else:
+                pattern = remote_uri.rstrip("/") + "/*.nc"
+                result.append((bool(fs.glob(_strip(pattern))), True))
+        except Exception:
+            result.append((False, False))
+        finally:
+            finished.set()
+
+    threading.Thread(target=probe, daemon=True).start()
+    try:
+        timeout = max(0.1, float(os.getenv("DEMO_GCS_PROBE_TIMEOUT", "3")))
+    except ValueError:
+        timeout = 3.0
+    if not finished.wait(timeout):
+        _REMOTE_PROBE_UNAVAILABLE = True
+        return False
+
+    available, connected = result[0]
+    if connected:
+        gcs_logger.setLevel(previous_log_level)
+    else:
+        _REMOTE_PROBE_UNAVAILABLE = True
+    return available
+
+
 def _pick(label: str, local_candidates: List[tuple], remote_uri: str) -> str:
     """
     Selection strategy:
@@ -346,7 +396,7 @@ def _pick(label: str, local_candidates: List[tuple], remote_uri: str) -> str:
     3. If neither is available, mark as missing.
     """
     # 1. First look at Bucket (unless local mode is explicitly specified)
-    if DATA_MODE != "local" and BUCKET_OK:
+    if DATA_MODE != "local" and BUCKET_OK and _remote_has_data(remote_uri):
         DATA_SOURCES[label] = "bucket"
         return remote_uri
 
@@ -377,9 +427,16 @@ def _model_dir(key: str):
     return _pick(f"model {key}", [(LOCAL_MODEL_DIRS[key], True)], _model_uri(key))
 
 
+# Prioritize 0.25-degree regridded CHIRPS data directories
 OBS_DIR = _pick(
     "observations",
     [
+        (EXTERNAL_DATA_DIR / f"{obs}_regridded_025" / region, True),
+        (EXTERNAL_DATA_DIR / f"{obs}_regridded_025", False),
+        (EXTERNAL_DATA_DIR / "CHIRPS_regridded_025" / region, True),
+        (EXTERNAL_DATA_DIR / "CHIRPS_regridded_025", False),
+        (EXTERNAL_DATA_DIR / "CHIRPS_025" / region, True),
+        (EXTERNAL_DATA_DIR / "CHIRPS_025", False),
         (EXTERNAL_DATA_DIR / obs / region, True),
         (EXTERNAL_DATA_DIR / obs, False),
         (EXTERNAL_DATA_DIR / "CHIRPS", False),
@@ -409,8 +466,8 @@ APPS_DIR = _find_apps_dir(PROJ_ROOT)
 ROMP_ROOT = APPS_DIR / "benchmarking" / "ROMP"
 MOMP_PKG_DIR = ROMP_ROOT / "momp"
 
-ROMP_OUT_DIR = DATA_DIR / "ROMP_OUT" / "et" / "output"
-ROMP_FIG_DIR = DATA_DIR / "ROMP_OUT" / "et" / "figure"
+ROMP_OUT_DIR = PKG_DIR / "data" / "ROMP_OUTPUT"
+ROMP_FIG_DIR = ROMP_OUT_DIR / "figures"
 
 ROMP_OUT_DIR.mkdir(parents=True, exist_ok=True)
 ROMP_FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -426,7 +483,7 @@ def setup_earthdata_auth() -> None:
 
 
 # ==============================================================================
-# 5. BENCHMARKING CATALOG
+# 5. BENCHMARKING CATALOG (Configured with unit_cvt for tp -> mm conversion)
 # ==============================================================================
 BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
     "AIFS": {
@@ -435,6 +492,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "aifs_single",
         "file_pattern": "{}_adm3.nc",
         "var": "tp",
+        "unit_cvt": 1000.0,
         "probabilistic": False,
         "category": "Deterministic",
     },
@@ -444,6 +502,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "fuxi",
         "file_pattern": "{}.nc",
         "var": "tp",
+        "unit_cvt": 1000.0,
         "probabilistic": False,
         "category": "Deterministic",
     },
@@ -453,6 +512,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "graphcast",
         "file_pattern": "{}.nc",
         "var": "tp",
+        "unit_cvt": 1000.0,
         "probabilistic": False,
         "category": "Deterministic",
     },
@@ -462,6 +522,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "aifs_ens",
         "file_pattern": "{}_adm3.nc",
         "var": "tp",
+        "unit_cvt": 1000.0,
         "probabilistic": True,
         "category": "Probabilistic",
         "slow": True,
@@ -472,6 +533,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "gencast",
         "file_pattern": "{}.nc",
         "var": "tp",
+        "unit_cvt": 1000.0,
         "probabilistic": True,
         "category": "Probabilistic",
         "slow": True,
@@ -504,7 +566,7 @@ del _key, _meta, _expected_bool
 # ==============================================================================
 # 6. CORE PARAMETERS & VERIFICATION SETTINGS
 # ==============================================================================
-project_name = "probabilistic benchmarking with CHIRPS data"
+project_name = "AI benchmarking with CHIRPS 0.25 data"
 work_dir = str(ROMP_ROOT.resolve())
 pkg_dir = str(MOMP_PKG_DIR.resolve())
 layout = ("model", "verification_window")
@@ -512,8 +574,8 @@ layout = ("model", "verification_window")
 _OBS_SETS = {
     "CHIRPS": dict(
         dir=OBS_DIR, 
-        pattern=("{}.nc", f"CHIRPS_{region}_{{}}.nc"), 
-        var="precip"
+        pattern=("{}.nc", f"CHIRPS_{region}_{{}}.nc", f"CHIRPS_025_{region}_{{}}.nc"), 
+        var="RAINFALL"  # <-- Changed from "precip" to "RAINFALL"
     ),
     "IMERG": dict(
         dir=OBS_URI, 
@@ -521,6 +583,7 @@ _OBS_SETS = {
         var="RAINFALL"
     ),
 }
+
 if obs not in _OBS_SETS:
     raise ValueError(f"ROMP_OBS must be one of {list(_OBS_SETS)}, got '{obs}'")
 _obs = _OBS_SETS[obs]
@@ -610,14 +673,13 @@ def compute_mode_overrides(mode: str = "det", catalog: Optional[Dict[str, Any]] 
     if not selected_models:
         raise ValueError(f"No models found in catalog for category '{target_category}'.")
 
-    n = len(selected_models)
     overrides: Dict[str, Any] = {
         "mode": mode_str,
         "probabilistic": is_prob,
         "model_list": tuple(m["model_name"] for m in selected_models),
         "model_dir_list": tuple(resolve_path(m["dir"]) for m in selected_models),
         "model_var_list": tuple(m.get("var", "tp") for m in selected_models),
-        "unit_cvt_list": (None,) * n,
+        "unit_cvt_list": tuple(m.get("unit_cvt") for m in selected_models),
         "file_pattern_list": tuple(m.get("file_pattern", "{}.nc") for m in selected_models),
         "skill_score": True,
         "verification_window_list": ((1, 15), (16, 30)),

@@ -16,7 +16,7 @@ def members_for(m: catalog.Model, members: int) -> int:
     return min(members, m.max_members) if m.kind == "ensemble" else 1
 
 
-def plan(keys, init, lead_days, members, box, region_name, use_case) -> dict:
+def plan(keys, init, lead_days, members, box, region_name, use_case, synthetic=False) -> dict:
     """Per model: (what, info, RunRequest). what: ready | download | run | skip."""
     out = {}
     for k in keys:

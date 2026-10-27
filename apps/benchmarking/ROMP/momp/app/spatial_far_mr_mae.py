@@ -42,7 +42,7 @@ from momp.utils.printing import tuple_to_str_range
 from momp.stats.parallel import parallel_metrics_multiple_years
 
 
-cfg, setting = get_cfg(), get_setting()
+cfg, setting = get_cfg(validate=False), get_setting(validate=False)
 
 
 def get_canonical_model_key(model_name: str) -> str:
@@ -94,22 +94,29 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         case_cfg = {**asdict(case), **asdict(setting)}
         case_cfg["model"] = canonical_model
 
-        # Ensure evaluation years are explicitly populated in kwargs
+        # Derive evaluation years directly from configure dates rather than defaulting to 2003
         if not case_cfg.get("years"):
+            start_yr = case_cfg.get("start_date", (2019, 5, 1))[0]
+            end_yr = case_cfg.get("end_date", (2024, 10, 31))[0]
             case_cfg["years"] = (
                 getattr(setting, "years", None)
                 or getattr(cfg, "years", None)
-                or list(range(2003, 2024))
+                or tuple(range(start_yr, end_yr + 1))
             )
 
-        # Standardize output directory path routing
+        # Standardize output directory path routing for forecast model
         base_out_dir = case_cfg.get("dir_out") or f"/app/data/ROMP_OUT/et/output"
         base_fig_dir = case_cfg.get("dir_fig") or f"/app/data/ROMP_OUT/et/figure"
 
         if not str(base_out_dir).endswith(canonical_model):
             case_cfg["dir_out"] = os.path.join(base_out_dir, canonical_model)
+        else:
+            case_cfg["dir_out"] = base_out_dir
+
         if not str(base_fig_dir).endswith(canonical_model):
             case_cfg["dir_fig"] = os.path.join(base_fig_dir, canonical_model)
+        else:
+            case_cfg["dir_fig"] = base_fig_dir
 
         os.makedirs(case_cfg["dir_out"], exist_ok=True)
         os.makedirs(case_cfg["dir_fig"], exist_ok=True)
@@ -172,12 +179,27 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         canonical_ref_model = get_canonical_model_key(getattr(case, "model", "climatology"))
         case_cfg_ref["model"] = canonical_ref_model
 
+        # Route reference model output/figures to its own directory (e.g. .../climatology)
+        ref_base_out = getattr(setting, "dir_out", "/app/data/ROMP_OUT/et/output")
+        ref_base_fig = getattr(setting, "dir_fig", "/app/data/ROMP_OUT/et/figure")
+
+        if Path(ref_base_out).name in ["fuxi", "aifs_single", "graphcast", "aifs_ens", "gencast", "climatology"]:
+            ref_base_out = str(Path(ref_base_out).parent)
+        if Path(ref_base_fig).name in ["fuxi", "aifs_single", "graphcast", "aifs_ens", "gencast", "climatology"]:
+            ref_base_fig = str(Path(ref_base_fig).parent)
+
+        case_cfg_ref["dir_out"] = os.path.join(ref_base_out, canonical_ref_model)
+        case_cfg_ref["dir_fig"] = os.path.join(ref_base_fig, canonical_ref_model)
+
+        os.makedirs(case_cfg_ref["dir_out"], exist_ok=True)
+        os.makedirs(case_cfg_ref["dir_fig"], exist_ok=True)
+
         if not case_cfg_ref.get("years"):
             case_cfg_ref["years"] = (
                 getattr(setting, "years_clim", None)
                 or getattr(cfg, "years_clim", None)
                 or case_cfg.get("years")
-                or list(range(2003, 2024))
+                or tuple(range(2003, 2024))
             )
 
         # Model-observation onset benchmarking for reference model

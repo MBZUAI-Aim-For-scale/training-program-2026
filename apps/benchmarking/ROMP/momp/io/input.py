@@ -4,9 +4,12 @@ Data loading utilities for observation and model forecast datasets.
 """
 
 import os
+import re
 import sys
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -30,6 +33,135 @@ from momp.utils.region import region_select
 from momp.utils import storage
 from momp.utils.practical import restore_args
 import momp.params as params
+
+
+def _resolve_data_variable(ds, requested_var, source):
+    variables = list(ds.data_vars)
+    if requested_var in variables:
+        return requested_var
+
+    normalized = {str(name).strip().lower(): name for name in variables}
+    requested_key = str(requested_var or "").strip().lower()
+    aliases = [requested_key, "rainfall", "precip", "precipitation", "pr", "tp", "total_precipitation"]
+    for alias in aliases:
+        if alias in normalized:
+            return normalized[alias]
+
+    if len(variables) == 1:
+        return variables[0]
+
+    raise KeyError(
+        f"Could not resolve rainfall variable {requested_var!r} in {source}. "
+        f"Available data variables: {variables}"
+    )
+
+
+def _normalize_admin_name(value):
+    return re.sub(r"[^a-z0-9]", "", str(value).strip().lower())
+
+
+@lru_cache(maxsize=8)
+def _build_admin_grid_index(admin_names, latitudes, longitudes, shapefile_dir):
+    import geopandas as gpd
+
+    source = Path(shapefile_dir).expanduser()
+    if source.is_file():
+        boundary_files = [source]
+    elif source.is_dir():
+        boundary_files = [
+            path
+            for pattern in ("*.geojson", "*.json", "*.shp")
+            for path in source.rglob(pattern)
+        ]
+    else:
+        boundary_files = []
+
+    boundary_files.sort(
+        key=lambda path: (
+            not any(token in path.name.lower() for token in ("adm3", "admin3", "woreda")),
+            path.name.lower(),
+        )
+    )
+    if not boundary_files:
+        raise FileNotFoundError(f"No administrative boundary file found in {source}")
+
+    boundaries = gpd.read_file(boundary_files[0])
+    name_field = next(
+        (field for field in ("ADM3_EN", "ADM3_NAME", "NAME_3", "adm3_name", "name") if field in boundaries),
+        None,
+    )
+    if name_field is None:
+        raise ValueError(f"No ADM3 name field found in {boundary_files[0]}")
+    if boundaries.crs is not None and str(boundaries.crs).upper() not in {"EPSG:4326", "OGC:CRS84"}:
+        boundaries = boundaries.to_crs("EPSG:4326")
+
+    admin_indices = {
+        _normalize_admin_name(name): index
+        for index, name in enumerate(admin_names)
+    }
+    boundaries = boundaries.copy()
+    boundaries["_admin_index"] = boundaries[name_field].map(
+        lambda name: admin_indices.get(_normalize_admin_name(name), -1)
+    )
+    boundaries = boundaries[boundaries["_admin_index"] >= 0]
+    if boundaries.empty:
+        raise ValueError("No forecast ADM3 names match the configured administrative boundaries")
+
+    lon_grid, lat_grid = np.meshgrid(longitudes, latitudes)
+    points = gpd.GeoDataFrame(
+        {"_grid_index": np.arange(lon_grid.size)},
+        geometry=gpd.points_from_xy(lon_grid.ravel(), lat_grid.ravel()),
+        crs="EPSG:4326",
+    )
+    try:
+        joined = gpd.sjoin(
+            points,
+            boundaries[["_admin_index", "geometry"]],
+            how="left",
+            predicate="intersects",
+        )
+    except ImportError as exc:
+        raise RuntimeError("ADM3 forecast mapping requires a GeoPandas spatial index") from exc
+
+    joined = joined.dropna(subset=["_admin_index"]).drop_duplicates("_grid_index")
+    grid_index = np.full(lon_grid.size, -1, dtype=np.int32)
+    grid_index[joined["_grid_index"].to_numpy(dtype=np.int64)] = joined["_admin_index"].to_numpy(dtype=np.int32)
+    if not np.any(grid_index >= 0):
+        raise ValueError("No observation grid cells overlap matched ADM3 forecast areas")
+    return grid_index.reshape(lon_grid.shape)
+
+
+def admin_forecast_grid_index(admin_names, grid, shpfile_dir=None):
+    if shpfile_dir is None:
+        shpfile_dir = getattr(params, "shpfile_dir", None)
+    if not shpfile_dir:
+        raise ValueError("ADM3 forecasts require a configured shpfile_dir")
+    return _build_admin_grid_index(
+        tuple(str(name) for name in admin_names),
+        tuple(float(value) for value in grid.lat.values),
+        tuple(float(value) for value in grid.lon.values),
+        str(shpfile_dir),
+    )
+
+
+def available_forecast_years(years, *, model_dir=None, file_pattern=None):
+    if years is None:
+        return ()
+    if isinstance(model_dir, (list, tuple)):
+        model_dir = model_dir[0] if model_dir else None
+    if isinstance(file_pattern, (list, tuple)):
+        file_pattern = file_pattern[0] if file_pattern else None
+    file_pattern = str(file_pattern or "{}.nc")
+
+    available = []
+    for year in years:
+        filename = file_pattern.format(year) if "{}" in file_pattern else f"{year}.nc"
+        forecast_path = storage.join(model_dir, filename)
+        if storage.exists(forecast_path):
+            available.append(year)
+        else:
+            print(f"Skipping forecast year {year}: file not found at {forecast_path}")
+    return tuple(available)
 
 
 def load_thresh_file(*, thresh_file=None, thresh_var=None, wet_threshold=None, region=None, **kwargs):
@@ -167,7 +299,8 @@ def load_imd_rainfall(year=None, *, obs_dir=None, obs_file_pattern=None, obs_var
     ds = dim_fmt(ds)
     ds = region_select(ds, region=region, **kwargs_clean)
 
-    rainfall = ds[obs_var]
+    rainfall_var = _resolve_data_variable(ds, obs_var, obs_file)
+    rainfall = ds[rainfall_var]
     if obs_unit_cvt:
         rainfall *= obs_unit_cvt
 
@@ -217,7 +350,11 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
     filtered_dates_yr = get_initialization_dates(year, **kwargs_clean)
 
     ds = storage.open_dataset(file_path)
-    ds = dim_fmt_model(ds)
+    admin_dim = next(
+        (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in ds.dims),
+        None,
+    )
+    ds = dim_fmt_model(ds, preserve_admin=admin_dim is not None)
 
     available_init_times = pd.to_datetime(ds.init_time.values)
     matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
@@ -225,7 +362,8 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
         raise ValueError(f"No matching initialization times found for year {year} in {file_path}")
     ds = ds.sel(init_time=matching_times)
 
-    ds = region_select(ds, region=region, **kwargs_clean)
+    if admin_dim is None:
+        ds = region_select(ds, region=region, **kwargs_clean)
 
     # Detect or fallback 'step' dimension name
     if 'step' not in ds.dims and 'step' not in ds.coords:
@@ -290,7 +428,19 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
 
     ds = storage.open_dataset(file_path)
     ds.load()
-    ds = dim_fmt_model_ensemble(ds)
+    admin_dim = next(
+        (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in ds.dims),
+        None,
+    )
+    ds = dim_fmt_model_ensemble(ds, preserve_admin=admin_dim is not None)
+
+    if "member" not in ds.dims:
+        dimensions = tuple(ds.dims)
+        ds.close()
+        raise ValueError(
+            f"Probabilistic forecast file has no ensemble member dimension: {file_path} "
+            f"(dimensions: {dimensions})"
+        )
 
     available_init_times = pd.to_datetime(ds.init_time.values)
     matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
@@ -317,7 +467,16 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
     if members:
         ds = ds.sel(member=list(members))
 
-    ds = region_select(ds, region=region, **kwargs_clean)
+    if ds.sizes.get("member", 0) < 2:
+        member_count = ds.sizes.get("member", 0)
+        ds.close()
+        raise ValueError(
+            f"Probabilistic forecast requires at least two ensemble members; "
+            f"found {member_count} in {file_path}"
+        )
+
+    if admin_dim is None:
+        ds = region_select(ds, region=region, **kwargs_clean)
 
     p_model = ds[model_var]
 

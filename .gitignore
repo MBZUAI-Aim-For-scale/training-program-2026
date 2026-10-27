@@ -13,6 +13,7 @@
 reports/slides/.quarto/
 # macOS
 .DS_Store
+.omx/
 
 # External NetCDF data
 /data/external/**/*.nc

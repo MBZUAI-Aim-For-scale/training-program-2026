@@ -139,6 +139,8 @@ date_filter_year = getattr(config, "date_filter_year", 2024)
 # ------------------------------------------------------------------------------
 verification_window_list = getattr(config, "verification_window_list", ((1, 15), (16, 30)))
 tolerance_days_list = getattr(config, "tolerance_days_list", (3, 5))
+if len(tolerance_days_list) != len(verification_window_list):
+    tolerance_days_list = tuple(3 if window[1] <= 15 else 5 for window in verification_window_list)
 max_forecast_day = getattr(config, "max_forecast_day", 30)
 day_bins = getattr(config, "day_bins", ((1, 5), (6, 10), (11, 15), (16, 20), (21, 25), (26, 30)))
 

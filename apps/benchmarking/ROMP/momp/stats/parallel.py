@@ -28,6 +28,7 @@ from momp.stats.benchmark import (
     compute_metrics_multiple_years,
     ens_compute_metrics_multiple_years,
 )
+from momp.io.input import available_forecast_years
 
 
 def func_wrapper(chunk_and_args, target_func=None):
@@ -204,6 +205,18 @@ def parallel_metrics_multiple_years(ens=False, **kwargs):
 
     if all_years is None:
         raise ValueError("The 'years' argument must be provided in kwargs.")
+
+    if kwargs.get("model") != "climatology":
+        all_years = available_forecast_years(
+            all_years,
+            model_dir=kwargs.get("model_dir"),
+            file_pattern=kwargs.get("file_pattern"),
+        )
+        if not all_years:
+            raise FileNotFoundError(
+                f"No forecast files are available in {kwargs.get('model_dir')!r}"
+            )
+        kwargs["years"] = all_years
 
     cpu_count = os.cpu_count() or 1
     task_count = len(all_years)

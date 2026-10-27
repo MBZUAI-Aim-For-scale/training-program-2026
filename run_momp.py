@@ -1,11 +1,8 @@
 """
 run_momp.py
 MOMP / ROMP benchmarking execution script.
-Phase 0 + Phase 1 updates:
-Normalized catalog metadata handling
-Deterministic / Probabilistic categorization
-Benchmark spec support through --spec or ROMP_SPEC_PATH
-One model per run
+Executes evaluation pipelines for selected weather models.
+Parses Streamlit UI runtime parameters, spec files, and GCS catalog configs.
 """
 from __future__ import annotations
 import argparse
@@ -15,21 +12,36 @@ import fnmatch
 import importlib.metadata
 import json
 import os
-import runpy
 import subprocess
 import sys
 from datetime import date
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 
-import config
-
 # ------------------------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
-ROMP_ROOT = Path(config.ROMP_ROOT).expanduser().resolve()
-MOMP_PKG_DIR = Path(config.MOMP_PKG_DIR).expanduser().resolve()
+if (PROJECT_ROOT / "ai_weather" / "config.py").is_file():
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+    from ai_weather import config
+
+    sys.modules["config"] = config
+else:
+    import config
+
+LOCAL_ROMP_ROOT = PROJECT_ROOT / "apps" / "benchmarking" / "ROMP"
+if (LOCAL_ROMP_ROOT / "momp" / "driver.py").is_file():
+    ROMP_ROOT = LOCAL_ROMP_ROOT
+else:
+    ROMP_ROOT = Path(config.ROMP_ROOT).expanduser().resolve()
+MOMP_PKG_DIR = ROMP_ROOT / "momp"
+
+config.ROMP_ROOT = ROMP_ROOT
+config.MOMP_PKG_DIR = MOMP_PKG_DIR
+config.work_dir = str(ROMP_ROOT)
+config.pkg_dir = str(MOMP_PKG_DIR)
 
 # Make `config` importable no matter where the script is launched from
 for _p in (PROJECT_ROOT, ROMP_ROOT):
@@ -45,7 +57,8 @@ ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_F
 
 import momp  # noqa: E402,F401
 import momp.params as params  # noqa: E402
-from momp.lib.loader import get_cfg  # noqa: E402
+from momp.lib.loader import get_cfg, get_setting  # noqa: E402
+from momp.lib.assertion import ROMPValidator  # noqa: E402
 
 # ------------------------------------------------------------------------------
 # Lead windows / tolerances (Length matched: 2 items each)
@@ -171,6 +184,7 @@ def resolve_path(p):
         if cand.exists():
             return str(cand.resolve())
     return str(candidates[0])
+
 # ------------------------------------------------------------------------------
 # Mode helpers
 # ------------------------------------------------------------------------------
@@ -396,7 +410,9 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
 # Apply Advanced Temporal & Verification Parameters from Environment
 # ------------------------------------------------------------------------------
 def apply_env_vars_to_cfg(cfg):
-    """Apply advanced temporal and verification parameters from environment variables."""
+    """
+    Apply temporal, verification, and Streamlit UI parameters from environment variables.
+    """
     def _parse_tuple(val):
         if not val:
             return None
@@ -405,6 +421,48 @@ def apply_env_vars_to_cfg(cfg):
         except Exception:
             return None
 
+    # Streamlit Date Evaluation Windows
+    if val := os.getenv("ROMP_EVAL_START"):
+        if t := _iso_to_tuple(val):
+            cfg.start_date = t
+    if val := os.getenv("ROMP_EVAL_END"):
+        if t := _iso_to_tuple(val):
+            cfg.end_date = t
+
+    # Streamlit Baseline Climatology Years
+    if val := os.getenv("ROMP_BASELINE_START_YEAR"):
+        try:
+            cfg.start_year_clim = int(val)
+        except ValueError:
+            pass
+    if val := os.getenv("ROMP_BASELINE_END_YEAR"):
+        try:
+            cfg.end_year_clim = int(val)
+        except ValueError:
+            pass
+
+    # Streamlit Forecast Window
+    if val := os.getenv("ROMP_FORECAST_WINDOW"):
+        _apply_forecast_window(cfg, val)
+
+    # Streamlit Regional Coverage
+    if val := os.getenv("ROMP_BENCHMARK_COVERAGE"):
+        cfg.region = str(val)
+
+    for key, env_name, converter in [
+        ("wet_threshold", "ROMP_WET_THRESHOLD", float),
+        ("wet_init", "ROMP_WET_INIT", float),
+        ("wet_spell", "ROMP_WET_SPELL", int),
+        ("dry_spell", "ROMP_DRY_SPELL", int),
+        ("dry_extent", "ROMP_DRY_EXTENT", int),
+    ]:
+        if val := os.getenv(env_name):
+            try:
+                setattr(cfg, key, converter(val))
+            except ValueError:
+                pass
+
+    # Verification and Advanced Temporal Settings
     if val := os.getenv("ROMP_INIT_TYPE"):
         cfg.init_type = val
     if val := os.getenv("ROMP_DATE_FILTER_YEAR"):
@@ -425,6 +483,45 @@ def apply_env_vars_to_cfg(cfg):
             cfg.max_forecast_day = int(val)
         except ValueError:
             pass
+
+    if val := os.getenv("ROMP_INIT_DAYS"):
+        try:
+            cfg.init_days = tuple(sorted(set(int(day.strip()) for day in val.split(",") if day.strip())))
+        except ValueError:
+            pass
+
+    for key, env_name in [
+        ("run_years_concurrently", "ROMP_RUN_YEARS_CONCURRENTLY"),
+        ("ensemble_forecast", "ROMP_ENSEMBLE_FORECAST"),
+    ]:
+        if val := os.getenv(env_name):
+            normalized = val.strip().lower()
+            if normalized in {"1", "true", "yes", "on"}:
+                setattr(cfg, key, True)
+            elif normalized in {"0", "false", "no", "off"}:
+                setattr(cfg, key, False)
+
+    if val := os.getenv("ROMP_GROUND_TRUTH"):
+        obs_key = _clean_str(val).upper()
+        obs_meta = _obs_meta(obs_key)
+        cfg.obs = obs_key
+        obs_settings = getattr(config, "_OBS_SETS", {}).get(obs_key, {})
+        if obs_meta:
+            obs_settings = {
+                "dir": _meta_get(obs_meta, "dir", ""),
+                "pattern": _meta_get(obs_meta, "file_pattern", "{}.nc"),
+                "var": _meta_get(obs_meta, "var", "precip"),
+            }
+        if obs_settings:
+            obs_dir = _clean_str(obs_settings.get("dir", ""))
+            if obs_dir:
+                cfg.obs_dir = resolve_path(obs_dir)
+            patterns = obs_settings.get("pattern", "{}.nc")
+            cfg.obs_file_pattern = tuple(patterns) if isinstance(patterns, (list, tuple)) else (str(patterns),)
+            cfg.obs_var = _clean_str(obs_settings.get("var", "precip"))
+            cfg.ref_model_dir = cfg.obs_dir
+            cfg.ref_model_file_pattern = cfg.obs_file_pattern
+            cfg.ref_model_var = cfg.obs_var
 
     for key, env_name in [
         ("mok", "ROMP_MOK"),
@@ -557,10 +654,14 @@ def validate_paths(cfg):
 
     if problems:
         raise FileNotFoundError("Data file check failed:\n  " + "\n  ".join(problems))
+
 def sync_params(cfg):
     for attr in dir(cfg):
         if not attr.startswith("_"):
             setattr(params, attr, getattr(cfg, attr))
+    from momp.lib.loader import set_cfg
+
+    set_cfg(cfg)
 
 def print_summary(cfg):
     print(f"work_dir      : {cfg.work_dir} ")
@@ -592,9 +693,10 @@ def run_single_model(mode, catalog_key, meta):
         raise FileNotFoundError(f"Driver not found at {driver_path} ")
     config.setup_earthdata_auth()
     with patched_package_metadata():
-        cfg = get_cfg()
+        cfg = get_cfg(validate=False)
         apply_base_paths(cfg)
         configure_model(cfg, catalog_key, meta, mode)
+
         spec_path = os.getenv("ROMP_SPEC_PATH")
         spec_file = Path(spec_path).expanduser() if spec_path else None
         if spec_file and spec_file.exists():
@@ -604,19 +706,18 @@ def run_single_model(mode, catalog_key, meta):
             except Exception as exc:
                 print(f"Warning: could not apply benchmark spec: {exc}")
                 
-        # Apply environment variables for advanced settings
+        # Apply environment variables passed from Streamlit UI
         apply_env_vars_to_cfg(cfg)
+
+        ROMPValidator(vars(cfg)).validate()
         
         validate_paths(cfg)
         sync_params(cfg)
         print_summary(cfg)
         print(f"Running MOMP driver pipeline at {driver_path}...")
-        original_argv = sys.argv
-        sys.argv = [str(driver_path), "--mode", mode]
-        try:
-            runpy.run_path(str(driver_path), run_name="__main__")
-        finally:
-            sys.argv = original_argv
+        from momp.driver import run_momp
+
+        run_momp(cfg=cfg, setting=get_setting())
     print(f"\nMOMP [{mode.upper()}] {name}: completed.")
 
 def execute_momp_benchmark(mode="det", model_key=None, in_process=False):

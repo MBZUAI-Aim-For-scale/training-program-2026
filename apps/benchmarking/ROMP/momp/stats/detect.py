@@ -11,6 +11,7 @@ import pandas as pd
 import xarray as xr
 
 from momp.utils.practical import restore_args
+from momp.io.input import admin_forecast_grid_index
 import momp.params as params
 
 
@@ -28,6 +29,62 @@ def find_first_true(arr):
         return int(np.argmax(arr_bool))
     else:
         return -1
+
+
+def _fit_forecast_horizon(p_model, max_forecast_day, dry_extent, wet_spell, day_bins):
+    step_count = int(p_model.sizes.get("step", 0))
+    if step_count == 0:
+        raise ValueError("Forecast data has no 'step' dimension.")
+
+    available_day = step_count
+    if "step" in p_model.coords:
+        values = np.asarray(p_model["step"].values)
+        if np.issubdtype(values.dtype, np.timedelta64):
+            values = values / np.timedelta64(1, "D")
+        else:
+            try:
+                values = values.astype(float)
+            except (TypeError, ValueError):
+                values = np.asarray([], dtype=float)
+
+            units = str(p_model["step"].attrs.get("units", "")).lower()
+            if "hour" in units:
+                values = values / 24.0
+            elif "minute" in units:
+                values = values / 1440.0
+            elif "second" in units:
+                values = values / 86400.0
+
+        finite_steps = values[np.isfinite(values)]
+        if finite_steps.size:
+            available_day = int(np.floor(np.max(finite_steps)))
+
+    window_end = max((int(end) for _, end in (day_bins or ())), default=int(max_forecast_day))
+    max_forecast_day = min(int(max_forecast_day), window_end)
+    if max_forecast_day > available_day:
+        raise ValueError(
+            f"Forecast data provides steps only through day {available_day}, "
+            f"but the verification window requires day {max_forecast_day}."
+        )
+
+    requested_dry_extent = max(0, int(dry_extent or 0))
+    dry_extent = min(requested_dry_extent, max(0, available_day - max_forecast_day))
+    required_tail = dry_extent if dry_extent > wet_spell else max(0, wet_spell - 1)
+    required_steps = max_forecast_day + required_tail
+    if required_steps > available_day:
+        raise ValueError(
+            f"Forecast data provides steps only through day {available_day}, "
+            f"but onset detection requires day {required_steps}."
+        )
+
+    if dry_extent < requested_dry_extent:
+        print(
+            f"Using available forecast steps through day {available_day}; "
+            f"dry_extent reduced from {requested_dry_extent} to {dry_extent} "
+            f"for a {max_forecast_day}-day verification window."
+        )
+
+    return max_forecast_day, dry_extent, required_steps
 
 
 def detect_onset(
@@ -238,26 +295,37 @@ def compute_onset_for_deterministic_model(
 ):
     """Compute onset dates for deterministic model forecast."""
     kwargs = restore_args(compute_onset_for_deterministic_model, kwargs, locals())
+    onset_kwargs = {
+        key: value
+        for key, value in kwargs.items()
+        if key not in {"wet_init", "wet_spell", "dry_spell", "dry_threshold", "dry_extent"}
+    }
 
     results_list = []
 
     init_times = p_model.init_time.values
-    lats = p_model.lat.values
-    lons = p_model.lon.values
+    admin_dim = next(
+        (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in p_model.dims),
+        None,
+    )
+    if admin_dim:
+        lats = onset_da.lat.values
+        lons = onset_da.lon.values
+        admin_grid = admin_forecast_grid_index(
+            p_model[admin_dim].values,
+            onset_da,
+            kwargs.get("shpfile_dir"),
+        )
+    else:
+        lats = p_model.lat.values
+        lons = p_model.lon.values
+        admin_grid = None
 
     print(f"Processing {len(init_times)} init times x {len(lats)} lats x {len(lons)} lons...")
 
-    if dry_extent <= wet_spell:
-        max_steps_needed = max_forecast_day + wet_spell - 1
-    else:
-        max_steps_needed = max_forecast_day + dry_extent
-
-    full_steps = p_model.sizes["step"]
-    if full_steps < max_steps_needed:
-        raise ValueError(
-            f"Not enough forecast time steps: model steps {full_steps} "
-            f"< min steps required {max_steps_needed}."
-        )
+    max_forecast_day, dry_extent, max_steps_needed = _fit_forecast_horizon(
+        p_model, max_forecast_day, dry_extent, wet_spell, kwargs.get("day_bins")
+    )
 
     total_potential_inits = 0
     valid_inits = 0
@@ -277,6 +345,10 @@ def compute_onset_for_deterministic_model(
         for i, lat in enumerate(lats):
             for j, lon in enumerate(lons):
                 total_potential_inits += 1
+                admin_index = admin_grid[i, j] if admin_grid is not None else None
+                if admin_index is not None and admin_index < 0:
+                    skipped_no_obs += 1
+                    continue
 
                 try:
                     obs_onset = onset_da.isel(lat=i, lon=j).values
@@ -299,11 +371,14 @@ def compute_onset_for_deterministic_model(
                 thresh = thresh_slice.isel(lat=i, lon=j).values if not np.isscalar(thresh_slice) else thresh_slice
 
                 try:
-                    forecast_series = (
-                        p_model.isel(init_time=t_idx, lat=i, lon=j)
-                        .sel(step=slice(1, max_steps_needed))
-                        .values
-                    )
+                    forecast_indexers = {"init_time": t_idx}
+                    if admin_index is None:
+                        forecast_indexers.update(lat=i, lon=j)
+                    else:
+                        forecast_indexers[admin_dim] = int(admin_index)
+                    forecast_series = p_model.isel(forecast_indexers).sel(
+                        step=slice(1, max_steps_needed)
+                    ).values
 
                     onset_day = None
                     if len(forecast_series) >= max_steps_needed:
@@ -317,7 +392,7 @@ def compute_onset_for_deterministic_model(
                                 dry_spell=dry_spell,
                                 dry_threshold=dry_threshold,
                                 dry_extent=dry_extent,
-                                **kwargs,
+                                **onset_kwargs,
                             )
 
                             if isonset:
@@ -380,6 +455,11 @@ def compute_onset_for_all_members(
 ):
     """Compute onset dates for each ensemble member, initialization time, and grid point."""
     kwargs = restore_args(compute_onset_for_all_members, kwargs, locals())
+    onset_kwargs = {
+        key: value
+        for key, value in kwargs.items()
+        if key not in {"wet_init", "wet_spell", "dry_spell", "dry_threshold", "dry_extent"}
+    }
 
     results_list = []
 
@@ -388,22 +468,28 @@ def compute_onset_for_all_members(
     if not members:
         members = p_model.member.values if "member" in p_model.dims else [0]
 
-    lats = p_model.lat.values
-    lons = p_model.lon.values
+    admin_dim = next(
+        (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in p_model.dims),
+        None,
+    )
+    if admin_dim:
+        lats = onset_da.lat.values
+        lons = onset_da.lon.values
+        admin_grid = admin_forecast_grid_index(
+            p_model[admin_dim].values,
+            onset_da,
+            kwargs.get("shpfile_dir"),
+        )
+    else:
+        lats = p_model.lat.values
+        lons = p_model.lon.values
+        admin_grid = None
 
     print(f"Processing {len(init_times)} init times x {len(lats)*len(lons)} unique locations x {len(members)} members...")
 
-    if dry_extent <= wet_spell:
-        max_steps_needed = max_forecast_day + wet_spell - 1
-    else:
-        max_steps_needed = max_forecast_day + dry_extent
-
-    full_steps = p_model.sizes["step"]
-    if full_steps < max_steps_needed:
-        raise ValueError(
-            f"Not enough forecast time steps: model steps {full_steps} "
-            f"< min steps required {max_steps_needed}."
-        )
+    max_forecast_day, dry_extent, max_steps_needed = _fit_forecast_horizon(
+        p_model, max_forecast_day, dry_extent, wet_spell, kwargs.get("day_bins")
+    )
 
     total_potential_forecasts = 0
     valid_forecasts = 0
@@ -423,8 +509,11 @@ def compute_onset_for_all_members(
         for lon_idx, lat_idx in product(range(len(lons)), range(len(lats))):
             lon = lons[lon_idx]
             lat = lats[lat_idx]
-
             total_potential_forecasts += len(members)
+            admin_index = admin_grid[lat_idx, lon_idx] if admin_grid is not None else None
+            if admin_index is not None and admin_index < 0:
+                skipped_no_obs += len(members)
+                continue
 
             try:
                 obs_onset = onset_da.isel(lat=lat_idx, lon=lon_idx).values
@@ -448,19 +537,18 @@ def compute_onset_for_all_members(
                 valid_forecasts += 1
 
                 try:
-                    if "member" in p_model.dims:
-                        forecast_series = (
-                            p_model.isel(init_time=t_idx, lat=lat_idx, lon=lon_idx)
-                            .sel(step=slice(1, max_steps_needed))
-                            .sel(member=member)
-                            .values
-                        )
+                    forecast_indexers = {"init_time": t_idx}
+                    if admin_index is None:
+                        forecast_indexers.update(lat=lat_idx, lon=lon_idx)
                     else:
-                        forecast_series = (
-                            p_model.isel(init_time=t_idx, lat=lat_idx, lon=lon_idx)
-                            .sel(step=slice(1, max_steps_needed))
-                            .values
-                        )
+                        forecast_indexers[admin_dim] = int(admin_index)
+                    forecast_data = p_model.isel(forecast_indexers).sel(
+                        step=slice(1, max_steps_needed)
+                    )
+                    if "member" in p_model.dims:
+                        forecast_series = forecast_data.sel(member=member).values
+                    else:
+                        forecast_series = forecast_data.values
 
                     if len(forecast_series) < max_steps_needed:
                         onset_day = None
@@ -476,7 +564,7 @@ def compute_onset_for_all_members(
                                 dry_spell=dry_spell,
                                 dry_threshold=dry_threshold,
                                 dry_extent=dry_extent,
-                                **kwargs,
+                                **onset_kwargs,
                             )
 
                             if isonset:

@@ -35,6 +35,7 @@ from momp.io.input import (
     get_forecast_probabilistic_twice_weekly,
     get_forecast_deterministic_twice_weekly,
     load_imd_rainfall,
+    available_forecast_years,
 )
 from momp.stats.detect import (
     detect_observed_onset,
@@ -289,10 +290,20 @@ def compute_metrics_multiple_years(
     onset_da_dict = {}
 
     thresh_da = load_thresh_file(**kwargs)
-    ref_clim = kwargs.get("model") == "climatology" or ref_model == "climatology"
+    ref_clim = kwargs.get("model") == "climatology"
 
     if years is None:
         years = kwargs.get("years") or getattr(params, "years", [2020])
+
+    if not ref_clim:
+        years = available_forecast_years(
+            years,
+            model_dir=model_dir,
+            file_pattern=file_pattern,
+        )
+        if not years:
+            raise FileNotFoundError(f"No forecast files are available in {model_dir!r}")
+        kwargs["years"] = years
 
     if ref_clim:
         print("Generating climatology onset doy for each year as onset_da_dict")
@@ -309,7 +320,7 @@ def compute_metrics_multiple_years(
             print("Extracting ensemble forecast data ...")
             p_model = get_forecast_probabilistic_twice_weekly(year, **kwargs)
             print("Computing onset for ensemble forecast ...")
-            _, onset_df = compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs)
+            onset_df = compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs)
 
         elif not ref_clim:
             print("Extracting model forecast data ...")
@@ -396,10 +407,20 @@ def ens_compute_metrics_multiple_years(
     onset_da_dict = {}
 
     thresh_da = load_thresh_file(**kwargs)
-    ref_clim = kwargs.get("model") == "climatology" or ref_model == "climatology"
+    ref_clim = kwargs.get("model") == "climatology"
 
     if years is None:
         years = kwargs.get("years") or getattr(params, "years", [2020])
+
+    if not ref_clim:
+        years = available_forecast_years(
+            years,
+            model_dir=model_dir,
+            file_pattern=file_pattern,
+        )
+        if not years:
+            raise FileNotFoundError(f"No forecast files are available in {model_dir!r}")
+        kwargs["years"] = years
 
     if ref_clim:
         climatological_onset_doy = compute_climatological_onset(**kwargs)

@@ -9,7 +9,7 @@ from matplotlib.patches import Polygon
 import numpy as np
 import xarray as xr
 
-from momp.params.region_def import polygon_boundary
+from momp.params.region_def import domain, polygon_boundary
 from momp.utils.land_mask import get_region_outline, shp_outline
 from momp.utils.visual import box_boundary
 
@@ -33,6 +33,107 @@ def calculate_cmz_averages(da, polygon_lon, polygon_lat):
         return np.nanmean(values_inside)
     else:
         return np.nan
+
+
+def _coordinate_spacing(values):
+    numeric = np.asarray(values, dtype=float)
+    numeric = np.unique(numeric[np.isfinite(numeric)])
+    differences = np.diff(np.sort(numeric))
+    differences = differences[differences > 0]
+    if differences.size:
+        return float(np.median(differences))
+    return max(float(np.ptp(numeric)) * 0.02 if numeric.size else 0.0, 0.1)
+
+
+def _region_geometry(shpfile_dir, region):
+    if shpfile_dir:
+        import geopandas as gpd
+        from shapely.ops import unary_union
+
+        source = os.path.expanduser(str(shpfile_dir))
+        if os.path.isfile(source):
+            boundary_files = [source]
+        elif os.path.isdir(source):
+            boundary_files = [
+                os.path.join(root, filename)
+                for root, _, files in os.walk(source)
+                for filename in files
+                if filename.lower().endswith((".geojson", ".json", ".shp"))
+            ]
+        else:
+            boundary_files = []
+
+        boundary_files.sort(
+            key=lambda path: (
+                not any(token in os.path.basename(path).lower() for token in ("adm3", "admin3", "woreda")),
+                path.lower(),
+            )
+        )
+        for boundary_file in boundary_files:
+            try:
+                frame = gpd.read_file(boundary_file)
+                if frame.empty or frame.geometry.isna().all():
+                    continue
+                if frame.crs is not None and str(frame.crs).upper() not in {"EPSG:4326", "OGC:CRS84"}:
+                    frame = frame.to_crs("EPSG:4326")
+
+                region_key = str(region).strip().casefold()
+                for field in ("ADM0_EN", "NAME_0", "COUNTRY", "ADMIN", "ADM1_EN", "NAME_1", "ADM2_EN", "NAME_2", "ADM3_EN", "NAME_3"):
+                    if field in frame:
+                        selected = frame[frame[field].astype(str).str.strip().str.casefold() == region_key]
+                        if not selected.empty:
+                            frame = selected
+                            break
+                return unary_union(frame.geometry)
+            except Exception:
+                continue
+
+    try:
+        from momp.utils.land_mask import get_shp
+
+        return get_shp(region=region)
+    except Exception:
+        return None
+
+
+def _region_grid_mask(latitudes, longitudes, region, geometry):
+    lon_grid, lat_grid = np.meshgrid(longitudes, latitudes)
+    mask = np.ones(lon_grid.shape, dtype=bool)
+    try:
+        south, north, west, east = map(float, domain(region))
+        if south < north and west < east:
+            mask &= (lat_grid >= south) & (lat_grid <= north)
+            mask &= (lon_grid >= west) & (lon_grid <= east)
+            extent = (west, east, south, north)
+        else:
+            extent = None
+    except (TypeError, ValueError, UnboundLocalError):
+        extent = None
+
+    if geometry is not None:
+        try:
+            from shapely.vectorized import contains
+
+            mask &= contains(geometry, lon_grid, lat_grid)
+        except ImportError:
+            from shapely.geometry import Point
+
+            mask &= np.array(
+                [geometry.contains(Point(lon, lat)) for lon, lat in zip(lon_grid.ravel(), lat_grid.ravel())]
+            ).reshape(lon_grid.shape)
+
+    return mask, extent
+
+
+def _geometry_boundaries(geometry):
+    if geometry is None:
+        return []
+    boundaries = []
+    for polygon in getattr(geometry, "geoms", [geometry]):
+        if getattr(polygon, "geom_type", "") == "Polygon":
+            coordinates = np.asarray(polygon.exterior.coords)
+            boundaries.append((coordinates[:, 0], coordinates[:, 1]))
+    return boundaries
 
 
 def plot_spatial_metrics(
@@ -68,6 +169,32 @@ def plot_spatial_metrics(
 
     lats = mean_mae.lat.values
     lons = mean_mae.lon.values
+    lat_spacing = _coordinate_spacing(lats)
+    lon_spacing = _coordinate_spacing(lons)
+    region_geometry = _region_geometry(shpfile_dir, region)
+    region_mask, domain_extent = _region_grid_mask(lats, lons, region, region_geometry)
+    mean_mae = mean_mae.where(region_mask)
+    far = far.where(region_mask)
+    miss_rate = miss_rate.where(region_mask)
+    data_extent = (
+        float(np.nanmin(lons)) - lon_spacing / 2,
+        float(np.nanmax(lons)) + lon_spacing / 2,
+        float(np.nanmin(lats)) - lat_spacing / 2,
+        float(np.nanmax(lats)) + lat_spacing / 2,
+    )
+    if domain_extent:
+        west, east, south, north = domain_extent
+        map_extent = (
+            west - lon_spacing / 2,
+            east + lon_spacing / 2,
+            south - lat_spacing / 2,
+            north + lat_spacing / 2,
+        )
+    elif region_geometry is not None:
+        west, south, east, north = region_geometry.bounds
+        map_extent = (west - lon_spacing / 2, east + lon_spacing / 2, south - lat_spacing / 2, north + lat_spacing / 2)
+    else:
+        map_extent = data_extent
 
     lat_diff = abs(lats[1] - lats[0]) if len(lats) > 1 else 0.1
     print(f"Detected resolution: {lat_diff:.1f} degrees")
@@ -146,7 +273,9 @@ def plot_spatial_metrics(
     txt_fsize = 8 if abs(lat_diff) >= 0.99 else None
 
     # Load shapefile outlines dynamically for requested region
-    region_boundaries = get_region_outline(shpfile_dir, region=region) if shpfile_dir else []
+    region_boundaries = _geometry_boundaries(region_geometry)
+    if not region_boundaries:
+        region_boundaries = get_region_outline(shpfile_dir, region=region) if shpfile_dir else []
 
     # Panel 1: Mean MAE
     masked_mae = np.ma.masked_invalid(mean_mae.values)
@@ -249,17 +378,17 @@ def plot_spatial_metrics(
 
     # Axis styling
     for i, ax in enumerate(axes):
-        ax.set_xlim([lons.min() - 2, lons.max() + 2])
-        ax.set_ylim([lats.min() - 2, lats.max() + 2])
+        ax.set_xlim(map_extent[0], map_extent[1])
+        ax.set_ylim(map_extent[2], map_extent[3])
 
-        xticks = np.arange(lons.min(), lons.max() + 1, 4)
+        xticks = np.linspace(map_extent[0], map_extent[1], 5)
         ax.set_xticks(xticks)
-        ax.set_xticklabels([f"{int(x)}°E" for x in xticks])
+        ax.set_xticklabels([f"{x:g}°E" for x in xticks])
 
         if i == 0:
-            yticks = np.arange(lats.min(), lats.max() + 1, 4)
+            yticks = np.linspace(map_extent[2], map_extent[3], 5)
             ax.set_yticks(yticks)
-            ax.set_yticklabels([f"{int(y)}°N" for y in yticks])
+            ax.set_yticklabels([f"{y:g}°N" for y in yticks])
         else:
             ax.set_yticks([])
             ax.set_yticklabels([])

@@ -40,10 +40,10 @@ def run_momp(cfg=None, setting=None):
 
     try:
         # 1. Calculate and save Skill Scores in defined day bins
-        skill_score_in_bins()
+        skill_score_in_bins(cfg=cfg, setting=setting)
 
         # 2. Generate spatial metrics and maps (MAE, FAR, Miss Rate)
-        spatial_far_mr_mae_map()
+        spatial_far_mr_mae_map(cfg=cfg, setting=setting)
 
         logger.info("ROMP Workflow completed successfully!")
 

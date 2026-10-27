@@ -5,7 +5,7 @@
 #   DEV=1 bash docker/run.sh          enable live code mounting
 #   bash docker/run.sh logs           follow container logs
 #   bash docker/run.sh restart        restart running services
-#   bash docker/run.sh update         git pull and recreate/rebuild container
+#   bash docker/run.sh update         git pull and incrementally update container
 #   bash docker/run.sh rebuild        rebuild image from scratch and recreate container
 #   bash docker/run.sh down           stop and remove container services
 
@@ -55,16 +55,11 @@ validate_env_file() {
     exit 1
   fi
 
-  if [ -n "${DEMO3_GCP_KEY:-}" ] && [ ! -f "$DEMO3_GCP_KEY" ]; then
-    echo "[WARNING] DEMO3_GCP_KEY is set to '$DEMO3_GCP_KEY', but file does not exist."
-    echo "          Falling back to default GCP credential paths..."
-  fi
-
   echo "[OK] Configuration validated successfully."
 }
 
 # ----------------------------------------------------------------------
-# 2. Host Environment & Standalone Container Cleanup
+# 2. Host Environment Setup & Automatic Container Pruning
 # ----------------------------------------------------------------------
 validate_env_file
 
@@ -92,20 +87,11 @@ elif [ -f "$ADC" ]; then
 fi
 
 cleanup_standalone_conflicts() {
-  # Remove unmanaged standalone container 'ai_weather' to prevent Compose name collision
+  # Force remove any lingering container named 'ai_weather' to prevent Compose collision
   if docker ps -a --format '{{.Names}}' | grep -q "^ai_weather$"; then
-    echo "Cleaning up conflicting standalone container 'ai_weather'..."
+    echo "[INFO] Cleaning up conflicting container 'ai_weather'..."
     docker rm -f ai_weather >/dev/null 2>&1 || true
   fi
-
-  docker run -d --name ai_weather --restart unless-stopped \
-    --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
-    -p 127.0.0.1:8501:8501 \
-    "${code[@]}" "${envs[@]}" "${cloud[@]}" -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
-    -e DEMO3_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
-    ai_weather
-
-  echo "AI Forecasting starting: http://localhost:8501"
 }
 
 check_gpu_availability() {
@@ -123,8 +109,7 @@ start_compose() {
   check_gpu_availability
   echo "Starting AI Weather services via Docker Compose..."
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
-  echo "Services operational:"
-  echo "  Streamlit Dashboard: http://localhost:8501"
+  echo "[SUCCESS] AI Forecasting operational: http://localhost:8501"
 }
 
 # ----------------------------------------------------------------------
@@ -143,7 +128,7 @@ case "${1:-start}" in
     cleanup_standalone_conflicts
     echo "Restarting AI Weather services..."
     docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart
-    echo "Services restarted."
+    echo "[SUCCESS] Services restarted."
     ;;
 
   update)
@@ -151,10 +136,10 @@ case "${1:-start}" in
     git -C "$here" pull
     cleanup_standalone_conflicts
     if [ "${DEV:-0}" = "1" ]; then
-      echo "DEV=1 enabled; restarting container."
+      echo "DEV=1 enabled; restarting services..."
       docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart
     else
-      echo "Rebuilding image and updating container..."
+      echo "Updating container with incremental build cache..."
       docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
     fi
     ;;

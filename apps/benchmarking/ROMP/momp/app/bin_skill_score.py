@@ -24,7 +24,7 @@ from collections import defaultdict
 #                         members, max_forecast_day, day_bins, date_filter_year,
 #                         file_pattern, mok, save_csv_score, plot_heatmap, **kwargs):
 
-cfg, setting = get_cfg(), get_setting()
+cfg, setting = get_cfg(validate=False), get_setting(validate=False)
 
 def skill_score_in_bins(cfg=cfg, setting=setting):
 

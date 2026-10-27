@@ -102,6 +102,20 @@ def gpu_name() -> str | None:
     return None
 
 
+def _normalize_optional_gpu_probe(run: Dict[str, Any]) -> None:
+    for step in run.get("steps", []):
+        detail = str(step.get("detail", ""))
+        if (
+            step.get("id") == "host.gpu"
+            and step.get("status") == "failed"
+            and "nvidia-smi" in detail.lower()
+            and ("filenotfounderror" in detail.lower() or "not found" in detail.lower())
+        ):
+            step["status"] = "warn"
+            step["detail"] = "nvidia-smi is unavailable on the host; checking container GPU access instead."
+            step["hint"] = ""
+
+
 def _demo_status(demo: Dict[str, Any]) -> Tuple[str, str, str | None]:
     if demo["n"] == 1:
         return "running", "This dashboard", None
@@ -133,6 +147,7 @@ def _last_run() -> Dict[str, Any] | None:
         run = json.loads(setup.STATUS.read_text())
     except (OSError, ValueError):
         return None
+    _normalize_optional_gpu_probe(run)
     if run.get("state") == "running" and not setup.pid_alive(run.get("pid")):
         run["state"] = "interrupted"
     return run
@@ -185,6 +200,9 @@ def _output(steps: list) -> str:
     parts = []
     for s in steps:
         if s.get("log"):
+            if s.get("id") == "host.gpu" and s.get("status") == "warn":
+                parts.append(f"──── {s['title'].replace('`', '')} [warn]\n{s['detail']}")
+                continue
             parts.append(
                 f"──── {s['title'].replace('`', '')} [{s['status']}]\n"
                 + setup.tail(setup.LOGS / s["log"], 200)

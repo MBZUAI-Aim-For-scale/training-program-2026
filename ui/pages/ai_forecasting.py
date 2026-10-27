@@ -436,7 +436,7 @@ def render():
                 "".join(f'<span class="metric-pill"><strong>{k}:</strong> {v}</span>' for k, v in tags) +
                 '</div>', unsafe_allow_html=True)
 
-    plan = runs.plan(model_keys, init, lead_days, members, box, region_name, use_case)
+    plan = runs.plan(model_keys, init, lead_days, members, box, region_name, use_case, synthetic=False)
     sig = runs.signature(model_keys, init, lead_days, members)
     s = runs.state(sig)
     actionable = any(w != runs.SKIP for w, _, _ in plan.values())

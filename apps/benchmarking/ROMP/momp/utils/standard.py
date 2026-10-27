@@ -83,7 +83,7 @@ def dim_fmt(ds: xr.Dataset) -> xr.Dataset:
     return dim_order_fmt(ds)
 
 
-def dim_fmt_model(ds: xr.Dataset) -> xr.Dataset:
+def dim_fmt_model(ds: xr.Dataset, preserve_admin=False) -> xr.Dataset:
     """Standardize dimension names for deterministic reforecast model data."""
     ds = _promote_coords(ds)
     coord_list = list(ds.coords.keys())
@@ -94,7 +94,7 @@ def dim_fmt_model(ds: xr.Dataset) -> xr.Dataset:
 
         if lat_coords and lon_coords:
             ds = ds.rename({lat_coords[0]: "lat", lon_coords[0]: "lon"})
-        else:
+        elif not preserve_admin:
             # Support regional/tabular datasets indexed by administrative area (e.g., adm3_name)
             spatial_candidates = ["adm3_name", "adm2_name", "adm1_name", "woreda", "district", "station", "location"]
             for cand in spatial_candidates:
@@ -131,10 +131,10 @@ def dim_fmt_model(ds: xr.Dataset) -> xr.Dataset:
     return dim_order_fmt(ds)
 
 
-def dim_fmt_model_ensemble(ds: xr.Dataset) -> xr.Dataset:
+def dim_fmt_model_ensemble(ds: xr.Dataset, preserve_admin=False) -> xr.Dataset:
     """Standardize dimension names for probabilistic reforecast model data."""
 
-    ds = dim_fmt_model(ds)
+    ds = dim_fmt_model(ds, preserve_admin=preserve_admin)
 
     coord_list = list(ds.coords.keys())
 
