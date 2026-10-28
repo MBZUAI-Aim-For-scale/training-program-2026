@@ -542,7 +542,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "label": "Probabilistic · AIFS ENS",
         "dir": _model_dir("aifs_ens"),
         "model_name": "aifs_ens",
-        "file_pattern": "{}_adm3.nc",
+        "file_pattern": "{}.nc",
         "var": "tp",
         "unit_cvt": 1000.0,
         "probabilistic": True,
