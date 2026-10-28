@@ -14,6 +14,10 @@ from momp.utils.practical import restore_args
 from itertools import product
 
 
+class NoForecastDataError(ValueError):
+    """Raised when no requested year can provide forecast-observation pairs."""
+
+
 def extract_day_range(bin_label):
     """ extract the start day of each bin for sorting purpose """
     if 'Days ' in bin_label:
@@ -528,6 +532,7 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
 
     # Initialize list to store all forecast-observation pairs
     all_forecast_obs_pairs = []
+    processed_years = []
                  
     # Process each year
     for year in years:
@@ -564,6 +569,7 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
 #            print("DONE!!!")
             # Add to master list
             all_forecast_obs_pairs.append(forecast_obs_pairs)
+            processed_years.append(year)
 
             print(f"Year {year} completed: {len(forecast_obs_pairs)} forecast-observation pairs")
 
@@ -582,13 +588,15 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
     #print(f"{'='*50}")
 
     if not all_forecast_obs_pairs:
-        raise ValueError("No data was successfully processed for any year")
+        raise NoForecastDataError(
+            f"No data was successfully processed for years {list(years)}"
+        )
 
     combined_forecast_obs = pd.concat(all_forecast_obs_pairs, ignore_index=True)
 
     # Print final summary statistics
     print(f"\nFinal Summary Statistics:")
-    print(f"Years processed: {years}")
+    print(f"Years processed: {processed_years}")
     return combined_forecast_obs
 
 

@@ -19,6 +19,7 @@ os.environ["GRPC_POLL_STRATEGY"] = "poll"
 from momp.stats.bins import (
     multi_year_climatological_forecast_obs_pairs,
     multi_year_forecast_obs_pairs,
+    NoForecastDataError,
 )
 from momp.stats.climatology import (
     compute_climatological_onset_dataset,
@@ -50,9 +51,12 @@ def func_wrapper(chunk_and_args, target_func=None):
         )
 
     if target_func == "forecast":
-        return multi_year_forecast_obs_pairs(
-            **local_kwargs
-        )
+        try:
+            return multi_year_forecast_obs_pairs(**local_kwargs)
+        except NoForecastDataError as exc:
+            years = local_kwargs["years"]
+            print(f"Skipping year chunk {years}: {exc}")
+            return pd.DataFrame()
 
 
 def parallel_climatological_forecast_obs_pairs(clim_onset, **kwargs):
@@ -111,7 +115,13 @@ def parallel_forecast_obs_pairs(**kwargs):
         func_wrapper_forecast = partial(func_wrapper, target_func="forecast")
         list_of_results = list(executor.map(func_wrapper_forecast, tasks))
 
-    combined_forecast_obs = pd.concat(list_of_results, ignore_index=True)
+    successful_results = [result for result in list_of_results if not result.empty]
+    if not successful_results:
+        raise NoForecastDataError(
+            f"No forecast-observation pairs were produced for years {list(all_years)}"
+        )
+
+    combined_forecast_obs = pd.concat(successful_results, ignore_index=True)
     return combined_forecast_obs
 
 
