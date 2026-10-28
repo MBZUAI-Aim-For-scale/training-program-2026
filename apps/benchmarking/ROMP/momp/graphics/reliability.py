@@ -38,15 +38,22 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
         [(str(label), group) for label, group in data.groupby(event_column, sort=False, dropna=False)]
         if event_column else [('All events', data)]
     )
-    frequency = np.histogram(data['predicted_prob'], bins=bin_edges)[0] / len(data)
     results_for_csv = []
 
     print("\nReliability Analysis (separate curve for each onset-time event):")
     print("Event bin\tProbability range\tN forecasts\tMean forecast\tObserved frequency")
     print("-" * 100)
 
-    fig, ax = plt.subplots(1, 1, figsize=(10, 8))
-    for event_label, event_data in event_groups:
+    fig, axes = plt.subplots(
+        len(event_groups), 1,
+        figsize=(10, max(4, 3.8 * len(event_groups))),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+    axes = axes[:, 0]
+    for panel_index, (event_label, event_data) in enumerate(event_groups):
+        ax = axes[panel_index]
         mean_forecast_prob = np.full(n_bins, np.nan)
         observed_frequency = np.full(n_bins, np.nan)
         error_bars = np.full(n_bins, np.nan)
@@ -87,22 +94,37 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
             ax.errorbar(
                 mean_forecast_prob[valid], observed_frequency[valid],
                 yerr=error_bars[valid], fmt='o-', linewidth=1.8,
-                markersize=6, capsize=3, label=event_label,
+                markersize=6, capsize=3, color='tab:blue', label='Observed frequency',
             )
+        ax.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Perfect reliability')
+        ax.set_title(event_label)
+        ax.set_ylabel('Observed frequency', fontsize=10)
+        ax.grid(True, alpha=0.3)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+
+        event_frequency = np.histogram(event_data['predicted_prob'], bins=bin_edges)[0] / len(event_data)
+        ax2 = ax.twinx()
+        positive_frequency = event_frequency[event_frequency > 0]
+        ax2.bar(
+            bin_centers,
+            event_frequency,
+            width=0.08,
+            alpha=0.2,
+            color='gray',
+            label='Forecast frequency',
+            zorder=0,
+        )
+        if len(positive_frequency):
+            ax2.set_yscale('log')
+            ax2.set_ylim(positive_frequency.min() * 0.5, positive_frequency.max() * 2)
+        ax2.set_ylabel('Forecast frequency', fontsize=9)
+        handles, labels = ax.get_legend_handles_labels()
+        handles2, labels2 = ax2.get_legend_handles_labels()
+        ax.legend(handles + handles2, labels + labels2, loc='best', fontsize=8)
 
     results_df = pd.DataFrame(results_for_csv)
-    ax.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Perfect reliability')
-
-    ax2 = ax.twinx()
-    positive_frequency = frequency[frequency > 0]
-    ax2.bar(bin_centers, frequency, width=0.08, alpha=0.25, color='gray', label='Forecast frequency')
-    if len(positive_frequency):
-        ax2.set_yscale('log')
-        ax2.set_ylim(positive_frequency.min() * 0.5, positive_frequency.max() * 2)
-    ax2.set_ylabel('Forecast frequency', fontsize=12)
-
-    ax.set_xlabel('Forecast Probability', fontsize=12)
-    ax.set_ylabel('Observed Frequency', fontsize=12)
+    axes[-1].set_xlabel('Forecast probability', fontsize=12)
 
 # this block has not been used, so no need years in the function args
 #    if len(years) > 1:
@@ -110,27 +132,20 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
 #    else:
 #        year_str = str(years[0])
 
-    ax.set_title(f"Reliability diagram — {model} — {tuple_to_str(verification_window)}")
-    ax.grid(True, alpha=0.3)
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-
-    handles, labels = ax.get_legend_handles_labels()
-    handles2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(handles + handles2, labels + labels2, loc='best', fontsize=9)
-    fig.tight_layout()
+    fig.suptitle(f"Reliability by onset-time bin — {model} — {tuple_to_str(verification_window)}")
+    fig.tight_layout(rect=(0, 0, 1, 0.98))
 
     if save_fig:
         os.makedirs(dir_fig, exist_ok=True)
         #model = kwargs.get("model")
         window_str = tuple_to_str(verification_window)
         #fig_fn = os.path.join(dir_fig, f'reliability_{model}_{max_forecast_day}day.png')
-        fig_fn = os.path.join(dir_fig, f'reliability_{model}_{window_str}.png')
+        fig_fn = os.path.join(dir_fig, f'reliability_by_onset_bin_{model}_{window_str}.png')
         fig.savefig(fig_fn, dpi=600, bbox_inches='tight')
         print(f"Figure saved to: {fig_fn}")
 
     if show_plot:
         plt.show()
 
-    return fig, ax, results_df
+    return fig, axes[0], results_df
 
