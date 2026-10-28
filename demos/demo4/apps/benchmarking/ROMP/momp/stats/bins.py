@@ -1,13 +1,21 @@
 import pandas as pd
 import numpy as np
 from momp.io.input import load_thresh_file, get_initialization_dates
-from momp.io.input import get_forecast_probabilistic_twice_weekly
+from momp.io.input import (
+    get_forecast_probabilistic_twice_weekly,
+    MissingEnsembleDimensionError,
+    NoMatchingInitializationTimesError,
+)
 from momp.io.input import load_imd_rainfall
 from momp.stats.detect import detect_observed_onset, compute_onset_for_all_members
 #from momp.lib.control import restore_args
 from momp.utils.practical import restore_args
 #from momp.stats.climatology import compute_climatological_onset_dataset
 from itertools import product
+
+
+class NoForecastDataError(ValueError):
+    """Raised when no requested year can provide forecast-observation pairs."""
 
 
 def extract_day_range(bin_label):
@@ -524,6 +532,7 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
 
     # Initialize list to store all forecast-observation pairs
     all_forecast_obs_pairs = []
+    processed_years = []
                  
     # Process each year
     for year in years:
@@ -560,9 +569,13 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
 #            print("DONE!!!")
             # Add to master list
             all_forecast_obs_pairs.append(forecast_obs_pairs)
+            processed_years.append(year)
 
             print(f"Year {year} completed: {len(forecast_obs_pairs)} forecast-observation pairs")
 
+        except (MissingEnsembleDimensionError, NoMatchingInitializationTimesError) as e:
+            print(f"Skipping year {year}: {e}")
+            continue
         except Exception as e:
             import traceback
             print(f"Error processing year {year}: {e}")
@@ -575,13 +588,15 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
     #print(f"{'='*50}")
 
     if not all_forecast_obs_pairs:
-        raise ValueError("No data was successfully processed for any year")
+        raise NoForecastDataError(
+            f"No data was successfully processed for years {list(years)}"
+        )
 
     combined_forecast_obs = pd.concat(all_forecast_obs_pairs, ignore_index=True)
 
     # Print final summary statistics
     print(f"\nFinal Summary Statistics:")
-    print(f"Years processed: {years}")
+    print(f"Years processed: {processed_years}")
     return combined_forecast_obs
 
 

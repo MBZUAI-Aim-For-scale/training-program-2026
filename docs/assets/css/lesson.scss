@@ -401,6 +401,39 @@ table {
   }
 }
 
+// Mermaid Diagram Variables
+$mermaid-bg: #f8f9fa !default;
+$mermaid-border: #e9ecef !default;
+$mermaid-radius: 8px !default;
+$mermaid-bg-dark: #1e1e1e !default;
+$mermaid-border-dark: #333333 !default;
+
+.mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background-color: $mermaid-bg;
+  border: 1px solid $mermaid-border;
+  border-radius: $mermaid-radius;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+
+  // Nested SVG styling
+  svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  // Dark mode overrides
+  @media (prefers-color-scheme: dark) {
+    background-color: $mermaid-bg-dark;
+    border-color: $mermaid-border-dark;
+  }
+}
 /* 10. Print Styles
 ========================================================================== */
 @media print {

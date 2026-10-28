@@ -30,6 +30,8 @@ except ImportError:
 
 import momp.params as params
 from momp.io.input import (
+    MissingEnsembleDimensionError,
+    NoMatchingInitializationTimesError,
     load_thresh_file,
     get_initialization_dates,
     get_forecast_probabilistic_twice_weekly,
@@ -313,12 +315,18 @@ def compute_metrics_multiple_years(
     for year in years:
         print(f"\n{'-'*50}\nProcessing year {year}")
 
+        if probabilistic and not ref_clim:
+            try:
+                p_model = get_forecast_probabilistic_twice_weekly(year, **kwargs)
+            except (MissingEnsembleDimensionError, NoMatchingInitializationTimesError) as exc:
+                print(f"Skipping year {year}: {exc}")
+                continue
+
         imd = load_imd_rainfall(year, **kwargs)
         onset_da = detect_observed_onset(imd, thresh_da, year, **kwargs)
 
         if probabilistic and not ref_clim:
             print("Extracting ensemble forecast data ...")
-            p_model = get_forecast_probabilistic_twice_weekly(year, **kwargs)
             print("Computing onset for ensemble forecast ...")
             onset_df = compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs)
 
@@ -429,13 +437,18 @@ def ens_compute_metrics_multiple_years(
     for year in years:
         print(f"\n{'-'*50}\nProcessing year {year}")
 
+        if probabilistic and not ref_clim:
+            try:
+                p_model = get_forecast_probabilistic_twice_weekly(year, **kwargs)
+            except (MissingEnsembleDimensionError, NoMatchingInitializationTimesError) as exc:
+                print(f"Skipping year {year}: {exc}")
+                continue
+
         imd = load_imd_rainfall(year, **kwargs)
         onset_da = detect_observed_onset(imd, thresh_da, year, **kwargs)
 
         if probabilistic and not ref_clim:
             print("-------Extracting ensemble forecast data ...")
-            p_model = get_forecast_probabilistic_twice_weekly(year, **kwargs)
-
             print("-------Computing onset for ensemble forecast ...")
             onset_df = compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs)
 
