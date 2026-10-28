@@ -514,7 +514,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "aifs_single",
         "file_pattern": "{}_adm3.nc",
         "var": "tp",
-        "unit_cvt": 1000.0,
+        "unit_cvt": 1.0,
         "probabilistic": False,
         "category": "Deterministic",
     },
