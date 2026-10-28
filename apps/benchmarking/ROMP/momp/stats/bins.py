@@ -14,6 +14,10 @@ from momp.utils.practical import restore_args
 from itertools import product
 
 
+class NoClimatologyPairsError(ValueError):
+    """Raised when a target-year chunk produces no climatology pairs."""
+
+
 class NoForecastDataError(ValueError):
     """Raised when no requested year can provide forecast-observation pairs."""
 
@@ -626,6 +630,8 @@ def multi_year_climatological_forecast_obs_pairs(clim_onset, *, years, day_bins,
     """
 
     kwargs = restore_args(multi_year_climatological_forecast_obs_pairs, kwargs, locals())
+    # This argument is supplied positionally below; do not forward a duplicate keyword.
+    kwargs.pop("clim_onset", None)
 
     clim_onset_slice = clim_onset #!!!!! region subset
 
@@ -662,7 +668,9 @@ def multi_year_climatological_forecast_obs_pairs(clim_onset, *, years, day_bins,
 
     # Combine all years
     if not all_forecast_obs_pairs:
-        raise ValueError("No data was successfully processed for any target year")
+        raise NoClimatologyPairsError(
+            f"No data was successfully processed for target years {list(years)}"
+        )
 
     combined_forecast_obs = pd.concat(all_forecast_obs_pairs, ignore_index=True)
 
