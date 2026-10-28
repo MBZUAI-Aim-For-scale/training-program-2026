@@ -36,6 +36,14 @@ from momp.utils.practical import restore_args
 import momp.params as params
 
 
+class MissingEnsembleDimensionError(ValueError):
+    """Raised when a probabilistic forecast file cannot provide members."""
+
+
+class NoMatchingInitializationTimesError(ValueError):
+    """Raised when a forecast file has no initialization dates for a year."""
+
+
 def _resolve_data_variable(ds, requested_var, source):
     variables = list(ds.data_vars)
     if requested_var in variables:
@@ -399,7 +407,9 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
     available_init_times = pd.to_datetime(ds.init_time.values)
     matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
     if len(matching_times) == 0:
-        raise ValueError(f"No matching initialization times found for year {year} in {file_path}")
+        raise NoMatchingInitializationTimesError(
+            f"No matching initialization times found for year {year} in {file_path}"
+        )
     ds = ds.sel(init_time=matching_times)
 
     if admin_dim is None:
@@ -477,7 +487,7 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
     if "member" not in ds.dims:
         dimensions = tuple(ds.dims)
         ds.close()
-        raise ValueError(
+        raise MissingEnsembleDimensionError(
             f"Probabilistic forecast file has no ensemble member dimension: {file_path} "
             f"(dimensions: {dimensions})"
         )

@@ -1,7 +1,11 @@
 import pandas as pd
 import numpy as np
 from momp.io.input import load_thresh_file, get_initialization_dates
-from momp.io.input import get_forecast_probabilistic_twice_weekly
+from momp.io.input import (
+    get_forecast_probabilistic_twice_weekly,
+    MissingEnsembleDimensionError,
+    NoMatchingInitializationTimesError,
+)
 from momp.io.input import load_imd_rainfall
 from momp.stats.detect import detect_observed_onset, compute_onset_for_all_members
 #from momp.lib.control import restore_args
@@ -563,6 +567,9 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
 
             print(f"Year {year} completed: {len(forecast_obs_pairs)} forecast-observation pairs")
 
+        except (MissingEnsembleDimensionError, NoMatchingInitializationTimesError) as e:
+            print(f"Skipping year {year}: {e}")
+            continue
         except Exception as e:
             import traceback
             print(f"Error processing year {year}: {e}")
