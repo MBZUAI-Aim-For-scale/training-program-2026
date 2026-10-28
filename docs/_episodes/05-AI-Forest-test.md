@@ -128,32 +128,6 @@ ForecastCheck has three stages. They never call each other: each one writes NetC
                bash docker/run.sh start   (the dashboard)
 ```
 
-```{mermaid}
-flowchart TD
-    B["Cloud bucket<br/>gs://&lt;bucket&gt;/demo5/{SEN|SLE}-local-engine"]
-
-    B -->|"bash docker/run.sh fetch"| F["data/{country}/forecast/…<br/>raw GraphCast / IFS forecasts"]
-    B -->|"bash docker/run.sh fetch"| T["data/{country}/truth/{product}/…<br/>observations (chirts, era5, chirps)"]
-    B -->|"bash docker/run.sh fetch"| D["data/{country}/assets/dem.nc<br/>elevation, for the altitude bands"]
-
-    F --> S1["Stage 1<br/>verification.run<br/>raw metrics<br/>MAE, bias, correlation"]
-    T --> S1
-    D --> S1
-
-    F --> S2["Stage 2<br/>calibration.run (IDR)<br/>train on earlier years,<br/>test later<br/>→ data/{country}/idr/…"]
-    T --> S2
-    D --> S2
-
-    S2 --> S3["Stage 3<br/>verification.run --model *-idr<br/>CRPS, ROC, reliability, cost-loss"]
-
-    S1 --> DIAG["data/{country}/diagnostics/…"]
-    S3 --> DIAG
-    D --> DIAG
-
-    DIAG --> START["bash docker/run.sh start<br/>(the dashboard)"]
-```
-
-
 Two naming rules make the files self-describing:
 
 - A model token without a suffix (`graphcast`, `ifs`) is the **raw** forecast. The suffix `-idr` (`graphcast-idr`) is the **calibrated** one.
