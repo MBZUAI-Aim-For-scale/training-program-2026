@@ -25,74 +25,80 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
     n_bins = 10
     bin_edges = np.linspace(0, 1, n_bins + 1)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
+    data = combined_forecast_obs.copy()
+    data['predicted_prob'] = pd.to_numeric(data['predicted_prob'], errors='coerce')
+    data['observed_onset'] = pd.to_numeric(data['observed_onset'], errors='coerce')
+    data = data.dropna(subset=['predicted_prob', 'observed_onset'])
+    data = data[data['predicted_prob'].between(0, 1)]
+    if data.empty:
+        raise ValueError("No valid forecast probabilities and observations for reliability diagram")
 
-    reliability_y = np.zeros(n_bins)
-    mean_forecast_prob = np.zeros(n_bins)
-    frequency = np.zeros(n_bins)
-    n_forecasts_array = np.zeros(n_bins)
-
-    print("\nReliability Analysis:")
-    print("Bin Range\t\tN_Forecasts\tMean_Forecast_Prob\tReliability\tFrequency\tError_Bar")
-    print("-" * 90)
-
+    event_column = 'bin_label' if 'bin_label' in data else None
+    event_groups = (
+        [(str(label), group) for label, group in data.groupby(event_column, sort=False, dropna=False)]
+        if event_column else [('All events', data)]
+    )
+    frequency = np.histogram(data['predicted_prob'], bins=bin_edges)[0] / len(data)
     results_for_csv = []
 
-    for i in range(n_bins):
-        if i == 0:
-            in_bin = ((combined_forecast_obs['predicted_prob'] >= bin_edges[i]) &
-                    (combined_forecast_obs['predicted_prob'] <= bin_edges[i+1]))
-        else:
-            in_bin = ((combined_forecast_obs['predicted_prob'] > bin_edges[i]) &
-                    (combined_forecast_obs['predicted_prob'] <= bin_edges[i+1]))
-
-        n_forecasts = in_bin.sum()
-        n_forecasts_array[i] = n_forecasts
-
-        if n_forecasts > 0:
-            mean_forecast_prob[i] = combined_forecast_obs.loc[in_bin, 'predicted_prob'].mean()
-            reliability_y[i] = combined_forecast_obs.loc[in_bin, 'observed_onset'].mean()
-            frequency[i] = n_forecasts / len(combined_forecast_obs)
-            error_bar = np.sqrt(reliability_y[i] * (1 - reliability_y[i]) / n_forecasts)
-        else:
-            mean_forecast_prob[i] = np.nan
-            reliability_y[i] = np.nan
-            frequency[i] = 0
-            error_bar = np.nan
-
-        bin_range = f"{bin_edges[i]:.1f}-{bin_edges[i+1]:.1f}"
-
-        print(f"{bin_range}\t\t{n_forecasts}\t\t{mean_forecast_prob[i]:.3f}\t\t\t{reliability_y[i]:.3f}\t\t{frequency[i]:.3f}\t\t{error_bar:.3f}")
-
-        results_for_csv.append({
-            'Bin_Range': bin_range,
-            'N_Forecasts': n_forecasts,
-            'Mean_Forecast_Prob': round(mean_forecast_prob[i], 3) if not np.isnan(mean_forecast_prob[i]) else np.nan,
-            'Observed_Frequency': round(reliability_y[i], 3) if not np.isnan(reliability_y[i]) else np.nan,
-            'Frequency': round(frequency[i], 3),
-            'Error_Bar': round(error_bar, 3) if not np.isnan(error_bar) else np.nan
-        })
-
-    results_df = pd.DataFrame(results_for_csv)
-
-    error_bars = np.sqrt(reliability_y * (1 - reliability_y) / n_forecasts_array)
-    error_bars = np.where(n_forecasts_array > 0, error_bars, 0)
+    print("\nReliability Analysis (separate curve for each onset-time event):")
+    print("Event bin\tProbability range\tN forecasts\tMean forecast\tObserved frequency")
+    print("-" * 100)
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+    for event_label, event_data in event_groups:
+        mean_forecast_prob = np.full(n_bins, np.nan)
+        observed_frequency = np.full(n_bins, np.nan)
+        error_bars = np.full(n_bins, np.nan)
+        counts = np.zeros(n_bins, dtype=int)
 
-    valid_bins = ~np.isnan(reliability_y) & ~np.isnan(mean_forecast_prob)
-    ax.errorbar(mean_forecast_prob[valid_bins], reliability_y[valid_bins],
-                yerr=error_bars[valid_bins], fmt='o-',
-                color='blue', linewidth=2, markersize=8, capsize=5, capthick=2,
-                label='Reliability')
+        for i in range(n_bins):
+            lower, upper = bin_edges[i], bin_edges[i + 1]
+            if i == 0:
+                mask = event_data['predicted_prob'].between(lower, upper, inclusive='both')
+            else:
+                mask = (event_data['predicted_prob'] > lower) & (event_data['predicted_prob'] <= upper)
+            group = event_data.loc[mask]
+            counts[i] = len(group)
+            if counts[i] == 0:
+                continue
 
-    ax.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Perfect Reliability')
+            mean_forecast_prob[i] = group['predicted_prob'].mean()
+            observed_frequency[i] = group['observed_onset'].mean()
+            error_bars[i] = np.sqrt(
+                observed_frequency[i] * (1 - observed_frequency[i]) / counts[i]
+            )
+            print(
+                f"{event_label}\t{lower:.1f}-{upper:.1f}\t{counts[i]}\t"
+                f"{mean_forecast_prob[i]:.3f}\t{observed_frequency[i]:.3f}"
+            )
+            results_for_csv.append({
+                'Event_Bin': event_label,
+                'Bin_Range': f"{lower:.1f}-{upper:.1f}",
+                'N_Forecasts': counts[i],
+                'Mean_Forecast_Prob': mean_forecast_prob[i],
+                'Observed_Frequency': observed_frequency[i],
+                'Frequency': counts[i] / len(event_data),
+                'Error_Bar': error_bars[i],
+            })
+
+        valid = ~np.isnan(observed_frequency)
+        if valid.any():
+            ax.errorbar(
+                mean_forecast_prob[valid], observed_frequency[valid],
+                yerr=error_bars[valid], fmt='o-', linewidth=1.8,
+                markersize=6, capsize=3, label=event_label,
+            )
+
+    results_df = pd.DataFrame(results_for_csv)
+    ax.plot([0, 1], [0, 1], 'k--', linewidth=1, label='Perfect reliability')
 
     ax2 = ax.twinx()
-    ax2.set_yscale('log')
-    ax2.bar(bin_centers, frequency, width=0.08, alpha=0.3, color='gray', label='Frequency')
-    max_freq = max(frequency)
-    min_freq = min([f for f in frequency if f > 0]) if any(f > 0 for f in frequency) else 1e-4
-    ax2.set_ylim(min_freq * 0.5, max_freq * 2)
+    positive_frequency = frequency[frequency > 0]
+    ax2.bar(bin_centers, frequency, width=0.08, alpha=0.25, color='gray', label='Forecast frequency')
+    if len(positive_frequency):
+        ax2.set_yscale('log')
+        ax2.set_ylim(positive_frequency.min() * 0.5, positive_frequency.max() * 2)
     ax2.set_ylabel('Forecast frequency', fontsize=12)
 
     ax.set_xlabel('Forecast Probability', fontsize=12)
@@ -104,9 +110,15 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
 #    else:
 #        year_str = str(years[0])
 
+    ax.set_title(f"Reliability diagram — {model} — {tuple_to_str(verification_window)}")
     ax.grid(True, alpha=0.3)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
+
+    handles, labels = ax.get_legend_handles_labels()
+    handles2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(handles + handles2, labels + labels2, loc='best', fontsize=9)
+    fig.tight_layout()
 
     if save_fig:
         os.makedirs(dir_fig, exist_ok=True)
@@ -117,7 +129,6 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
         fig.savefig(fig_fn, dpi=600, bbox_inches='tight')
         print(f"Figure saved to: {fig_fn}")
 
-    plt.tight_layout()
     if show_plot:
         plt.show()
 
