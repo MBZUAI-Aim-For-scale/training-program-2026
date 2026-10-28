@@ -44,3 +44,6 @@ anaconda_projects/db/
 # saved forecasts, movies and job logs (mounted from the host)
 /outputs/
 apps/outputs/
+
+#Demo 1 dashboard runtime files
+demos/demo1/state/

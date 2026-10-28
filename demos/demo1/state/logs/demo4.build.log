@@ -1,3 +1,0 @@
-image ai_weather exists; pass --rebuild to rebuild it
-
-[ok] image present (built 2026-10-16, 17 GB)
