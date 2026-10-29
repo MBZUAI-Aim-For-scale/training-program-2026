@@ -5,6 +5,86 @@ from scipy import stats
 from momp.stats.bins import extract_day_range
 
 
+def match_samples(forecast_df, reference_df):
+    """Match forecast/reference pairs by initialization, grid point, and event bin."""
+    keys = ("init_time", "lat", "lon", "bin_label")
+
+    def sample_index(frame, label):
+        missing = set(keys).difference(frame.columns)
+        if missing:
+            raise KeyError(f"{label} pairs missing match columns: {sorted(missing)}")
+        normalized = frame.loc[:, keys].copy()
+        normalized["init_time"] = pd.to_datetime(normalized["init_time"], utc=True, errors="raise")
+        for column in ("lat", "lon"):
+            normalized[column] = pd.to_numeric(normalized[column], errors="raise").round(8)
+        normalized["bin_label"] = normalized["bin_label"].astype(str)
+        if normalized.duplicated().any():
+            raise ValueError(f"Duplicate {label} sample keys prevent one-to-one matching")
+        return pd.MultiIndex.from_frame(normalized)
+
+    forecast_keys = sample_index(forecast_df, "forecast")
+    reference_keys = sample_index(reference_df, "reference")
+    common = forecast_keys.intersection(reference_keys, sort=False)
+    if common.empty:
+        raise ValueError(
+            "Forecast and reference pairs have no common samples on "
+            "(init_time, lat, lon, bin_label)"
+        )
+
+    forecast_matched = forecast_df.loc[forecast_keys.isin(common)].copy()
+    reference_matched = reference_df.loc[reference_keys.isin(common)].copy()
+    print(
+        f"Matched {len(common):,} forecast samples; retained "
+        f"{len(forecast_matched):,}/{len(forecast_df):,} forecast rows and "
+        f"{len(reference_matched):,}/{len(reference_df):,} reference rows"
+    )
+    return forecast_matched, reference_matched
+
+
+def match_samples(forecast_df, reference_df):
+    """Return forecast/reference rows for the same initialization, grid cell, and event bin."""
+    keys = ("init_time", "lat", "lon", "bin_label")
+    for name, frame in (("forecast", forecast_df), ("reference", reference_df)):
+        missing = set(keys).difference(frame.columns)
+        if missing:
+            raise KeyError(f"{name} pairs are missing sample-match columns: {sorted(missing)}")
+
+    def normalized_keys(frame, name):
+        key_frame = frame.loc[:, keys].copy()
+        key_frame["init_time"] = pd.to_datetime(key_frame["init_time"], utc=True, errors="raise")
+        for column in ("lat", "lon"):
+            key_frame[column] = pd.to_numeric(key_frame[column], errors="raise").round(8)
+        key_frame["bin_label"] = key_frame["bin_label"].astype(str)
+        duplicate = key_frame.duplicated(keep=False)
+        if duplicate.any():
+            examples = key_frame.loc[duplicate].head(3).to_dict("records")
+            raise ValueError(f"Duplicate {name} forecast-observation sample keys: {examples}")
+        return key_frame
+
+    forecast_keys = normalized_keys(forecast_df, "forecast")
+    reference_keys = normalized_keys(reference_df, "reference")
+    forecast_index = pd.MultiIndex.from_frame(forecast_keys)
+    reference_index = pd.MultiIndex.from_frame(reference_keys)
+    common = forecast_index.intersection(reference_index, sort=False)
+    if common.empty:
+        raise ValueError(
+            "Forecast and reference pairs have no matching samples on "
+            "(init_time, lat, lon, bin_label); "
+            f"forecast={len(forecast_df):,}, reference={len(reference_df):,} rows"
+        )
+
+    matched_forecast = forecast_df.loc[forecast_index.isin(common)].copy()
+    matched_reference = reference_df.loc[reference_index.isin(common)].copy()
+    print(
+        "Matched forecast/reference samples: "
+        f"{len(common):,} keys ({len(matched_forecast):,} forecast rows, "
+        f"{len(matched_reference):,} reference rows); "
+        f"discarded {len(forecast_df) - len(matched_forecast):,}/"
+        f"{len(reference_df) - len(matched_reference):,} unmatched rows"
+    )
+    return matched_forecast, matched_reference
+
+
 # Function to calculate Brier Score and Fair Brier Score for the model forecasts (both overall and bin-wise)
 def calculate_brier_score(forecast_obs_df):
     """
@@ -161,6 +241,142 @@ def calculate_auc(forecast_obs_df):
     }
     
     return auc_results
+
+
+def probe_prob(model, label, forecast_obs_df, *, day_bins=None):
+    """Print compact event-wise probability and probability-mass diagnostics."""
+    print(f"\nPROBE_PROB model={model!r} label={label!r} day_bins={day_bins!r}")
+    if forecast_obs_df is None or forecast_obs_df.empty:
+        print("PROBE_PROB: no forecast-observation rows")
+        return
+
+    required = {"bin_label", "predicted_prob", "observed_onset"}
+    missing = required.difference(forecast_obs_df.columns)
+    if missing:
+        print(f"PROBE_PROB: missing columns {sorted(missing)}")
+        return
+
+    data = forecast_obs_df.copy()
+    data["predicted_prob"] = pd.to_numeric(data["predicted_prob"], errors="coerce")
+    data["observed_onset"] = pd.to_numeric(data["observed_onset"], errors="coerce")
+    print(
+        "rows={:,} invalid_probability={} probability_outside_0_1={} nonbinary_observation={}".format(
+            len(data),
+            int(data["predicted_prob"].isna().sum()),
+            int((~data["predicted_prob"].between(0, 1)).sum()),
+            int((~data["observed_onset"].isin([0, 1])).sum()),
+        )
+    )
+
+    auc_by_event = calculate_auc(data).get("bin_auc_scores", {})
+    summary = data.groupby("bin_label", sort=False, dropna=False).agg(
+        n=("predicted_prob", "count"),
+        probability_mean=("predicted_prob", "mean"),
+        probability_min=("predicted_prob", "min"),
+        probability_max=("predicted_prob", "max"),
+        probability_unique=("predicted_prob", "nunique"),
+        probability_zero_fraction=("predicted_prob", lambda values: values.eq(0).mean()),
+        probability_one_fraction=("predicted_prob", lambda values: values.eq(1).mean()),
+        observed_frequency=("observed_onset", "mean"),
+        positive_count=("observed_onset", "sum"),
+    )
+    summary["auc"] = [auc_by_event.get(str(event), np.nan) for event in summary.index]
+    print("PROBE_PROB per event:")
+    print(summary.round(4).to_string())
+
+    key_columns = [column for column in ("year", "init_time", "lat", "lon") if column in data]
+    if key_columns:
+        mass = data.groupby(key_columns, dropna=False).agg(
+            probability_sum=("predicted_prob", "sum"),
+            observation_sum=("observed_onset", "sum"),
+        )
+        print(
+            "PROBE_PROB per-forecast probability_sum min/mean/max="
+            f"{mass['probability_sum'].min():.4f}/"
+            f"{mass['probability_sum'].mean():.4f}/"
+            f"{mass['probability_sum'].max():.4f}; "
+            "observation_sum min/mean/max="
+            f"{mass['observation_sum'].min():.0f}/"
+            f"{mass['observation_sum'].mean():.4f}/"
+            f"{mass['observation_sum'].max():.0f}"
+        )
+
+    for column in ("members_with_onset", "total_members", "total_members_with_onset", "n_contributing_years"):
+        if column in data:
+            values = pd.to_numeric(data[column], errors="coerce").dropna()
+            if not values.empty:
+                print(
+                    f"PROBE_PROB {column} min/median/max="
+                    f"{values.min():g}/{values.median():g}/{values.max():g}"
+                )
+
+
+def probe_prob(model, label, forecast_obs_df, *, day_bins=None):
+    """Print compact event-wise probability and probability-mass diagnostics."""
+    print(f"\nPROBE_PROB model={model!r} label={label!r} day_bins={day_bins!r}")
+    if forecast_obs_df is None or forecast_obs_df.empty:
+        print("PROBE_PROB: no forecast-observation rows")
+        return
+
+    required = {"bin_label", "predicted_prob", "observed_onset"}
+    missing = required.difference(forecast_obs_df.columns)
+    if missing:
+        print(f"PROBE_PROB: missing columns {sorted(missing)}")
+        return
+
+    data = forecast_obs_df.copy()
+    data["predicted_prob"] = pd.to_numeric(data["predicted_prob"], errors="coerce")
+    data["observed_onset"] = pd.to_numeric(data["observed_onset"], errors="coerce")
+    print(
+        "rows={:,} invalid_probability={} probability_outside_0_1={} nonbinary_observation={}".format(
+            len(data),
+            int(data["predicted_prob"].isna().sum()),
+            int((~data["predicted_prob"].between(0, 1)).sum()),
+            int((~data["observed_onset"].isin([0, 1])).sum()),
+        )
+    )
+
+    auc_by_event = calculate_auc(data).get("bin_auc_scores", {})
+    summary = data.groupby("bin_label", sort=False, dropna=False).agg(
+        n=("predicted_prob", "count"),
+        probability_mean=("predicted_prob", "mean"),
+        probability_min=("predicted_prob", "min"),
+        probability_max=("predicted_prob", "max"),
+        probability_unique=("predicted_prob", "nunique"),
+        probability_zero_fraction=("predicted_prob", lambda values: values.eq(0).mean()),
+        probability_one_fraction=("predicted_prob", lambda values: values.eq(1).mean()),
+        observed_frequency=("observed_onset", "mean"),
+        positive_count=("observed_onset", "sum"),
+    )
+    summary["auc"] = [auc_by_event.get(str(event), np.nan) for event in summary.index]
+    print("PROBE_PROB per event:")
+    print(summary.round(4).to_string())
+
+    key_columns = [column for column in ("year", "init_time", "lat", "lon") if column in data]
+    if key_columns:
+        mass = data.groupby(key_columns, dropna=False).agg(
+            probability_sum=("predicted_prob", "sum"),
+            observation_sum=("observed_onset", "sum"),
+        )
+        print(
+            "PROBE_PROB per-forecast probability_sum min/mean/max="
+            f"{mass['probability_sum'].min():.4f}/"
+            f"{mass['probability_sum'].mean():.4f}/"
+            f"{mass['probability_sum'].max():.4f}; "
+            "observation_sum min/mean/max="
+            f"{mass['observation_sum'].min():.0f}/"
+            f"{mass['observation_sum'].mean():.4f}/"
+            f"{mass['observation_sum'].max():.0f}"
+        )
+
+    for column in ("members_with_onset", "total_members", "total_members_with_onset", "n_contributing_years"):
+        if column in data:
+            values = pd.to_numeric(data[column], errors="coerce").dropna()
+            if not values.empty:
+                print(
+                    f"PROBE_PROB {column} min/median/max="
+                    f"{values.min():g}/{values.median():g}/{values.max():g}"
+                )
 
 
 # Function to calculate Ranked Probability Score (RPS) and Fair RPS for the model forecasts for (either 15 day or 30 day forecast)

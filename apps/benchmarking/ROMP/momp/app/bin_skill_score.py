@@ -53,6 +53,25 @@ def skill_score_in_bins(cfg=cfg, setting=setting):
         case.day_bins = day_bins_filtered
 
         case_cfg = {**asdict(setting), **asdict(case)}
+        print("DEBUG case_cfg:", case_cfg.get("model"), "| unit_cvt", repr(case_cfg.get("unit_cvt")),
+              "| members", repr(case_cfg.get("members")), "| model_var", case_cfg.get("model_var"),
+              "| max_forecast_day", case_cfg.get("max_forecast_day"), "| dry_extent", case_cfg.get("dry_extent"))
+        print(
+            "DEBUG case_cfg:", case_cfg.get("model"),
+            "| unit_cvt", repr(case_cfg.get("unit_cvt")),
+            "| members", repr(case_cfg.get("members")),
+            "| model_var", case_cfg.get("model_var"),
+            "| max_forecast_day", case_cfg.get("max_forecast_day"),
+            "| dry_extent", case_cfg.get("dry_extent"),
+        )
+        print(
+            "DEBUG case_cfg:", case_cfg.get("model"),
+            "| unit_cvt", repr(case_cfg.get("unit_cvt")),
+            "| members", repr(case_cfg.get("members")),
+            "| model_var", case_cfg.get("model_var"),
+            "| max_forecast_day", case_cfg.get("max_forecast_day"),
+            "| dry_extent", case_cfg.get("dry_extent"),
+        )
 #        print("\n\n\n members = ", case_cfg['members'])
 #        print("\n\n\n max_forecast_day = ", case_cfg['max_forecast_day'])
 #        print("\n\n\n cfg.max_forecast_day = ", cfg.max_forecast_day)
@@ -86,7 +105,9 @@ def skill_score_in_bins(cfg=cfg, setting=setting):
 
         # reliability plot
         if case_cfg['plot_reliability']:
-            plot_reliability_diagram(score_results["forecast_obs_df"], **case_cfg)
+            plot_reliability_diagram(
+                score_results["forecast_obs_df"], extract_bins=False, **case_cfg
+            )
 
 #    print("\n score_results \n ", score_results['skill_results']['bin_fair_brier_skill_scores'])
 #    print("\n binned_data \n", binned_data['Fair_Brier_Skill_Score'])

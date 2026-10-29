@@ -2,7 +2,7 @@
 from momp.stats.climatology import compute_climatological_onset_dataset
 from momp.stats.bins import multi_year_forecast_obs_pairs, multi_year_climatological_forecast_obs_pairs
 from momp.io.input import available_forecast_years
-from momp.stats.score import calculate_brier_score, calculate_auc, calculate_rps, calculate_brier_score_climatology, calculate_auc_climatology, calculate_skill_scores
+from momp.stats.score import calculate_brier_score, calculate_auc, calculate_rps, calculate_brier_score_climatology, calculate_auc_climatology, calculate_skill_scores, probe_prob
 from momp.utils.printing import tuple_to_str
 from momp.io.output import save_ref_score_results, load_ref_score_results
 #from momp.lib.control import restore_args
@@ -58,6 +58,7 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
         forecast_obs_df_all = parallel_forecast_obs_pairs(**kwargs)
     else:
         forecast_obs_df_all = multi_year_forecast_obs_pairs(**kwargs)
+    probe_prob(None, None, forecast_obs_df_all, day_bins=day_bins)
     forecast_obs_df = extract_pd_bins(forecast_obs_df_all, day_bins)
 
     end = time.perf_counter()

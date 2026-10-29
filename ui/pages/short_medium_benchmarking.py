@@ -3311,24 +3311,24 @@ def page() -> None:
             om = [m for m in pref_m if m in mods] + sorted(mods - set(pref_m))
             ow = [w for w in ["Days 1–15", "Days 16–30"] if w in wins] + sorted(wins - {"Days 1–15", "Days 16–30"})
             st.markdown(build_metrics_table_html(tbl, om, ow), unsafe_allow_html=True)
-
+        
         st.divider()
         section_header("Detailed Metric Distributions", "violet")
         st.caption(
             "Distribution statistics computed directly from gridded model outputs. "
-            "Green = better than baseline, Red = worse than baseline. Bold = best value."
             "Green = better (lower than baseline), Red = worse (higher than baseline). Bold = best value."
-
         )
         stats_df = compute_metric_distribution_stats()
         if stats_df.empty:
             info_box("No distribution statistics could be computed from the available outputs.", "amber")
         else:
-
+            # Normalize string helper to prevent Unicode en-dash / hyphen key lookup misses
             def _norm(s):
                 return str(s).replace("–", "-").strip().lower()
-
+            
             stat_cols = ["Mean", "Min", "Median", "P75", "P90", "Max"]
+            
+            # Pre-calculate Climatology baseline & Best values
             best_vals = {}
             baseline_vals = {}
             comparison_scales = {}
@@ -3338,29 +3338,36 @@ def page() -> None:
                 met_k = _norm(metric)
                 higher_better = is_metric_higher_better(metric)
                 
+                # Check for Climatology / Baseline model
                 clim_mask = g["Model"].apply(lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))
                 clim_row = g[clim_mask]
                 
                 for stat in stat_cols:
                     stat_k = _norm(stat)
                     vals = pd.to_numeric(g[stat], errors="coerce").dropna()
-                    
                     if not vals.empty:
+                        # Best value: minimum for error metrics, maximum for skill metrics
                         best_vals[(win_k, met_k, stat_k)] = float(vals.max()) if higher_better else float(vals.min())
-                        
+                    
                     if not clim_row.empty:
                         clim_v = pd.to_numeric(clim_row[stat], errors="coerce").dropna()
                         if not clim_v.empty:
-                            comparison_key = (win_k, met_k, stat_k)
                             baseline_value = float(clim_v.iloc[0])
-                            baseline_vals[comparison_key] = baseline_value
+                            baseline_vals[(win_k, met_k, stat_k)] = baseline_value
+                            
+                            # Calculate scale for intensity
                             model_vals = pd.to_numeric(g.loc[~clim_mask, stat], errors="coerce").dropna()
                             differences = (model_vals - baseline_value).abs()
                             if not differences.empty:
-                                comparison_scales[comparison_key] = float(differences.max())
-
+                                comparison_scales[(win_k, met_k, stat_k)] = float(differences.max())
+            
+            # Sort ordering
             metric_order = {"false alarm rate": 0, "miss rate": 1, "mean absolute error": 2}
-            model_order = {"aifs single v2": 0, "fuxi": 1, "graphcast": 2, "aifs ensemble v2": 3, "gencast": 4, "traditional climatology": 5, "climatology": 5}
+            model_order = {
+                "aifs single v2": 0, "fuxi": 1, "graphcast": 2, 
+                "aifs ensemble v2": 3, "gencast": 4, 
+                "traditional climatology": 5, "climatology": 5
+            }
             window_order = {"days 1-15": 0, "days 16-30": 1}
             
             df_sorted = stats_df.copy()
@@ -3368,12 +3375,11 @@ def page() -> None:
             df_sorted["model_sort"] = df_sorted["Model"].apply(lambda m: model_order.get(_norm(m), 999))
             df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lambda w: window_order.get(_norm(w), 999))
             df_sorted = df_sorted.sort_values(["model_sort", "window_sort", "metric_sort"])
-
+            
             html_blocks = []
             for (model_label, window_label), group_df in df_sorted.groupby(["Model", "Lead Window"], sort=False):
                 win_k = _norm(window_label)
                 is_clim = any(k in _norm(model_label) for k in ["clim", "trad", "base", "ref"])
-                
                 display_model = "CLIMATOLOGY" if is_clim else str(model_label).replace(" ", "_").upper()
                 display_window = str(window_label).upper()
                 tolerance_days = 5 if "16" in win_k else 3
@@ -3384,27 +3390,34 @@ def page() -> None:
                     met_k = _norm(metric)
                     higher_better = is_metric_higher_better(metric)
                     is_fraction = bool(row.get("fraction", False)) or any(k in met_k for k in ["rate", "far", "mr"])
-
-                    cells_html = [f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; font-weight:600; background-color:#ffffff; color:#0f172a;">{metric}</td>']
+                    
+                    cells_html = [
+                        f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; '
+                        f'font-weight:600; background-color:#ffffff; color:#0f172a;">{metric}</td>'
+                    ]
                     
                     for stat in stat_cols:
                         stat_k = _norm(stat)
                         val = row.get(stat, np.nan)
                         
                         if pd.isna(val) or not np.isfinite(val):
-                            cells_html.append('<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:#ffffff; color:#94a3b8;">-</td>')
+                            cells_html.append(
+                                '<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right; '
+                                'background-color:#ffffff; color:#94a3b8;">-</td>'
+                            )
                             continue
-
+                        
                         val_float = float(val)
                         formatted = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
-
+                        
+                        # Apply bolding if best value across models
                         best_v = best_vals.get((win_k, met_k, stat_k))
                         if best_v is not None and abs(val_float - best_v) <= 1e-5:
                             formatted = f"<b>{formatted}</b>"
-
+                        
+                        # Color coding vs baseline using _distribution_cell_style
                         base_v = baseline_vals.get((win_k, met_k, stat_k))
                         scale = comparison_scales.get((win_k, met_k, stat_k))
-                        
                         comparison_style = _distribution_cell_style(
                             val_float,
                             base_v,
@@ -3412,17 +3425,26 @@ def page() -> None:
                             higher_better,
                             is_baseline=is_clim,
                         )
-                        cell_style = f"border:1px solid #cbd5e1; padding:8px 12px; text-align:right; {comparison_style}"
-                        cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
                         
-                    unit_str = "fraction" if is_fraction else "days"
-                    cells_html.append(f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; color:#64748b; background-color:#ffffff;">{unit_str}</td>')
-                    rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+                        cell_style = (
+                            f"border:1px solid #cbd5e1; padding:8px 12px; text-align:right; {comparison_style}"
+                        )
+                        cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
                     
+                    unit_str = "fraction" if is_fraction else "days"
+                    cells_html.append(
+                        f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; '
+                        f'color:#64748b; background-color:#ffffff;">{unit_str}</td>'
+                    )
+                    rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+                
                 card_html = (
-                    f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
-                    f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">{display_model} - {display_window}</div>'
-                    f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">+/-{tolerance_days} day tolerance</div>'
+                    f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; '
+                    f'border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
+                    f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">'
+                    f'{display_model} - {display_window}</div>'
+                    f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">'
+                    f'+/-{tolerance_days} day tolerance</div>'
                     f'<table style="width:100%; border-collapse:collapse; font-size:0.88rem;">'
                     f'<thead><tr style="background-color:#f1f5f9; color:#0f172a; text-transform:uppercase; font-size:0.8rem;">'
                     f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left;">METRIC</th>'
@@ -3438,136 +3460,7 @@ def page() -> None:
                     f'</tbody></table></div>'
                 )
                 html_blocks.append(card_html)
-                
-            st.markdown("".join(html_blocks), unsafe_allow_html=True)
-            # Normalize string helper to prevent Unicode en-dash / hyphen key lookup misses
-            def _norm(s):
-                return str(s).replace("–", "-").strip().lower()
-
-            stat_cols = ["Mean", "Min", "Median", "P75", "P90", "Max"]
             
-            # Pre-calculate Climatology baseline & Minimum (Best) values
-            best_vals = {}
-            baseline_vals = {}
-            
-            for (window, metric), g in stats_df.groupby(["Lead Window", "Metric"]):
-                win_k = _norm(window)
-                met_k = _norm(metric)
-                
-                # Check for Climatology / Baseline model
-                clim_mask = g["Model"].apply(lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))
-                clim_row = g[clim_mask]
-                
-                for stat in stat_cols:
-                    stat_k = _norm(stat)
-                    vals = pd.to_numeric(g[stat], errors="coerce").dropna()
-                    
-                    if not vals.empty:
-                        best_vals[(win_k, met_k, stat_k)] = float(vals.min())
-                        
-                    if not clim_row.empty:
-                        clim_v = pd.to_numeric(clim_row[stat], errors="coerce").dropna()
-                        if not clim_v.empty:
-                            baseline_vals[(win_k, met_k, stat_k)] = float(clim_v.iloc[0])
-                    elif not vals.empty:
-                        # Fallback baseline if no explicit Climatology row exists
-                        baseline_vals[(win_k, met_k, stat_k)] = float(vals.mean())
-
-            # Sort ordering
-            metric_order = {"false alarm rate": 0, "miss rate": 1, "mean absolute error": 2}
-            model_order = {"aifs single v2": 0, "fuxi": 1, "graphcast": 2, "aifs ensemble v2": 3, "gencast": 4, "traditional climatology": 5, "climatology": 5}
-            window_order = {"days 1-15": 0, "days 16-30": 1}
-            
-            df_sorted = stats_df.copy()
-            df_sorted["metric_sort"] = df_sorted["Metric"].apply(lambda m: metric_order.get(_norm(m), 999))
-            df_sorted["model_sort"] = df_sorted["Model"].apply(lambda m: model_order.get(_norm(m), 999))
-            df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lambda w: window_order.get(_norm(w), 999))
-            df_sorted = df_sorted.sort_values(["model_sort", "window_sort", "metric_sort"])
-
-            html_blocks = []
-            for (model_label, window_label), group_df in df_sorted.groupby(["Model", "Lead Window"], sort=False):
-                win_k = _norm(window_label)
-                is_clim = any(k in _norm(model_label) for k in ["clim", "trad", "base", "ref"])
-                
-                display_model = "CLIMATOLOGY" if is_clim else str(model_label).replace(" ", "_").upper()
-                display_window = str(window_label).upper()
-                tolerance_days = 5 if "16" in win_k else 3
-                
-                rows_html = []
-                for _, row in group_df.iterrows():
-                    metric = str(row["Metric"])
-                    met_k = _norm(metric)
-                    is_fraction = bool(row.get("fraction", False)) or any(k in met_k for k in ["rate", "far", "mr"])
-
-                    cells_html = [f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; font-weight:600; background-color:#ffffff; color:#0f172a;">{metric}</td>']
-                    
-                    for stat in stat_cols:
-                        stat_k = _norm(stat)
-                        val = row.get(stat, np.nan)
-                        
-                        if pd.isna(val) or not np.isfinite(val):
-                            cells_html.append('<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:#ffffff; color:#94a3b8;">-</td>')
-                            continue
-
-                        val_float = float(val)
-                        formatted = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
-
-                        # Apply bolding if minimum value across models
-                        best_v = best_vals.get((win_k, met_k, stat_k))
-                        if best_v is not None and abs(val_float - best_v) <= 1e-5:
-                            formatted = f"<b>{formatted}</b>"
-
-                        # Explicit color coding vs baseline
-                        base_v = baseline_vals.get((win_k, met_k, stat_k))
-                        
-                        if is_clim or base_v is None:
-                            bg_color = "#f1f5f9"
-                            text_color = "#334155"
-                            font_weight = "normal"
-                        else:
-                            diff = val_float - base_v
-                            if abs(diff) <= 1e-5:
-                                bg_color = "#f1f5f9"
-                                text_color = "#334155"
-                                font_weight = "normal"
-                            elif diff < 0:
-                                # LOWER than baseline = BETTER (Green)
-                                bg_color = "#dcfce7"
-                                text_color = "#15803d"
-                                font_weight = "600"
-                            else:
-                                # HIGHER than baseline = WORSE (Red)
-                                bg_color = "#fee2e2"
-                                text_color = "#b91c1c"
-                                font_weight = "normal"
-
-                        cell_style = f"border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:{bg_color} !important; color:{text_color} !important; font-weight:{font_weight};"
-                        cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
-                        
-                    unit_str = "fraction" if is_fraction else "days"
-                    cells_html.append(f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; color:#64748b; background-color:#ffffff;">{unit_str}</td>')
-                    rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
-                    
-                card_html = (
-                    f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
-                    f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">{display_model} - {display_window}</div>'
-                    f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">+/-{tolerance_days} day tolerance</div>'
-                    f'<table style="width:100%; border-collapse:collapse; font-size:0.88rem;">'
-                    f'<thead><tr style="background-color:#f1f5f9; color:#0f172a; text-transform:uppercase; font-size:0.8rem;">'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left;">METRIC</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEAN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MIN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEDIAN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P75</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P90</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MAX</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center;">UNIT</th>'
-                    f'</tr></thead><tbody>'
-                    f'{"".join(rows_html)}'
-                    f'</tbody></table></div>'
-                )
-                html_blocks.append(card_html)
-                
             st.markdown("".join(html_blocks), unsafe_allow_html=True)
     # Tab 3: Benchmark Outputs
     with res_tabs[2]:
@@ -3800,6 +3693,9 @@ def page() -> None:
             section_header("Benchmark Report & Export", "teal")
             st.caption("Generate executive summary reports and inspect workflow provenance metadata.")
 
+            # ======================================================================
+            # Provenance Metadata (if available)
+            # ======================================================================
             if PHASE_6_AVAILABLE:
                 st.markdown("### Provenance Metadata")
                 try:
@@ -3808,10 +3704,120 @@ def page() -> None:
                 except Exception as e:
                     info_box(f"Could not build provenance metadata: {e}", "amber")
 
+            # ======================================================================
+            # PDF Generation
+            # ======================================================================
             if PDF_AVAILABLE:
                 st.markdown("### Executive Summary Export")
-                st.info("PDF engine ready. You can export current benchmark graphics and metrics into a standardized report.")
+                st.markdown(
+                    "Generate a complete scientific PDF report including benchmark inputs, "
+                    "model configuration, verification scores, metric distributions, and benchmark output figures."
+                )
 
+                # Executive Summary Metrics
+                st.markdown("#### Report Summary")
+                c1, c2, c3, c4 = st.columns(4)
+                det_count = sum(1 for r in active_rows if r.get("Category") == "Deterministic")
+                prob_count = sum(1 for r in active_rows if r.get("Category") == "Probabilistic")
+                c1.metric("Models Evaluated", len(active_rows))
+                c2.metric("Ground Truth", ground_truth)
+                c3.metric("Forecast Window", forecast_window)
+                c4.metric("Baseline", shared_settings.get("baseline_forecast", "climatology"))
 
+                # Fair comparison window info
+                fair_plan_dict = st.session_state.get("fair_comparison_plan")
+                if fair_plan_dict:
+                    eval_years = fair_plan_dict.get("evaluation_years", [])
+                    if eval_years:
+                        st.info(
+                            f"**Fair Comparison Window:** {min(eval_years)} - {max(eval_years)} "
+                            f"({len(eval_years)} common years)"
+                        )
+                    else:
+                        st.warning("Fair comparison plan did not find common evaluation years.")
+
+                st.divider()
+
+                # Generate PDF Button
+                st.markdown("#### Download Complete Report")
+                generate_clicked = st.button(
+                    "Generate Complete PDF Report",
+                    type="primary",
+                    width="stretch",
+                    key="btn_generate_pdf_report",
+                )
+
+                if generate_clicked:
+                    with st.spinner("Generating complete PDF report..."):
+                        try:
+                            # Collect verification scores
+                            scores_df = pd.DataFrame()
+                            if PHASE_4_AVAILABLE:
+                                try:
+                                    scores_df = collect_scores_from_momp_outputs(ROMP_DEMO_OUT_DIR)
+                                except Exception:
+                                    scores_df = pd.DataFrame()
+
+                            # Collect distribution statistics
+                            try:
+                                distribution_stats = compute_metric_distribution_stats()
+                            except Exception:
+                                distribution_stats = pd.DataFrame()
+
+                            # Collect benchmark figures
+                            try:
+                                report_figures = collect_reference_figures()
+                            except Exception:
+                                report_figures = {}
+
+                            # Build report context
+                            report_context = {
+                                "generated_at": datetime.utcnow().isoformat() + "Z",
+                                "ground_truth": ground_truth,
+                                "benchmark_coverage": benchmark_coverage,
+                                "forecast_window": forecast_window,
+                                "shared_settings": shared_settings,
+                                "active_rows": active_rows,
+                                "fair_plan": st.session_state.get("fair_comparison_plan"),
+                                "map_outputs": map_outputs,
+                                "scores_df": scores_df,
+                                "distribution_stats": distribution_stats,
+                                "uncertainty_df": st.session_state.get("unc_df"),
+                                "significance_df": st.session_state.get("sig_df"),
+                                "figures": report_figures,
+                            }
+
+                            # Generate PDF
+                            pdf_bytes = generate_benchmark_pdf_report(report_context)
+
+                            # Store in session state
+                            st.session_state["benchmark_pdf_bytes"] = pdf_bytes
+                            st.session_state["benchmark_pdf_file"] = (
+                                f"benchmark_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                            )
+                            st.success("PDF report generated successfully.")
+                        except Exception as e:
+                            st.error(f"PDF generation failed: {e}")
+                            import traceback
+                            with st.expander("Technical details"):
+                                st.code(traceback.format_exc())
+
+                # Download Button (appears after generation)
+                pdf_bytes = st.session_state.get("benchmark_pdf_bytes")
+                pdf_file = st.session_state.get("benchmark_pdf_file")
+                if pdf_bytes and pdf_file:
+                    st.download_button(
+                        "Download Complete PDF Report",
+                        data=pdf_bytes,
+                        file_name=pdf_file,
+                        mime="application/pdf",
+                        key="btn_download_pdf_report",
+                        type="primary",
+                        width="stretch",
+                    )
+            else:
+                st.error(
+                    "PDF generation requires `fpdf2`. Install it with: `pip install fpdf2`"
+                )
 if __name__ == "__main__":
     page()
