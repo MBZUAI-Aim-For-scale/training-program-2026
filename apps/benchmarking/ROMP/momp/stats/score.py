@@ -419,7 +419,8 @@ def calculate_rps(forecast_obs_df):
         # Get predicted probabilities and observations for this forecast
         p_ij = group_sorted['predicted_prob'].values
         y_ij = group_sorted['observed_onset'].values
-        total_members = group_sorted['total_members'].iloc[0]  # Same for all bins in forecast
+        member_column = 'total_members_with_onset' if 'total_members_with_onset' in group_sorted else 'total_members'
+        total_members = group_sorted[member_column].iloc[0]
         
         m = len(p_ij)  # Number of bins
         
@@ -438,7 +439,7 @@ def calculate_rps(forecast_obs_df):
             rps_forecast += rps_component
             
             # Fair RPS correction term
-            fair_correction = (cum_p * (1 - cum_p)) / (total_members - 1)
+            fair_correction = (cum_p * (1 - cum_p)) / (total_members - 1) if total_members > 1 else np.nan
             fair_rps_component = rps_component - fair_correction
             fair_rps_forecast += fair_rps_component
         
@@ -677,22 +678,23 @@ def calculate_skill_scores(brier_forecast, rps_forecast,
     print("SKILL SCORE CALCULATIONS")
     print("="*60)
     
-    # Fair Brier Skill Score (1-15 day overall)
-    if brier_climatology == 0:
-        fair_bss_bin = float("nan")
+    # Overall skill for the configured verification window.
+    if not np.isfinite(brier_climatology['fair_brier_score']) or brier_climatology['fair_brier_score'] == 0:
+        fair_bss_overall = float("nan")
         warnings.warn("\n brier_climatology is zero → fair BSS set to NaN \n")
     else:
         fair_bss_overall = 1 - (brier_forecast['fair_brier_score'] / brier_climatology['fair_brier_score'])
 
     skill_scores['fair_brier_skill_score'] = fair_bss_overall
     
-    print(f"Fair Brier Skill Score (1-15 day): {fair_bss_overall:.4f}")
+    print(f"Fair Brier Skill Score (overall): {fair_bss_overall:.4f}")
     
-    # Fair RPS Skill Score (1-15 day overall)
-    fair_rpss_overall = 1 - (rps_forecast['fair_rps'] / rps_climatology['fair_rps'])
+    # Fair RPS Skill Score for the same window.
+    reference_rps = rps_climatology['fair_rps']
+    fair_rpss_overall = 1 - (rps_forecast['fair_rps'] / reference_rps) if np.isfinite(reference_rps) and reference_rps != 0 else np.nan
     skill_scores['fair_rps_skill_score'] = fair_rpss_overall
     
-    print(f"Fair RPS Skill Score (1-15 day): {fair_rpss_overall:.4f}")
+    print(f"Fair RPS Skill Score (overall): {fair_rpss_overall:.4f}")
     
     # Automatically extract target bins from the data, excluding unwanted bins
     all_forecast_bins = set(brier_forecast['bin_fair_brier_scores'].keys())
@@ -740,7 +742,7 @@ def calculate_skill_scores(brier_forecast, rps_forecast,
             forecast_fair_brier_bin = brier_forecast['bin_fair_brier_scores'][bin_label]
             clim_fair_brier_bin = brier_climatology['bin_fair_brier_scores'][bin_label]
             
-            fair_bss_bin = 1 - (forecast_fair_brier_bin / clim_fair_brier_bin)
+            fair_bss_bin = 1 - (forecast_fair_brier_bin / clim_fair_brier_bin) if np.isfinite(clim_fair_brier_bin) and clim_fair_brier_bin != 0 else np.nan
             bin_fair_bss[bin_label] = fair_bss_bin
             
             print(f"  {bin_label}: Fair BSS = {fair_bss_bin:.4f}")
@@ -751,7 +753,7 @@ def calculate_skill_scores(brier_forecast, rps_forecast,
     skill_scores['bin_fair_brier_skill_scores'] = bin_fair_bss
     
     # Dynamic table header based on detected bins
-    header = f"{'Metric':<30} {'Overall (1-15 day)':<18}"
+    header = f"{'Metric':<30} {'Overall':<18}"
     for bin_name in target_bins:
         # Shorten bin names for table display
         short_name = bin_name.replace('Days ', '')

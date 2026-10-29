@@ -313,12 +313,10 @@ def _apply_forecast_window(cfg, window: str):
         cfg.verification_window_list = ((1, 15),)
         cfg.tolerance_days_list = (3,)
         cfg.max_forecast_day = 15
-        cfg.day_bins = ((1, 5), (6, 10), (11, 15))
     elif "16-30" in window:
         cfg.verification_window_list = ((16, 30),)
         cfg.tolerance_days_list = (5,)
         cfg.max_forecast_day = 30
-        cfg.day_bins = ((16, 20), (21, 25), (26, 30))
 
 def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
     if not isinstance(spec, dict):
@@ -549,6 +547,35 @@ def apply_env_vars_to_cfg(cfg):
 # ------------------------------------------------------------------------------
 # Model configuration
 # ------------------------------------------------------------------------------
+def validate_runtime_config(cfg):
+    """Check the final merged settings, after spec and dashboard overrides."""
+    windows = tuple(tuple(window) for window in cfg.verification_window_list)
+    if not windows or len(windows) != len(cfg.tolerance_days_list):
+        raise ValueError("Verification windows and tolerances must be nonempty and match in length.")
+    for start, end in windows:
+        if start < 1 or end < start or end > cfg.max_forecast_day:
+            raise ValueError(f"Verification window {(start, end)} exceeds forecast horizon {cfg.max_forecast_day} or is invalid.")
+        bins = [tuple(b) for b in cfg.day_bins if b[0] >= start and b[1] <= end]
+        covered = [day for low, high in bins for day in range(low, high + 1)]
+        if sorted(covered) != list(range(start, end + 1)):
+            raise ValueError(f"Day bins {cfg.day_bins} do not partition verification window {(start, end)}.")
+    # Keep the full bin catalog until all overrides are merged, then pass only
+    # active bins to the downstream validator and calculation stages.
+    cfg.day_bins = tuple(tuple(b) for b in cfg.day_bins
+                         if any(b[0] >= start and b[1] <= end for start, end in windows))
+    if getattr(cfg, "run_years_concurrently", None) is not None:
+        cfg.parallel = cfg.run_years_concurrently
+    if cfg.probabilistic:
+        required = set()
+        if cfg.skill_score:
+            required.update(("BS", "RPS"))
+        if cfg.plot_heatmap_bss_auc or cfg.plot_panel_heatmap_skill or cfg.plot_bar_bss_rpss_auc or cfg.save_csv_score:
+            required.update(("BS", "RPS", "AUC", "skill_score"))
+        missing = sorted(flag for flag in required if not getattr(cfg, flag, False))
+        if missing:
+            raise ValueError(f"Enabled probabilistic outputs require these metrics: {', '.join(missing)}.")
+
+
 def configure_model(cfg, catalog_key: str, meta, mode):
     name = _model_name(meta, catalog_key)
     cfg.model_list = (name,)
@@ -718,6 +745,7 @@ def run_single_model(mode, catalog_key, meta):
                 
         # Apply environment variables passed from Streamlit UI
         apply_env_vars_to_cfg(cfg)
+        validate_runtime_config(cfg)
 
         ROMPValidator(vars(cfg)).validate()
         

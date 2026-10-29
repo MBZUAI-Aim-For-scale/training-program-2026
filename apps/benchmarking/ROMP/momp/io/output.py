@@ -14,7 +14,7 @@ from momp.utils.printing import tuple_to_str
 
 
 #def save_score_results(score_results, *, model, max_forecast_day, dir_out, **kwargs):
-def save_score_results(score_results, *, model, verification_window, dir_out, **kwargs):
+def save_score_results(score_results, *, model, verification_window, dir_out, save_csv_score=True, **kwargs):
     """Save overall and binned skill scores to CSV files"""
             
     # Save overall scores
@@ -44,8 +44,9 @@ def save_score_results(score_results, *, model, verification_window, dir_out, **
                         #f'overall_skill_scores_{model}_{max_forecast_day}day.csv'
                         #{model}_{tuple_to_str(verification_window)}window_{max_forecast_day}day.csv'
     overall_filename = os.path.join(dir_out, overall_filename)
-    overall_df.to_csv(overall_filename, index=False)
-    print(f"Saved overall scores to '{overall_filename}'")
+    if save_csv_score:
+        overall_df.to_csv(overall_filename, index=False)
+        print(f"Saved overall scores to '{overall_filename}'")
     print(overall_df)
 
     # Get target bins, remove bins with "Day Before" and "Day After"
@@ -69,8 +70,9 @@ def save_score_results(score_results, *, model, verification_window, dir_out, **
     binned_filename = f'binned_skill_scores_{model}_{window_str}.csv'
                         #f'binned_skill_scores_{model}_{max_forecast_day}day.csv'
     binned_filename = os.path.join(dir_out, binned_filename)
-    binned_df.to_csv(binned_filename, index=False)
-    print(f"Saved binned scores to '{binned_filename}'")
+    if save_csv_score:
+        binned_df.to_csv(binned_filename, index=False)
+        print(f"Saved binned scores to '{binned_filename}'")
     print(binned_df)
 
     return binned_data, overall_scores_nested
@@ -203,9 +205,8 @@ def nested_dict_to_array(nested_dict, metric_key):
     # Top-level keys → rows
     row_labels = list(nested_dict.keys())
 
-    # Second-level keys → columns (assume all rows share same keys)
-    first_row = nested_dict[row_labels[0]]
-    col_labels = list(first_row.keys())
+    # Preserve every window, including windows absent from the first model.
+    col_labels = list(dict.fromkeys(key for row in nested_dict.values() for key in row))
 
     # Initialize array
     arr = np.full((len(row_labels), len(col_labels)), np.nan)
@@ -216,7 +217,10 @@ def nested_dict_to_array(nested_dict, metric_key):
             # Safely get the value (default to np.nan if missing)
             #arr[i, j] = nested_dict.get(rkey, {}).get(ckey, {}).get(metric_key, np.nan)
             da = nested_dict.get(rkey, {}).get(ckey, {}).get(metric_key, np.nan)
-            arr[i,j] = da.mean()
+            values = np.asarray(getattr(da, "values", da), dtype=float)
+            finite = values[np.isfinite(values)]
+            if finite.size:
+                arr[i, j] = finite.mean()
 
     return arr, row_labels, col_labels
 

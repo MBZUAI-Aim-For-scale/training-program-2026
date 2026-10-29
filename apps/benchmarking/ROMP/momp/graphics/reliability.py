@@ -10,10 +10,15 @@ from momp.utils.printing import tuple_to_str
 
 def plot_reliability_diagram(combined_forecast_obs, *, model, verification_window, day_bins,
                              save_fig, dir_fig, extract_bins=True, show_plot=True, **kwargs):
-    """Plot a single pooled reliability diagram from forecast-observation pairs."""
+    """Plot reliability for one full 1–15 or 16–30 day event window."""
 
-    if extract_bins:
-        combined_forecast_obs = extract_pd_bins(combined_forecast_obs, day_bins)
+    verification_window = tuple(verification_window)
+    if verification_window not in ((1, 15), (16, 30)):
+        raise ValueError("Reliability diagrams support only days 1–15 and 16–30.")
+    # Always enforce the full event window, including for prefiltered callers.
+    combined_forecast_obs = extract_pd_bins(combined_forecast_obs, (verification_window,))
+    if combined_forecast_obs.empty:
+        raise ValueError(f"No full-window forecast/observation pairs for {verification_window}; regenerate benchmark results.")
 
     n_bins = 10
     bin_edges = np.linspace(0, 1, n_bins + 1)
@@ -111,5 +116,7 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
 
     if show_plot:
         plt.show()
+    else:
+        plt.close(fig)
 
     return fig, ax, results_df

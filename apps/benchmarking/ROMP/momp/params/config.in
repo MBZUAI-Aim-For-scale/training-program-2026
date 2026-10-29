@@ -75,7 +75,7 @@ ref_model_unit_cvt = getattr(config, "ref_model_unit_cvt", None)
 # ------------------------------------------------------------------------------
 # 4. FORECAST MODEL SETTINGS
 # ------------------------------------------------------------------------------
-model_list = getattr(config, "model_list", ("AIFS", "fuxi", "graphcast"))
+model_list = getattr(config, "model_list", ("aifs_single",))
 
 # Dynamic Forecast Model Directories
 model_dir_list = getattr(
@@ -154,11 +154,11 @@ MR = getattr(config, "MR", True)
 probabilistic = getattr(config, "probabilistic", False)
 members = getattr(config, "members", "All")
 
-BS = getattr(config, "BS", True)
-RPS = getattr(config, "RPS", True)
-AUC = getattr(config, "AUC", True)
-Reliability = getattr(config, "Reliability", True)
-skill_score = getattr(config, "skill_score", True)
+BS = getattr(config, "BS", probabilistic)
+RPS = getattr(config, "RPS", probabilistic)
+AUC = getattr(config, "AUC", probabilistic)
+Reliability = getattr(config, "Reliability", probabilistic)
+skill_score = getattr(config, "skill_score", probabilistic)
 
 # ------------------------------------------------------------------------------
 # 10. OUTPUT & GRAPHICS SETTINGS
@@ -172,15 +172,15 @@ save_csv_score = getattr(config, "save_csv_score", True)
 save_nc_climatology = getattr(config, "save_nc_climatology", True)
 
 plot_spatial_far_mr_mae = getattr(config, "plot_spatial_far_mr_mae", True)
-plot_heatmap_bss_auc = getattr(config, "plot_heatmap_bss_auc", True)
-plot_reliability = getattr(config, "plot_reliability", True)
+plot_heatmap_bss_auc = getattr(config, "plot_heatmap_bss_auc", probabilistic)
+plot_reliability = getattr(config, "plot_reliability", probabilistic)
 plot_climatology_onset = getattr(config, "plot_climatology_onset", True)
 plot_panel_heatmap_error = getattr(config, "plot_panel_heatmap_error", True)
-plot_panel_heatmap_skill = getattr(config, "plot_panel_heatmap_skill", True)
-plot_bar_bss_rpss_auc = getattr(config, "plot_bar_bss_rpss_auc", True)
+plot_panel_heatmap_skill = getattr(config, "plot_panel_heatmap_skill", probabilistic)
+plot_bar_bss_rpss_auc = getattr(config, "plot_bar_bss_rpss_auc", probabilistic)
 
 show_plot = getattr(config, "show_plot", False)
-show_panel = getattr(config, "show_panel", True)
+show_panel = getattr(config, "show_panel", False)
 
 # ------------------------------------------------------------------------------
 # 11. PARALLELIZATION & DEBUG SETTINGS

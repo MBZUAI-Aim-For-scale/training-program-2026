@@ -29,6 +29,7 @@ except ImportError:
                 break
         import config
 
+from ai_weather.precipitation import precipitation_to_mm
 from momp.utils.standard import dim_fmt, dim_fmt_model, dim_fmt_model_ensemble
 from momp.utils.region import region_select
 from momp.utils import storage
@@ -429,10 +430,10 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
 
     p_model = ds[model_var]
 
-    if unit_cvt:
-        p_model *= unit_cvt
-
-    ds.close()
+    try:
+        p_model = precipitation_to_mm(p_model, unit_cvt)
+    finally:
+        ds.close()
     return p_model
 
 
@@ -496,7 +497,8 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
     matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
 
     if len(matching_times) == 0:
-        raise ValueError(f"No matching initialization times found for year {year} in {file_path}")
+        ds.close()
+        raise NoMatchingInitializationTimesError(f"No matching initialization times found for year {year} in {file_path}")
 
     ds = ds.sel(init_time=matching_times)
 
@@ -530,8 +532,8 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
 
     p_model = ds[model_var]
 
-    if unit_cvt:
-        p_model *= unit_cvt
-
-    ds.close()
+    try:
+        p_model = precipitation_to_mm(p_model, unit_cvt)
+    finally:
+        ds.close()
     return p_model

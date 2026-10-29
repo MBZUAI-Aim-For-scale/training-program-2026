@@ -95,7 +95,7 @@ def ensure_local_shapefile(shpfile_path=None, region="Ethiopia") -> str:
                 shps = glob.glob(os.path.join(p_str, "*.shp"))
                 if shps:
                     return shps[0]
-            elif p_str.endswith(".shp"):
+            elif Path(p_str).suffix.lower() in {".shp", ".geojson", ".json"}:
                 return p_str
 
     existing = glob.glob(os.path.join(local_tmp_dir, "*.shp"))
@@ -158,6 +158,8 @@ def get_region_outline(shpfile_path=None, region="Ethiopia"):
             return []
 
         gdf = gpd.read_file(real_path)
+        if gdf.crs is not None:
+            gdf = gdf.to_crs("EPSG:4326")
         if region and hasattr(gdf, "columns"):
             name_cols = [c for c in gdf.columns if c.upper() in ["NAME", "NAME_0", "COUNTRY", "ADMIN"]]
             if name_cols:
@@ -226,7 +228,7 @@ def apply_nc_mask(ds, nc_mask, mask_var=None, keep_value=1):
 
             mask_aligned = mask_da.isel(lat=lat_idx, lon=lon_idx)
             raw_vals = mask_aligned.values
-            bool_vals = (raw_vals == keep_value) if raw_vals.dtype != bool else raw_vals
+            bool_vals = raw_vals == keep_value
 
             mask_bool = xr.DataArray(
                 bool_vals,
@@ -234,7 +236,7 @@ def apply_nc_mask(ds, nc_mask, mask_var=None, keep_value=1):
                 dims=["lat", "lon"]
             )
         else:
-            mask_bool = (mask_da == keep_value) if mask_da.dtype != bool else mask_da
+            mask_bool = mask_da == keep_value
 
         ds_out = ds.copy()
         for v in ds_out.data_vars:

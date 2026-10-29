@@ -76,6 +76,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
     results_list = []
 
     # Get unique combinations of init_time, lat, lon from the filtered forecast data
+    if onset_all_members.empty:
+        raise NoForecastDataError("No valid ensemble onset forecasts were produced.")
     forecast_groups = onset_all_members.groupby(['init_time', 'lat', 'lon'])
 
     # Add the "after max_forecast_day" bin
@@ -122,6 +124,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
 #        print("BBBBBB")
         
         total_members = len(group)
+        if total_members < 2:
+            continue
 
         # For each day bin (including the "after max_forecast_day" bin)
         for bin_idx, (bin_start, bin_end) in enumerate(extended_bins):
@@ -211,6 +215,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
             results_list.append(result)
 
     # Convert to DataFrame
+    if not results_list:
+        raise NoForecastDataError("No forecast cases have at least two valid ensemble members and an observed onset.")
     forecast_obs_df = pd.DataFrame(results_list)
 #    print("result_list = ", results_list)
 #    print("forecast_obs_df = ", forecast_obs_df)

@@ -54,12 +54,22 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
 
     # select bins without "Day before" and "Day After"
     #forecast_obs_df = multi_year_forecast_obs_pairs(**kwargs)
+    pair_kwargs = dict(kwargs)
+    reliability_window = tuple(kwargs.get("verification_window", ()))
+    reliability_enabled = kwargs.get("plot_reliability", False) and kwargs.get("Reliability", True) and reliability_window in ((1, 15), (16, 30))
+    if reliability_enabled:
+        pair_kwargs["day_bins"] = tuple(dict.fromkeys(tuple(b) for b in (*day_bins, reliability_window)))
     if parallel:
-        forecast_obs_df_all = parallel_forecast_obs_pairs(**kwargs)
+        forecast_obs_df_all = parallel_forecast_obs_pairs(**pair_kwargs)
     else:
-        forecast_obs_df_all = multi_year_forecast_obs_pairs(**kwargs)
+        forecast_obs_df_all = multi_year_forecast_obs_pairs(**pair_kwargs)
     probe_prob(None, None, forecast_obs_df_all, day_bins=day_bins)
     forecast_obs_df = extract_pd_bins(forecast_obs_df_all, day_bins)
+    if forecast_obs_df.empty:
+        raise ValueError(f"No forecast pairs match configured day bins {day_bins}.")
+    # RPS needs a disjoint, complete ordered partition, including outside-window events.
+    rps_bins = ((-float("inf"), min(b[0] for b in day_bins) - 1), *day_bins,
+                (max(b[1] for b in day_bins) + 1, float("inf")))
 
     end = time.perf_counter()
     print(f"Execution time: {end - start:.4f} seconds")
@@ -78,9 +88,11 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
 #    sys.exit()
 
     results["forecast_obs_df"] = forecast_obs_df
+    if reliability_enabled:
+        results["reliability_forecast_obs_df"] = extract_pd_bins(forecast_obs_df_all, (reliability_window,))
 
     results["BS"] = calculate_brier_score(forecast_obs_df) if BS else None
-    results["RPS"] = calculate_rps(forecast_obs_df) if RPS else None
+    results["RPS"] = calculate_rps(extract_pd_bins(forecast_obs_df_all, rps_bins)) if RPS else None
     results["AUC"] = calculate_auc(forecast_obs_df) if AUC else None
 
 
@@ -88,6 +100,8 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
 
     results["BS_ref"], results["RPS_ref"], results["AUC_ref"] = None, None, None
     results['skill_score'] = None
+    if not (BS or RPS or AUC or skill_score):
+        return results
 
     # check if ref_results exist
     #dir_out = kwargs.get("dir_out")
@@ -153,7 +167,7 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
             results["BS_ref"] = None
         
         if RPS:
-            rps_ref = calculate_rps(climatology_obs_df)
+            rps_ref = calculate_rps(extract_pd_bins(climatology_obs_df_all, rps_bins))
             results["RPS_ref"] = rps_ref
         else:
             results["RPS_ref"] = None
@@ -188,7 +202,7 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
             results["BS_ref"] = None
         
         if RPS:
-            rps_ref = calculate_rps(ref_obs_df)
+            rps_ref = calculate_rps(extract_pd_bins(ref_obs_df_all, rps_bins))
             results["RPS_ref"] = rps_ref
         else:
             results["RPS_ref"] = None

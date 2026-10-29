@@ -154,55 +154,39 @@ def compute_onset_metrics_with_windows(
         num_onset, num_no_onset = 0, 0
         mae_tp, mae_fp = [], []
 
-        if len(grid_data) > 0:
-            gt_grd = grid_data["obs_onset_dt"].iloc[0]
-        else:
-            gt_grd = pd.NaT
-
         for _, init_row in grid_data.iterrows():
             t_init = init_row["init_dt"]
             model_onset = init_row["model_onset_dt"]
+            observed_onset = init_row["obs_onset_dt"]
 
             valid_window_start = t_init + pd.Timedelta(days=forecast_bin_start)
             valid_window_end = t_init + pd.Timedelta(days=forecast_bin_end)
 
-            whole_forecast_window_start = t_init + pd.Timedelta(days=1)
-            whole_forecast_window_end = t_init + pd.Timedelta(days=forecast_bin_end)
-
-            is_obs_onset_in_whole_window = (
-                pd.notna(gt_grd) and (whole_forecast_window_start <= gt_grd <= whole_forecast_window_end)
+            is_observed_event = (
+                pd.notna(observed_onset) and valid_window_start <= observed_onset <= valid_window_end
             )
+            is_model_event = pd.notna(model_onset) and valid_window_start <= model_onset <= valid_window_end
 
-            if is_obs_onset_in_whole_window:
+            if is_observed_event:
                 num_onset += 1
             else:
                 num_no_onset += 1
 
-            has_model_onset = pd.notna(model_onset)
-
-            if has_model_onset:
-                is_model_in_valid_window = valid_window_start <= model_onset <= valid_window_end
-
-                if is_model_in_valid_window:
-                    abs_diff_days = abs((model_onset - gt_grd).days)
-
-                    if abs_diff_days <= tolerance_days:
-                        TP += 1
-                        mae_tp.append(abs_diff_days)
-                    else:
-                        FP += 1
+            # Every valid forecast is an event or non-event for this specific
+            # interval. Earlier onsets are non-events here, not dropped rows.
+            if is_model_event:
+                abs_diff_days = abs((model_onset - observed_onset).days) if pd.notna(observed_onset) else None
+                if is_observed_event and abs_diff_days <= tolerance_days:
+                    TP += 1
+                    mae_tp.append(abs_diff_days)
+                else:
+                    FP += 1
+                    if abs_diff_days is not None:
                         mae_fp.append(abs_diff_days)
-                else:
-                    if model_onset > valid_window_end:
-                        if is_obs_onset_in_whole_window:
-                            FN += 1
-                        else:
-                            TN += 1
+            elif is_observed_event:
+                FN += 1
             else:
-                if is_obs_onset_in_whole_window:
-                    FN += 1
-                else:
-                    TN += 1
+                TN += 1
 
         total_forecasts = len(grid_data)
         mae_combined = mae_tp + mae_fp

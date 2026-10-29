@@ -544,7 +544,8 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "aifs_ens",
         "file_pattern": "{}.nc",
         "var": "tp",
-        "unit_cvt": 1000.0,
+        # Processed ensemble files declare rainfall in mm.
+        "unit_cvt": 1.0,
         "probabilistic": True,
         "category": "Probabilistic",
         "slow": True,
@@ -555,7 +556,9 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "model_name": "gencast",
         "file_pattern": "{}.nc",
         "var": "tp",
-        "unit_cvt": 1000.0,
+        # Processed GenCast daily rainfall is already in mm, despite missing
+        # units metadata. Declared source units still take precedence in loaders.
+        "unit_cvt": 1.0,
         "probabilistic": True,
         "category": "Probabilistic",
         "slow": True,
@@ -621,6 +624,7 @@ ref_model_var = _obs["var"]
 ref_model_unit_cvt = None
 nc_mask = resolve_path(JJAS_MASK_FILE)
 shpfile_dir = SHAPEFILE_MASK_FILE
+CLIMATOLOGY_SHAPEFILE = join(shpfile_dir, "ETH_Zones.geojson")
 polygon = False
 
 wet_init = 1

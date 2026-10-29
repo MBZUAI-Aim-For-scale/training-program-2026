@@ -49,24 +49,38 @@ def cbar_season():
     return cmap_jjas, norm_jjas, bounds
 
 
-def set_basemap(ax, region, shpfile_dir, polygon, linewidth=1.25, grid=True, line=False, **kwargs):
+def set_basemap(ax, region, shpfile_dir, polygon, linewidth=1.25, grid=True, line=False, map_extent=None, **kwargs):
+    from ai_weather import config as weather_config
+    from ai_weather.map_extent import geographic_extent
+    from ai_weather.spatial import boundary_geometry, climatology_boundary_path
     from momp.utils.land_mask import shp_outline, get_india_outline
     from momp.params.region_def import domain
     import cartopy.crs as ccrs
     import matplotlib.ticker as mticker
 
-    # Add Ethiopia boundary
+    if str(region).strip().casefold() == "ethiopia":
+        shpfile_dir = climatology_boundary_path(weather_config)
+        geometry = boundary_geometry(shpfile_dir)
+        if map_extent is None:
+            west, south, east, north = geometry.bounds
+            map_extent = geographic_extent([], [], region_bounds=(west, east, south, north))
+
+    # Boundaries must remain visible above later raster artists.
     if shpfile_dir:
-        region_boundaries = get_india_outline(shpfile_dir)
+        region_boundaries = get_india_outline(shpfile_dir, region=region)
         for boundary in region_boundaries:
             region_lon, region_lat = boundary
-            ax.plot(region_lon, region_lat, color='black', linewidth=1.5)        
+            ax.plot(region_lon, region_lat, color='black', linewidth=linewidth,
+                    transform=ccrs.PlateCarree(), zorder=10)
     else:
         shp_outline(ax, region=region)
     
     # Set map extent to Ethiopia
-    lats, latn, lonw, lone = domain(region)
-    ax.set_extent([lonw, lone, lats, latn], crs=ccrs.PlateCarree())
+    if map_extent is None:
+        lats, latn, lonw, lone = domain(region)
+        map_extent = [lonw, lone, lats, latn]
+    ax.set_extent(map_extent, crs=ccrs.PlateCarree())
+    ax.set_anchor("C")
 
     # Add polygon boundary
     # need da as input for lat, lon coordinate
@@ -88,8 +102,8 @@ def set_basemap(ax, region, shpfile_dir, polygon, linewidth=1.25, grid=True, lin
     gl.xlabel_style = {'size': 7}
     gl.ylabel_style = {'size': 7}
 
-    gl.xlocator = mticker.MultipleLocator(5)   # every 5°
-    gl.ylocator = mticker.MultipleLocator(5)   # every 5°
+    gl.xlocator = mticker.MaxNLocator(nbins=5)
+    gl.ylocator = mticker.MaxNLocator(nbins=5)
 
     return ax, gl
 

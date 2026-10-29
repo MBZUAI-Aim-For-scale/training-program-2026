@@ -5,6 +5,7 @@ Ensures explicit resolution of evaluation years, canonical model key normalizati
 and standardized directory routing for deterministic and reference model benchmarks.
 """
 
+from ai_weather.spatial import climatology_boundary_path
 import os
 import sys
 import copy
@@ -211,6 +212,13 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         # Create spatial metrics
         spatial_metrics = create_spatial_far_mr_mae(metrics_df_dict, onset_da_dict)
 
+        # Mask climatology grids before summaries and NetCDF serialization.
+        if canonical_ref_model == "climatology":
+            from ai_weather import config as weather_config
+            from ai_weather.spatial import clip_to_boundary
+
+            spatial_metrics = {key: clip_to_boundary(value, climatology_boundary_path(weather_config))
+                               for key, value in spatial_metrics.items()}
         # Log case result into combined multi-case results dictionary
         results = set_nested(results, combi, spatial_metrics)
 
@@ -233,6 +241,9 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         fout = fout.format(tuple_to_str_range(case_cfg_ref.get("years_clim", list(range(2003, 2024)))))
         if onset_da_dict:
             climatological_onset_doy = next(iter(onset_da_dict.values()))
+            from ai_weather import config as weather_config
+            from ai_weather.spatial import clip_to_boundary
+            climatological_onset_doy = clip_to_boundary(climatological_onset_doy, climatology_boundary_path(weather_config))
             climatological_onset_doy.attrs["years"] = case_cfg_ref.get("years_clim", list(range(2003, 2024)))
             climatological_onset_doy.to_netcdf(fout)
 

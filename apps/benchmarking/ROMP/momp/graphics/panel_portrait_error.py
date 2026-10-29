@@ -18,7 +18,7 @@ def _portrait_metric_data(results, metric_key, scale=1.0):
         (i for i, label in enumerate(labels) if "climatology" in str(label).lower()),
         None,
     )
-    if baseline_index is None:
+    if baseline_index is None or len(labels) == 1:
         return values * scale, labels, columns, False
 
     model_indices = [i for i in range(len(labels)) if i != baseline_index]
@@ -38,12 +38,25 @@ def _symmetric_range(data):
     return -limit, limit
 
 
+def _format_portrait_value(value, position=None):
+    return f"{value:.2f}" if np.isfinite(value) else "N/A"
+
+
+def _annotate_empty_panel(ax, data):
+    if not np.isfinite(data).any():
+        for i, j in np.ndindex(data.shape):
+            ax.text(j + 0.5, i + 0.5, "N/A", ha="center", va="center", fontsize=14)
+
+
 def panel_portrait_mae_far_mr(results, *, dir_fig, show_panel=True, **kwargs):
     """Generate 3-panel portrait plots for MAE, FAR, and Miss Rate anomalies."""
+    if not results:
+        raise ValueError("No spatial metrics are available for the portrait plot.")
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8, 3))
 
     data, row_labels, col_labels, has_baseline = _portrait_metric_data(results, "mean_mae")
     title_prefix = r"$\Delta$ " if has_baseline else ""
+    has_missing = not np.isfinite(data).all()
 
     fig, ax1, im = portrait_plot(
         data,
@@ -52,15 +65,18 @@ def panel_portrait_mae_far_mr(results, *, dir_fig, show_panel=True, **kwargs):
         fig=fig,
         ax=ax1,
         vrange=_symmetric_range(data),
-        annotate=True,
+        annotate=bool(np.isfinite(data).any()),
         annotate_data=data,
+        annotate_format=_format_portrait_value,
         title=f"{title_prefix}MAE (days)",
         colorbar_off=True,
     )
+    _annotate_empty_panel(ax1, data)
 
     data, row_labels, col_labels, has_baseline = _portrait_metric_data(
         results, "false_alarm_rate", scale=100
     )
+    has_missing |= not np.isfinite(data).all()
 
     fig, ax2, im = portrait_plot(
         data,
@@ -69,17 +85,20 @@ def panel_portrait_mae_far_mr(results, *, dir_fig, show_panel=True, **kwargs):
         fig=fig,
         ax=ax2,
         vrange=_symmetric_range(data),
-        annotate=True,
+        annotate=bool(np.isfinite(data).any()),
         annotate_data=data,
+        annotate_format=_format_portrait_value,
         title=f"{title_prefix}FAR (%)",
         colorbar_off=True,
     )
+    _annotate_empty_panel(ax2, data)
 
     ax2.set_xlabel("Forecast window (days)")
 
     data, row_labels, col_labels, has_baseline = _portrait_metric_data(
         results, "miss_rate", scale=100
     )
+    has_missing |= not np.isfinite(data).all()
 
     fig, ax3, im = portrait_plot(
         data,
@@ -88,13 +107,20 @@ def panel_portrait_mae_far_mr(results, *, dir_fig, show_panel=True, **kwargs):
         fig=fig,
         ax=ax3,
         vrange=_symmetric_range(data),
-        annotate=True,
+        annotate=bool(np.isfinite(data).any()),
         annotate_data=data,
+        annotate_format=_format_portrait_value,
         title=f"{title_prefix}MR (%)",
         colorbar_off=True,
     )
+    _annotate_empty_panel(ax3, data)
 
-    fig.tight_layout()
+    if has_missing:
+        fig.text(0.5, 0.01, "N/A: no valid model/reference values for this metric and window.",
+                 ha="center", fontsize=8)
+        fig.tight_layout(rect=(0, 0.08, 1, 1))
+    else:
+        fig.tight_layout()
 
     # Save figure
     first_model = kwargs.get("model_list", ["model"])[0]

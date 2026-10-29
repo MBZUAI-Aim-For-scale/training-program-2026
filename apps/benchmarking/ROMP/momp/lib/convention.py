@@ -96,6 +96,7 @@ class Setting:
     BS: bool = field(default=False)
     RPS: bool = field(default=False)
     AUC: bool = field(default=False)
+    Reliability: bool = field(default=False)
 
     skill_score: bool = field(default=False)
 

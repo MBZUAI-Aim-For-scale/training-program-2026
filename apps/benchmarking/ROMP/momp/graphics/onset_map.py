@@ -1,5 +1,10 @@
+from ai_weather.spatial import climatology_boundary_path
+from ai_weather.spatial import apply_jjas_mask
 #apps/benchmarking/ROMP/momp/graphics/onset_map.py
 import copy
+from ai_weather.map_extent import geographic_extent
+from ai_weather import config as weather_config
+from ai_weather.spatial import clip_map_artist, clip_to_boundary
 import os
 from datetime import datetime, timedelta
 
@@ -11,7 +16,7 @@ from matplotlib import colors as mcolors
 
 from momp.graphics.func_map import spatial_metrics_map
 from momp.graphics.maps import calculate_cmz_averages
-from momp.utils.land_mask import add_polygon, shp_mask
+from momp.utils.land_mask import add_polygon, get_region_outline, get_shp, shp_mask
 from momp.utils.printing import tuple_to_str_range
 from momp.utils.visual import cbar_season, set_basemap
 
@@ -44,8 +49,21 @@ def plot_spatial_climatology_onset(
     **kwargs,
 ):
     """Plot spatial climatological onset date map across specified region."""
+    is_ethiopia = str(region).strip().casefold() == "ethiopia"
+    if is_ethiopia:
+        shpfile_dir = kwargs.pop("climatology_shpfile", None) or climatology_boundary_path(weather_config)
+        if not weather_config.exists(shpfile_dir):
+            raise FileNotFoundError(f"Climatology Ethiopia boundary not found: {shpfile_dir}")
+    outlines = get_region_outline(shpfile_dir, region=region) if shpfile_dir else []
+    if is_ethiopia and not outlines:
+        raise ValueError(f"Could not load Ethiopia zones for climatology overlay and margins: {shpfile_dir}")
     # Extract DataArray
     climatological_onset_doy = next(iter(onset_da_dict.values()))
+    climatological_onset_doy = apply_jjas_mask(climatological_onset_doy, kwargs.get("nc_mask", getattr(weather_config, "nc_mask", None)))
+    if is_ethiopia:
+        climatological_onset_doy = clip_to_boundary(climatological_onset_doy, shpfile_dir)
+    if domain_mask:
+        climatological_onset_doy = shp_mask(climatological_onset_doy, region=region)
 
     # Coordinate extraction
     lats = climatological_onset_doy.lat.values
@@ -63,13 +81,28 @@ def plot_spatial_climatology_onset(
     # --- GEOSException Workaround for Cartopy Title Updater ---
     ax._update_title_position = lambda renderer: None
 
-    # Set spatial extent
-    lon_min, lon_max = float(np.nanmin(lons)), float(np.nanmax(lons))
-    lat_min, lat_max = float(np.nanmin(lats)), float(np.nanmax(lats))
-    ax.set_extent([lon_min, lon_max, lat_min, lat_max], crs=ccrs.PlateCarree())
-
     # Apply base map configuration
-    set_basemap(ax, region, shpfile_dir, polygon, **kwargs)
+    extent = kwargs.pop("map_extent", None)
+    if extent is None:
+        # Frame the displayed region, rather than the larger source rainfall grid.
+        region_bounds = None
+        if outlines:
+            coordinates = np.concatenate([np.column_stack(boundary) for boundary in outlines])
+            coordinates = coordinates[np.isfinite(coordinates).all(axis=1)]
+            if coordinates.size:
+                region_bounds = (coordinates[:, 0].min(), coordinates[:, 0].max(),
+                                 coordinates[:, 1].min(), coordinates[:, 1].max())
+        if region_bounds is None:
+            try:
+                geometry = get_shp(region=region)
+            except (OSError, ValueError):
+                geometry = None
+            if geometry is not None:
+                west, south, east, north = geometry.bounds
+                region_bounds = (west, east, south, north)
+        extent = geographic_extent(lons, lats, climatological_onset_doy.transpose("lat", "lon").values,
+                                   region_bounds=region_bounds)
+    set_basemap(ax, region, shpfile_dir, polygon, map_extent=extent, **kwargs)
 
     if polygon:
         ax, polygon1_lat, polygon1_lon, polygon_defined = add_polygon(
@@ -88,9 +121,6 @@ def plot_spatial_climatology_onset(
         cmap_jjas = plt.cm.Spectral
         norm_jjas = mcolors.BoundaryNorm(levels, cmap_jjas.N, extend="max")
 
-    if domain_mask:
-        climatological_onset_doy = shp_mask(climatological_onset_doy, region=region)
-
     im = ax.pcolormesh(
         climatological_onset_doy.lon,
         climatological_onset_doy.lat,
@@ -100,6 +130,8 @@ def plot_spatial_climatology_onset(
         transform=ccrs.PlateCarree(),
         shading="auto",
     )
+    if is_ethiopia:
+        clip_map_artist(im, ax, shpfile_dir)
 
     cbar = plt.colorbar(im, ax=ax, orientation="vertical", pad=0.02, shrink=0.6, aspect=20)
 
