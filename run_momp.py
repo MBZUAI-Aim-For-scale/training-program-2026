@@ -462,6 +462,16 @@ def apply_env_vars_to_cfg(cfg):
             except ValueError:
                 pass
 
+    # Preserve explicit empty values: the UI uses them to disable a mask or
+    # select scalar onset criteria instead of a threshold file.
+    for key, env_name in (("nc_mask", "ROMP_AREA_MASK_FILE"),
+                          ("thresh_file", "ROMP_ONSET_THRESHOLD_FILE")):
+        if env_name in os.environ:
+            value = os.environ[env_name].strip()
+            setattr(cfg, key, resolve_path(value) if value else None)
+    if "ROMP_BASELINE_FORECAST" in os.environ:
+        cfg.ref_model = os.environ["ROMP_BASELINE_FORECAST"].strip() or "climatology"
+
     # Verification and Advanced Temporal Settings
     if val := os.getenv("ROMP_INIT_TYPE"):
         cfg.init_type = val

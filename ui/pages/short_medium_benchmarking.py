@@ -652,12 +652,11 @@ def _extract_time_range_from_nc(nc_path: str):
                 return None, None
             
             try:
-                ds_decoded = xr.open_dataset(nc_path, decode_cf=True, decode_times=True)
-                da = ds_decoded[time_name]
-                min_t = pd.Timestamp(da.values.min()).date()
-                max_t = pd.Timestamp(da.values.max()).date()
-                ds_decoded.close()
-                return min_t, max_t
+                with xr.open_dataset(nc_path, decode_cf=True, decode_times=True) as ds_decoded:
+                    da = ds_decoded[time_name]
+                    min_t = pd.Timestamp(da.values.min()).date()
+                    max_t = pd.Timestamp(da.values.max()).date()
+                    return min_t, max_t
             except Exception:
                 return None, None
     except Exception:
@@ -803,12 +802,30 @@ def detect_benchmark_models(force_refresh: bool = False) -> List[Dict[str, Any]]
     return detected
 
 
-def compute_common_model_window(active_rows: List[Dict[str, Any]]):
+def available_observation_years(ground_truth: str) -> List[int]:
+    meta = BENCHMARK_OBS_CATALOG.get(ground_truth) or getattr(config, "_OBS_SETS", {}).get(ground_truth, {})
+    folder = meta.get("dir")
+    if not folder:
+        return []
+    patterns = meta.get("pattern", "{}.nc")
+    if isinstance(patterns, str):
+        patterns = (patterns,)
+    names = {Path(p).name for p in config.glob(config.join(folder, "*.nc"))}
+    return [year for year in range(1900, date.today().year + 1)
+            if any(pattern.format(year) in names for pattern in patterns)]
+
+
+def compute_common_model_window(active_rows: List[Dict[str, Any]], observation_years=None):
     starts = [r["_start_date"] for r in active_rows if r.get("_start_date")]
     ends = [r["_end_date"] for r in active_rows if r.get("_end_date")]
     if not starts or not ends:
         return None, None
     cs, ce = max(starts), min(ends)
+    if observation_years is not None:
+        if not observation_years:
+            return None, None
+        cs = max(cs, date(min(observation_years), 1, 1))
+        ce = min(ce, date(max(observation_years), 12, 31))
     return (cs, ce) if cs <= ce else (None, None)
 
 
@@ -2314,6 +2331,11 @@ def run_momp_benchmark(
     env["NUMEXPR_NUM_THREADS"] = "4"
 
     if run_config:
+        for key, env_name in (("area_mask_file", "ROMP_AREA_MASK_FILE"),
+                              ("onset_threshold_file", "ROMP_ONSET_THRESHOLD_FILE"),
+                              ("baseline_forecast", "ROMP_BASELINE_FORECAST")):
+            if key in run_config:
+                env[env_name] = str(run_config[key] or "")
         if run_config.get("eval_start"):
             env["ROMP_EVAL_START"] = str(run_config["eval_start"])
         if run_config.get("eval_end"):
@@ -2422,7 +2444,7 @@ def section_header(text: str, accent: str = "sky") -> None:
 BENCHMARK_COVERAGE_COUNTRIES = (
     ("🇸🇳", "Senegal"), ("🇷🇼", "Rwanda"), ("🇨🇴", "Colombia"), ("🇵🇪", "Peru"),
     ("🇧🇴", "Bolivia"), ("🇵🇭", "Philippines"), ("🇮🇩", "Indonesia"), ("🇵🇰", "Pakistan"),
-    ("🇳🇬", "Nigeria"), ("🇪ET", "Ethiopia"), ("🇰🇪", "Kenya"), ("🇸🇱", "Sierra Leone"),
+    ("🇳🇬", "Nigeria"), ("🇪🇹", "Ethiopia"), ("🇰🇪", "Kenya"), ("🇸🇱", "Sierra Leone"),
     ("🇨🇱", "Chile"), ("🇧🇩", "Bangladesh"),
 )
 DEFAULT_BENCHMARK_COVERAGE = "Ethiopia"
@@ -2467,13 +2489,13 @@ def render_shared_settings(ground_truth: str = "CHIRPS") -> Dict[str, Any]:
 
     st.markdown("**EVENT DETECTION**")
     c1, c2, c3 = st.columns(3)
-    wet_day_threshold = c1.number_input("Wet-day threshold", min_value=0.0, value=20.0, step=0.5, format="%.1f", key="shared_wet_day_threshold")
-    minimum_wet_day_rainfall = c2.number_input("Minimum wet-day rainfall", min_value=0.0, value=1.0, step=0.1, format="%.1f", key="shared_min_wet_day")
+    wet_day_threshold = c1.number_input("Wet-day threshold", min_value=0.0, value=float(getattr(config, "wet_threshold", 20)), step=0.5, format="%.1f", key="shared_wet_day_threshold")
+    minimum_wet_day_rainfall = c2.number_input("Minimum wet-day rainfall", min_value=0.0, value=float(getattr(config, "wet_init", 1)), step=0.1, format="%.1f", key="shared_min_wet_day")
     wet_spell_length = c3.number_input("Wet spell length", min_value=1, value=3, format="%d", key="shared_wet_spell")
 
     c4, c5, _ = st.columns(3)
     dry_spell_limit = c4.number_input("Dry spell limit", min_value=0, value=7, format="%d", key="shared_dry_spell")
-    dry_spell_search_extension = c5.number_input("Dry spell search extension", min_value=0, value=0, format="%d", key="shared_dry_ext")
+    dry_spell_search_extension = c5.number_input("Dry spell search extension", min_value=0, value=int(getattr(config, "dry_extent", 21)), format="%d", key="shared_dry_ext")
 
     st.markdown("**MASKS AND BASELINE**")
     m1, m2 = st.columns(2)
@@ -3005,10 +3027,11 @@ def page() -> None:
     # Model run windows
     section_header("Model run windows", "amber")
     model_run_windows: Dict[str, Dict[str, Any]] = {}
+    observation_years = available_observation_years(ground_truth)
     if active_rows:
-        cs, ce = compute_common_model_window(active_rows)
+        cs, ce = compute_common_model_window(active_rows, observation_years)
         if cs and ce:
-            st.info(f"Fair-comparison window automatically set to {cs:%Y-%m-%d} to {ce:%Y-%m-%d}.")
+            st.info(f"Shared model/observation window: {cs:%Y-%m-%d} to {ce:%Y-%m-%d}.")
         for row in active_rows:
             rk = row["_row_key"]
             avs, ave = row["_start_date"], row["_end_date"]
@@ -3069,10 +3092,38 @@ def page() -> None:
                     st.warning(f"Could not load inventory: {e}")
 
     # Run Benchmark Action
+    observation_problems = []
+    for row in active_rows:
+        window = model_run_windows[row["_row_key"]]
+        start, end = window["eval_start"], window["eval_end"]
+        missing = sorted(set(range(start.year, end.year + 1)) - set(observation_years))
+        if start > end:
+            observation_problems.append(f"{row['Model']}: evaluation start must precede end.")
+        elif missing:
+            observation_problems.append(f"{row['Model']}: {ground_truth} observations are missing for {missing}. Adjust the evaluation dates or supply those files.")
+    for problem in observation_problems:
+        st.error(problem)
     st.markdown('<div class="run-section">', unsafe_allow_html=True)
     c1, _ = st.columns([1, 2])
-    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready)
+    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready or bool(observation_problems))
     st.markdown("</div>", unsafe_allow_html=True)
+
+    import hashlib
+    settings_signature = hashlib.sha256(json.dumps({
+        "shared": shared_settings, "windows": model_run_windows,
+        "models": [r["_exec_key"] for r in active_rows],
+        "ground_truth": ground_truth, "coverage": benchmark_coverage,
+        "forecast_window": forecast_window,
+    }, sort_keys=True, default=str).encode()).hexdigest()
+    previous_signature = st.session_state.get("benchmark_settings_signature")
+    if previous_signature != settings_signature:
+        # Settings edits do not change files on disk. Keep cached results until
+        # a benchmark runs; clearing here reloads every results tab on each edit.
+        if not run_clicked and st.session_state.get("benchmark_last_run", {}).get("ok"):
+            st.warning("Benchmark settings changed. Run Benchmark to compute results for these settings; existing outputs belong to an earlier run.")
+
+    if run_clicked and not active_rows:
+        st.warning("Select at least one model in the Models table, then click Run Benchmark.")
 
     if run_clicked and active_rows:
         runs: List[Dict[str, Any]] = []
@@ -3092,6 +3143,8 @@ def page() -> None:
                 runs.append(result)
 
         st.cache_data.clear()
+        if all(r.get("ok") for r in runs):
+            st.session_state["benchmark_settings_signature"] = settings_signature
         st.session_state["benchmark_last_run"] = {
             "ok": all(r.get("ok") for r in runs),
             "returncode": max(int(r.get("returncode", 1)) for r in runs),
@@ -3101,6 +3154,20 @@ def page() -> None:
             "runs": runs,
         }
         st.rerun()
+
+    last_run = st.session_state.get("benchmark_last_run")
+    if last_run:
+        if last_run.get("ok"):
+            st.success("Latest benchmark run completed successfully.")
+        else:
+            st.error("Latest benchmark run failed. See the execution log below for the cause.")
+        with st.expander("Latest benchmark execution log", expanded=not last_run.get("ok")):
+            for result in last_run.get("runs", []):
+                st.write(f"{result.get('model', 'Benchmark')} — exit code {result.get('returncode', 'unknown')}")
+                if result.get("command"):
+                    st.code(result["command"], language="bash")
+                log = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr")).strip()
+                st.code(log or "The process produced no output.", language="text")
 
     # Results Section
     section_header("Results", "sky")
@@ -3567,14 +3634,14 @@ def page() -> None:
         if nc_files:
             sel = st.selectbox("Dataset", nc_files, format_func=format_nc_label, key="nc_explorer_sel")
             try:
-                ds = _safe_open_dataset(sel)
-                # Filter out coordinate variables or time-only bounds
-                vars_list = [v for v in ds.data_vars if "time" not in v.lower() and "bounds" not in v.lower()]
-                if vars_list:
-                    vn = st.selectbox("Variable", vars_list, key="nc_explorer_var")
-                    _render_variable_plot(ds, vn, format_nc_label(sel))
-                else:
-                    info_box("No plottable data variables found in dataset.", "amber")
+                with _safe_open_dataset(sel) as ds:
+                    # Filter out coordinate variables or time-only bounds
+                    vars_list = [v for v in ds.data_vars if "time" not in v.lower() and "bounds" not in v.lower()]
+                    if vars_list:
+                        vn = st.selectbox("Variable", vars_list, key="nc_explorer_var")
+                        _render_variable_plot(ds, vn, format_nc_label(sel))
+                    else:
+                        info_box("No plottable data variables found in dataset.", "amber")
             except Exception as e:
                 info_box(f"Could not open dataset: {e}", "amber")
         else:

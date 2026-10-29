@@ -321,11 +321,15 @@ def get_shp(region="Ethiopia", resolution="10m", category="cultural", name="admi
     """Fetches geometry from Cartopy NaturalEarth reader."""
     import cartopy.io.shapereader as shpreader
     shp = shpreader.natural_earth(resolution=resolution, category=category, name=name)
-    for country in shpreader.Reader(shp).records():
-        c_name = str(country.attributes.get("NAME", "")).lower()
-        if c_name == str(region).lower() or str(region).lower() in c_name:
-            return country.geometry
-    return None
+    reader = shpreader.Reader(shp)
+    try:
+        for country in reader.records():
+            c_name = str(country.attributes.get("NAME", "")).lower()
+            if c_name == str(region).lower() or str(region).lower() in c_name:
+                return country.geometry
+        return None
+    finally:
+        reader.close()
 
 
 def shp_mask(da, region="Ethiopia", **kwargs):
