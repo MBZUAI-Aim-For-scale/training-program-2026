@@ -9,12 +9,25 @@ import pandas as pd
 from ui.utils.metric_filters import (
     lead_window_sort_key,
     load_probabilistic_metric_table,
+    metric_comparison_groups,
     metric_model_label,
     metric_model_options,
 )
 
 
 class MetricFilterTests(unittest.TestCase):
+    def test_comparisons_separate_metric_families_and_keep_climatology_with_errors(self):
+        models = ["AIFS Single", "FuXi", "AIFS Ensemble", "GenCast", "Traditional Climatology"]
+        categories = dict(zip(models, ["Deterministic", "Deterministic", "Probabilistic",
+                                      "Probabilistic", "Climatology"]))
+        self.assertEqual(metric_comparison_groups(models, categories), [
+            ("Onset error metrics", ["AIFS Single", "FuXi", "Traditional Climatology"]),
+            ("Probabilistic skill metrics", ["AIFS Ensemble", "GenCast"]),
+        ])
+        self.assertEqual(metric_comparison_groups(["GenCast"], categories),
+                         [("Probabilistic skill metrics", ["GenCast"])])
+        self.assertEqual(metric_comparison_groups([], categories), [])
+
     def test_lead_windows_sort_numerically(self):
         windows = ["Days 16–30", "Days 2-7", "Days 31–45", "Days 1–15", "Unknown"]
         self.assertEqual(sorted(windows, key=lead_window_sort_key),

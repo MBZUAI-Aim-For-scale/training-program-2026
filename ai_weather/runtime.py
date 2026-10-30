@@ -1,6 +1,7 @@
-"""Select and check the scientific Python used by dashboard worker processes."""
+"""Select and check the scientific Python used by benchmark processes."""
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,7 +17,18 @@ def select_runtime_python(project_root):
     return str(candidate.absolute())
 
 
-def check_runtime_python(python, env, cwd, spawn):
+def _spawn_dependency_probe(argv, env, cwd, timeout, on_line):
+    try:
+        result = subprocess.run(argv, env=env, cwd=cwd, timeout=timeout,
+                                capture_output=True, text=True, check=False)
+    except subprocess.TimeoutExpired:
+        return 124, True
+    for line in (result.stdout + result.stderr).splitlines():
+        on_line(line)
+    return result.returncode, False
+
+
+def check_runtime_python(python, env, cwd, spawn=None):
     """Probe binary dependencies in isolation using the same launcher as workers."""
     probe = (
         "import sys, numpy, pandas, xarray, matplotlib, scipy; "
@@ -26,11 +38,12 @@ def check_runtime_python(python, env, cwd, spawn):
         "print('SciPy:', scipy.__version__, scipy.__file__)"
     )
     output = []
+    spawn = spawn or _spawn_dependency_probe
     code, timed_out = spawn([python, "-c", probe], env, str(cwd), 30, output.append)
     if code != 0 or timed_out:
         detail = "Dependency check timed out." if timed_out else "\n".join(output)
         raise RuntimeError(
             f"Scientific Python dependency check failed for {python}. "
-            "Start Streamlit with the project's .venv/bin/python, or set ROMP_PYTHON "
+            "Use the project's .venv/bin/python, or set ROMP_PYTHON "
             "to a working environment. No benchmark was started.\n" + detail)
     return "\n".join(output)

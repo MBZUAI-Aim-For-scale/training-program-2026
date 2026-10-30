@@ -57,6 +57,7 @@ ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_F
 
 import momp  # noqa: E402,F401
 import momp.params as params  # noqa: E402
+from ai_weather.runtime import check_runtime_python, select_runtime_python
 from momp.lib.loader import get_cfg, get_setting  # noqa: E402
 from momp.lib.assertion import ROMPValidator  # noqa: E402
 
@@ -768,6 +769,16 @@ def run_single_model(mode, catalog_key, meta):
     print(f"\nMOMP [{mode.upper()}] {name}: completed.")
 
 def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
+    python = select_runtime_python(PROJECT_ROOT)
+    if python != os.path.abspath(sys.executable):
+        cmd = [python, str(Path(__file__).resolve()), "--mode", mode]
+        if model_key:
+            cmd.extend(["--model", model_key])
+        if in_process:
+            cmd.append("--in-process")
+        print(f"Using scientific Python: {python}", flush=True)
+        return subprocess.run(cmd, cwd=str(PROJECT_ROOT), env=os.environ.copy(), check=False).returncode
+    print(check_runtime_python(python, os.environ.copy(), PROJECT_ROOT), flush=True)
     models = select_models(mode, model_key)
     print(
         f"Models to run ({mode}): "
@@ -780,7 +791,7 @@ def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
     failures = []
     for key, meta in models:
         cmd = [
-            sys.executable,
+            python,
             str(Path(__file__).resolve()),
             "--mode",
             mode,

@@ -2,7 +2,7 @@
 from momp.stats.climatology import compute_climatological_onset_dataset
 from momp.stats.bins import multi_year_forecast_obs_pairs, multi_year_climatological_forecast_obs_pairs
 from momp.io.input import available_forecast_years
-from momp.stats.score import calculate_brier_score, calculate_auc, calculate_rps, calculate_brier_score_climatology, calculate_auc_climatology, calculate_skill_scores, probe_prob
+from momp.stats.score import calculate_brier_score, calculate_auc, calculate_paired_rps, calculate_brier_score_climatology, calculate_auc_climatology, calculate_skill_scores, probe_prob
 from momp.utils.printing import tuple_to_str
 from momp.io.output import save_ref_score_results, load_ref_score_results
 #from momp.lib.control import restore_args
@@ -92,7 +92,7 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
         results["reliability_forecast_obs_df"] = extract_pd_bins(forecast_obs_df_all, (reliability_window,))
 
     results["BS"] = calculate_brier_score(forecast_obs_df) if BS else None
-    results["RPS"] = calculate_rps(extract_pd_bins(forecast_obs_df_all, rps_bins)) if RPS else None
+    results["RPS"] = None
     results["AUC"] = calculate_auc(forecast_obs_df) if AUC else None
 
 
@@ -167,8 +167,10 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
             results["BS_ref"] = None
         
         if RPS:
-            rps_ref = calculate_rps(extract_pd_bins(climatology_obs_df_all, rps_bins))
-            results["RPS_ref"] = rps_ref
+            results["RPS"], results["RPS_ref"] = calculate_paired_rps(
+                extract_pd_bins(forecast_obs_df_all, rps_bins),
+                extract_pd_bins(climatology_obs_df_all, rps_bins),
+            )
         else:
             results["RPS_ref"] = None
 
@@ -202,8 +204,10 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
             results["BS_ref"] = None
         
         if RPS:
-            rps_ref = calculate_rps(extract_pd_bins(ref_obs_df_all, rps_bins))
-            results["RPS_ref"] = rps_ref
+            results["RPS"], results["RPS_ref"] = calculate_paired_rps(
+                extract_pd_bins(forecast_obs_df_all, rps_bins),
+                extract_pd_bins(ref_obs_df_all, rps_bins),
+            )
         else:
             results["RPS_ref"] = None
 

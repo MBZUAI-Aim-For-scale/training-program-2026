@@ -1,5 +1,49 @@
 # Probabilistic benchmark configuration audit
 
+## Scientific runtime handoff for command-line and notebook runs
+
+- Reproduced the reported `_spropack` import failure directly with `/opt/anaconda3/bin/python`. The project `.venv` successfully imports SciPy and executes the scoring dependency probe.
+- The dashboard already selected the scientific environment, but both `run_momp.py` scripts inherited `sys.executable` for command-line workers and ran single-model/in-process requests in the caller's interpreter. Both now select `.venv` (or explicit `ROMP_PYTHON`), hand off before model selection when needed, and check scientific dependencies before any model starts. Mode, model, in-process selection and environment-based spec settings are preserved.
+- Notebook subprocess utilities select the same interpreter. The legacy notebook executor delegates to a subprocess when its kernel uses a different Python. The shared runtime dependency probe now also supports ordinary subprocess callers while retaining the dashboard's launcher callback.
+- Real Anaconda launches of both runner scripts handed off to `.venv` and passed the scientific probe. Invalid test model names then stopped execution before any weather benchmark; an explicit broken `ROMP_PYTHON` override is rejected by the dependency check before model selection. No numerical benchmark rerun or global package installation was needed for this launcher fix.
+- Validation: 121 tests pass, one opt-in test is skipped. Runtime/helper tests pass Ruff; runtime type checking and changed-file compilation pass. Existing legacy lint findings remain outside this fix.
+
+## Completed result regeneration (2026-10-30)
+
+The saved results have now been regenerated from local source forecasts, validated, and published with backups of the original files. This supersedes the earlier notes below about historical results still awaiting regeneration.
+
+- Deterministic runs: AIFS Single, FuXi, GraphCast and their shared climatology reference, both lead windows, evaluation/baseline years 2000–2024. Eight corrected metric grids and associated figures were verified; 21 files were published. The run scripts, logs, originals and verification report are under `.omx/runs/onset-refresh-20261030/`.
+- Probabilistic runs: AIFS Ensemble and GenCast, both windows, evaluation/baseline years 2003–2024 (GenCast source files begin in 2003). Each model/window retains 102,428 matched forecast/reference cases. Four overall summaries, four binned summaries and sixteen figures were regenerated; 24 files were published. Backups and the numerical verification report are under `.omx/runs/prob-refresh-20261030/`.
+
+| Model | RPSS 1–15 (%) | RPSS 16–30 (%) |
+| --- | ---: | ---: |
+| AIFS Ensemble | -45.156463 | -163.465822 |
+| GenCast | 11.379723 | -35.693282 |
+
+All four scores were independently checked against `1 - Fair_RPS / Reference_Fair_RPS`. Reference Fair RPS is 0.4915894294518889 for days 1–15 and 0.5916165777854857 for days 16–30, identical across models on the matched sample sets. The old GenCast 9.066% result used a different sample set (83,470 retained cases); the common-period rerun retains 102,428.
+
+New summary CSVs also retain `Score_Definition=paired_fair_rps_v2`, `Evaluation_Years`, and `Reference_Years`. A new **Refresh saved results** control clears Streamlit's metric/map/figure caches. Full Streamlit AppTest checks confirm that all 24 probabilistic metric cells are finite, all four RPSS values display correctly, and the old-grid warning is absent. The refresh control was separately verified to replace a cached old value with an updated saved value. The full unittest suite passes: 118 passed, one opt-in test skipped.
+
+## Onset error table and miss-rate correction (2026-10-30)
+
+- All reported MAE/MR/FAR values match the saved NetCDF means. Early FuXi/GraphCast MR values are approximately 0.0000203/0.0002235 and round to 0.000; their late-window values round to 1.000. These are saved numbers, not a dashboard unit-conversion error.
+- Probabilistic runs deliberately produce probability-score summaries rather than deterministic MAE/MR/FAR grids. All Metrics now renders separate onset-error and probabilistic-score tables, preserving model/lead/category selection without filling incompatible metric/model combinations with misleading N/A cells. Undefined or genuinely unavailable values within each track remain N/A. No ensemble-to-point-forecast convention was introduced.
+- The onset contingency calculation counted an out-of-tolerance in-window prediction as FP without FN even when the observation was also in-window. This violated `TP + FN = observed events`, allowing nearly zero MR alongside large timing errors and high FAR. The same pair now contributes both FP for the wrongly timed predicted event and FN for the unmatched observed event. One hit plus one timing failure now yields MR=0.5 and FAR=0.5, rather than MR=0.
+- MAE intentionally includes timing errors for false alarms whose observed onset may be outside the window. An initialization with predicted day 20 and observed day 100 has an 80-day error even for the 16–30-day verification window. Large historical MAE values were not clamped or replaced. Late FuXi and GraphCast MAE/FAR also cover only 144 and 111 finite grid cells respectively, versus 1,642 MR cells. Saved evaluation years differ across outputs; regenerate with common settings before interpreting model comparisons.
+- New spatial outputs record `contingency_definition=timing_matched_v2`. All Metrics warns when selected saved grids lack that definition, because aggregated scores alone cannot recover the missing contingency counts. The initial code fix preserved the existing outputs; the completed regeneration above has since replaced them with verified results and retained backups.
+- Validation: 118 tests pass and one opt-in integration test is skipped. Regression checks cover timing failures, downstream spatial rates and unbounded false-alarm MAE. Real Streamlit AppTest checks confirm two separate all-model tables, one probabilistic-only table and a warning for old grids, without exceptions. Changed code compiles; changed utility/test files pass Ruff, and legacy lint findings remain outside scope.
+
+## Missing RPSS investigation (2026-10-30)
+
+- The four current AIFS Ensemble/GenCast overall CSVs have finite forecast Fair RPS but blank RPSS. They predate this correction and do not save reference RPS or sample counts, so their exact historical denominators cannot be reconstructed from the summaries.
+- A reproducible failure remains in the scoring path: climatology pairs accept one effective onset year; `calculate_rps` assigns NaN to that case's fair correction, and `np.mean` propagates it into the whole reference Fair RPS. Brier climatology uses pandas means, which skip NaN, explaining how BSS can remain finite while RPSS disappears.
+- Using local CHIRPS 2000–2024, the current 20 mm/three-day wet spell, seven-day dry spell/21-day search and May 15 onset start produces 225 cells with only one detected onset year. One (12.5°N, 41.75°E) remains inside the configured Ethiopia boundary and JJAS mask; its only onset is 2006-08-31.
+- Reproduction: combine that cell with 12.5°N, 39°E, target year 2006, initialization 2006-06-01, and bins 1–5/6–10/11–15 plus before/after categories. The unfiltered reference Fair RPS is NaN; the supported cell's reference Fair RPS is 0.03666666666666667. This uses real observed onsets, not regenerated ensemble forecasts.
+- `calculate_paired_rps` now excludes cases with fewer than two effective members (or nonfinite member counts), warns with counts, and matches forecast/reference rows before calculating either RPS. Both sides lose unsupported cases together. It reuses `match_samples`; merely replacing `mean` with `nanmean` would compare different populations.
+- New overall CSVs retain `Reference_Fair_RPS`, `RPS_N_Forecasts`, `RPS_N_Excluded_Forecasts` and `Reference_RPS_N_Excluded_Forecasts`. Zero/nonfinite reference scores and no supported cases still yield undefined RPSS. The dashboard caption now distinguishes undefined scores, missing results and metrics not computed for a model.
+- Validation: 114 unittest tests pass and one opt-in integration test is skipped, including serial/parallel and climatology/model-reference scoring, unsupported-reference exclusion, zero-reference guards, complete RPS categories, and CSV diagnostics. Test-file Ruff checks pass. Existing legacy MOMP lint findings and duplicate definitions reported by mypy remain outside this fix.
+- The initial code fix preserved the historical summaries; the completed regeneration above has since replaced them. Do not combine historical Fair RPS numerators with newly calculated denominators. Gridded probabilistic distributions remain a separate unimplemented output.
+
 ## Confirmed problems and fixes
 
 | Problem | Evidence and correction |
@@ -78,7 +122,7 @@ The UI's AIFS normalization now uses the same converter. It no longer infers met
 ## Remaining limits
 
 - GenCast source files still lack rainfall units metadata. The catalog now treats these processed files as mm, based on the supplied data statistics; this is an explicit dataset assumption, not universal unit detection. The loader records this non-scaling assumption as an INFO message, while unlabeled scaling fallbacks still warn. Raw files explicitly declaring m are still converted to mm. Negative values are preserved rather than silently clipped.
-- No complete multi-year ensemble benchmark was run during this audit. Existing probabilistic CSV/PNG outputs predate these corrections and must be regenerated; they do not establish correctness of the new calculations.
+- The initial audit used focused regressions and smoke checks. Complete multi-year ensemble runs have since finished successfully; see the completed regeneration section above for periods, retained sample counts, backups and numerical verification.
 - Excluding members with missing required-horizon rainfall changes effective ensemble sizes. Fair scores require at least two usable members. Missing forecasts are distinct from valid dry forecasts with no detected onset.
 - RPS now includes outside-window categories, so regenerated values differ from historical outputs by design. Do not mix old and new scores in comparisons.
 - Anaconda's global SciPy installation remains broken; no global packages were modified. Dashboard workers use the verified project environment. Start the dashboard from the repository root with `.venv/bin/python -m streamlit run ui/app.py --server.port 8502`. Set `ROMP_PYTHON` to an executable Python path only when intentionally selecting another scientific environment.

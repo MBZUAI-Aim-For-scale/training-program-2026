@@ -31,6 +31,17 @@ def save_score_results(score_results, *, model, verification_window, dir_out, sa
     }
 
     overall_scores_nested = dict(zip(overall_scores['Metric'], overall_scores['Score']))
+    # Retain the RPSS denominator and sample coverage so undefined scores can be diagnosed.
+    reference_rps = score_results.get('RPS_ref') or {}
+    overall_scores_nested.update({
+        'Score_Definition': 'paired_fair_rps_v2',
+        'Evaluation_Years': str(kwargs.get('years', '')),
+        'Reference_Years': str(kwargs.get('years_clim', '')),
+        'Reference_Fair_RPS': reference_rps.get('fair_rps', np.nan),
+        'RPS_N_Forecasts': score_results['RPS'].get('n_forecasts', np.nan),
+        'RPS_N_Excluded_Forecasts': score_results['RPS'].get('n_excluded_forecasts', 0),
+        'Reference_RPS_N_Excluded_Forecasts': reference_rps.get('n_excluded_forecasts', 0),
+    })
 
     #overall_df = pd.DataFrame(overall_scores)
     # pd.DataFrame expects lists/arrays as values, or a list of dicts for rows, not a dict of scalars

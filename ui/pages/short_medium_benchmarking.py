@@ -930,6 +930,7 @@ def discover_map_outputs(force_refresh: bool = False) -> List[Dict[str, Any]]:
         try:
             mtime = nc_path.stat().st_mtime
             with xr.open_dataset(nc_path, decode_cf=False, decode_times=False) as ds:
+                contingency_definition = ds.attrs.get("contingency_definition")
                 for mm in MAP_METRICS.values():
                     var = _find_var(ds, mm["keywords"])
                     if var:
@@ -963,6 +964,7 @@ def discover_map_outputs(force_refresh: bool = False) -> List[Dict[str, Any]]:
                 "model_label": model_label,
                 "windows": windows,
                 "mtime": mtime,
+                "contingency_definition": contingency_definition,
             }
         )
     latest_by_model_window = {}
@@ -3508,6 +3510,10 @@ def page() -> None:
 
     # Results Section
     section_header("Results", "sky")
+    if st.button("Refresh saved results", key="benchmark_refresh_results",
+                 help="Reload saved metrics, maps and figures after a benchmark completes."):
+        st.cache_data.clear()
+        st.rerun()
     tab_labels = ["Metric Map", "All Metrics", "Benchmark Outputs"]
     if OTS_AVAILABLE:
         tab_labels.append("Onset Analysis")
@@ -3708,7 +3714,7 @@ def page() -> None:
         with res_tabs[1]:
             from ui.utils.metric_filters import (
                 lead_window_sort_key, load_probabilistic_metric_table,
-                metric_model_label, metric_model_options,
+                metric_comparison_groups, metric_model_label, metric_model_options,
             )
 
             st.markdown("### ALL METRICS")
@@ -3736,23 +3742,32 @@ def page() -> None:
             ow = st.multiselect("Lead times", lead_options, default=lead_options,
                                 key=f"metrics_leads_{tuple(lead_options)}")
             ow = sorted(ow, key=lead_window_sort_key)
-            st.caption("N/A means no saved result for that model, metric and lead time. BSS/RPSS percentages and AUC are included from probabilistic summaries when available.")
+            st.caption("N/A means a metric is not computed for that model, no result was saved for that lead time, or the score is mathematically undefined. RPSS requires supported forecast/reference cases and a finite, nonzero reference Fair RPS. BSS/RPSS percentages and AUC are included from probabilistic summaries when available.")
+            st.caption("Onset error metrics and probabilistic scores are shown separately because they evaluate different forecast types. MAE includes timing errors for false alarms and can exceed the length of the lead-time window.")
             st.caption("Scroll the table horizontally to view all models and lead times on smaller screens.")
             if summary_errors:
                 st.warning("Some probabilistic summaries could not be read: " + "; ".join(summary_errors))
             if om and ow:
-                selected = {key: value for key, value in tbl.items() if key[2] in om and key[1] in ow}
-                present_metrics = {key[0] for key in selected}
-                if not present_metrics:
-                    present_metrics = ({"Fair Brier Score", "Fair Brier Skill Score (%)", "Fair RPS", "Fair RPS Skill Score (%)", "AUC", "Reference AUC"}
-                                       if all(categories[model] == "Probabilistic" for model in om)
-                                       else {"Mean Absolute Error days", "Miss Rate fraction", "False Alarm Rate fraction"})
-                # Keep configured models visible even before they have generated outputs.
-                for metric in present_metrics:
-                    for window in ow:
-                        for model in om:
-                            selected.setdefault((metric, window, model), None)
-                st.markdown(build_metrics_table_html(selected, om, ow).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
+                for heading, group_models in metric_comparison_groups(om, categories):
+                    st.markdown(f"#### {heading}")
+                    selected = {key: value for key, value in tbl.items() if key[2] in group_models and key[1] in ow}
+                    present_metrics = {key[0] for key in selected}
+                    if not present_metrics:
+                        present_metrics = ({"Fair Brier Score", "Fair Brier Skill Score (%)", "Fair RPS", "Fair RPS Skill Score (%)", "AUC", "Reference AUC"}
+                                           if categories[group_models[0]] == "Probabilistic"
+                                           else {"Mean Absolute Error days", "Miss Rate fraction", "False Alarm Rate fraction"})
+                    # Keep configured models visible before they have generated outputs.
+                    for metric in present_metrics:
+                        for window in ow:
+                            for model in group_models:
+                                selected.setdefault((metric, window, model), None)
+                    st.markdown(build_metrics_table_html(selected, group_models, ow).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
+                legacy_outputs = [output for output in map_outputs if
+                                  metric_model_label(output["model_label"]) in om and
+                                  set(output["windows"]) & set(ow) and
+                                  output.get("contingency_definition") != "timing_matched_v2"]
+                if legacy_outputs:
+                    st.warning("Saved onset error results predate the timing-miss correction. Rerun these models for the selected lead times to regenerate miss rates; historical grids do not retain the event counts needed to repair them.")
                 missing = [model for model in om if not any(
                     key[2] == model and key[1] in ow and value is not None and np.isfinite(value)
                     for key, value in tbl.items())]

@@ -2,13 +2,13 @@
 
 import ast
 import contextlib
+import inspect
 import io
 import unittest
 import warnings
 from datetime import datetime
 from itertools import product
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -29,11 +29,50 @@ def load_functions(relative_path, namespace, names=None):
 
 
 class ProbabilisticScoringTests(unittest.TestCase):
+    def test_paired_rps_excludes_single_member_reference_from_both_scores(self):
+        ns = {"np": np, "pd": pd, "warnings": warnings}
+        load_functions("stats/score.py", ns)
+        rows = []
+        for lon, members in ((38, 1), (39, 4)):
+            for index, (probability, observation) in enumerate(zip((.5, .5), (1, 0))):
+                rows.append({"init_time": "2024-06-01", "lat": 10, "lon": lon,
+                             "bin_index": index, "bin_label": str(index),
+                             "predicted_prob": probability, "observed_onset": observation,
+                             "total_members": 25, "total_members_with_onset": members})
+        reference = pd.DataFrame(rows)
+        forecast = reference.drop(columns="total_members_with_onset").copy()
+        forecast.loc[forecast.lon == 38, "predicted_prob"] = [0, 1]
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            original = ns["calculate_rps"](reference)
+            model_rps, reference_rps = ns["calculate_paired_rps"](forecast, reference)
+        self.assertTrue(np.isnan(original["fair_rps"]))
+        self.assertEqual(model_rps["n_forecasts"], 1)
+        self.assertEqual(reference_rps["n_forecasts"], 1)
+        self.assertEqual(model_rps["n_excluded_forecasts"], 1)
+        self.assertAlmostEqual(model_rps["fair_rps"], .25 - .25 / 24)
+        self.assertAlmostEqual(reference_rps["fair_rps"], .25 - .25 / 3)
+        self.assertTrue(any("fewer than two" in str(item.message) for item in caught))
+
+    def test_paired_rps_without_supported_reference_stays_undefined(self):
+        ns = {"np": np, "pd": pd, "warnings": warnings}
+        load_functions("stats/score.py", ns)
+        pairs = pd.DataFrame({"init_time": ["2024-06-01"], "lat": [10], "lon": [38],
+                              "bin_index": [0], "bin_label": ["1"], "predicted_prob": [1.],
+                              "observed_onset": [1], "total_members": [1]})
+        with contextlib.redirect_stdout(io.StringIO()), warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            model_rps, reference_rps = ns["calculate_paired_rps"](pairs, pairs)
+        self.assertEqual(reference_rps["n_forecasts"], 0)
+        self.assertTrue(np.isnan(model_rps["fair_rps"]))
+        self.assertTrue(np.isnan(reference_rps["fair_rps"]))
+
     def test_rps_retains_before_and_after_events_without_reliability_overlap(self):
         ns = {"np": np, "pd": pd, "warnings": warnings}
         load_functions("io/dict.py", ns, {"extract_pd_bins"})
+        load_functions("stats/bins.py", ns, {"extract_day_range"})
         load_functions("stats/score.py", ns)
-        rps = MagicMock(side_effect=ns["calculate_rps"])
+        rps = MagicMock(side_effect=ns["calculate_paired_rps"])
         frames = []
         for init_time, probabilities in (("2024-06-01", [1, 0, 0, 0, 0, 0]),
                                          ("2024-06-02", [0, 0, 0, 0, 1, 0])):
@@ -47,31 +86,34 @@ class ProbabilisticScoringTests(unittest.TestCase):
                 "predicted_prob": probabilities, "observed_onset": [0, 1, 0, 0, 0, 1],
             }))
         pairs = pd.concat(frames, ignore_index=True)
-        path = MOMP / "metrics/skill.py"
-        tree = ast.parse(path.read_text())
-        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
-                        and node.name == "create_score_results")
-        start = next(i for i, node in enumerate(function.body) if isinstance(node, ast.Assign)
-                     and any(isinstance(target, ast.Name) and target.id == "pair_kwargs"
-                             for target in node.targets))
-        end = next(i for i, node in enumerate(function.body) if isinstance(node, ast.Assign)
-                   and any(isinstance(target, ast.Subscript) and isinstance(target.slice, ast.Constant)
-                           and target.slice.value == "AUC" for target in node.targets)) + 1
-        for parallel in (False, True):
-            with self.subTest(parallel=parallel):
+        for parallel, reference in product((False, True), ("climatology", "other_model")):
+            with self.subTest(parallel=parallel, reference=reference):
                 runner = MagicMock(return_value=pairs)
-                brier, auc = MagicMock(), MagicMock()
-                scope = {**ns, "kwargs": {"plot_reliability": True,
-                                         "verification_window": (16, 30),
-                                         "day_bins": ((16, 20), (21, 25), (26, 30))},
-                         "day_bins": ((16, 20), (21, 25), (26, 30)), "parallel": parallel,
+                brier = MagicMock(return_value={
+                    "fair_brier_score": .2, "bin_fair_brier_scores": {"Days 16-20": .2}})
+                auc = MagicMock()
+                scope = {**ns,
                          "parallel_forecast_obs_pairs": runner, "multi_year_forecast_obs_pairs": runner,
-                         "probe_prob": MagicMock(), "time": SimpleNamespace(perf_counter=lambda: 0),
-                         "start": 0, "results": {}, "BS": True, "RPS": True, "AUC": True,
+                         "parallel_climatological_forecast_obs_pairs": runner,
+                         "multi_year_climatological_forecast_obs_pairs": runner,
+                         "parallel_climatological_onset_dataset": MagicMock(),
+                         "compute_climatological_onset_dataset": MagicMock(),
+                         "available_forecast_years": lambda years, **kwargs: years,
+                         "restore_args": lambda func, kwargs, bound: {
+                             **{key: value for key, value in bound.items() if key != "kwargs"}, **kwargs},
+                         "probe_prob": MagicMock(),
                          "calculate_brier_score": brier, "calculate_auc": auc,
-                         "calculate_rps": rps}
+                         "calculate_brier_score_climatology": brier, "calculate_auc_climatology": auc,
+                         "calculate_paired_rps": rps}
+                load_functions("metrics/skill.py", scope, {"create_score_results"})
+                run = scope["create_score_results"]
+                arguments = {name: None for name in inspect.signature(run).parameters if name != "kwargs"}
+                arguments.update(BS=True, RPS=True, AUC=True, skill_score=True,
+                                 years=(2024,), ref_model=reference,
+                                 day_bins=((16, 20), (21, 25), (26, 30)),
+                                 plot_reliability=True, verification_window=(16, 30), parallel=parallel)
                 with contextlib.redirect_stdout(io.StringIO()):
-                    exec(compile(ast.Module(body=function.body[start:end], type_ignores=[]), str(path), "exec"), scope)  # noqa: S102
+                    result = run(**arguments)
                 rps_pairs = rps.call_args.args[0]
                 self.assertEqual(len(rps_pairs), 10)
                 self.assertNotIn("Days 16-30", set(rps_pairs.bin_label))
@@ -84,10 +126,12 @@ class ProbabilisticScoringTests(unittest.TestCase):
                     after = expected(rps_pairs[rps_pairs.init_time == "2024-06-02"])
                 self.assertEqual(before["rps"], 1)
                 self.assertEqual(after["rps"], 3)
-                self.assertEqual(scope["results"]["RPS"]["rps"], 2)
+                self.assertEqual(result["RPS"]["rps"], 2)
+                self.assertEqual(result["RPS_ref"]["rps"], 2)
+                self.assertEqual(result["skill_results"]["fair_rps_skill_score"], 0)
                 self.assertEqual(len(brier.call_args.args[0]), 6)
                 self.assertEqual(len(auc.call_args.args[0]), 6)
-                self.assertEqual(len(scope["results"]["reliability_forecast_obs_df"]), 2)
+                self.assertEqual(len(result["reliability_forecast_obs_df"]), 2)
 
     def test_zero_reference_scores_produce_undefined_skill_instead_of_infinity(self):
         ns = {"np": np, "pd": pd, "warnings": warnings}

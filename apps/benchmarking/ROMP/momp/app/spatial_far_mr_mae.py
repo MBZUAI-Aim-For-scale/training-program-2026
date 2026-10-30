@@ -138,6 +138,7 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         if case_cfg.get("save_nc_spatial_far_mr_mae", True):
             desc_dict = {
                 "title": "Monsoon Onset MAE, FAR, MR Analysis",
+                "contingency_definition": "timing_matched_v2",
                 "description": """Spatial maps of Mean Absolute Error, False Alarm Rate, and Miss Rate 
                 for monsoon onset predictions""",
             }
@@ -226,6 +227,7 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         if case_cfg_ref.get("save_nc_spatial_far_mr_mae", True):
             desc_dict = {
                 "title": "Monsoon Onset MAE, FAR, MR Analysis",
+                "contingency_definition": "timing_matched_v2",
                 "description": """Spatial maps of Mean Absolute Error, False Alarm Rate, and Miss Rate 
                 for monsoon onset predictions""",
             }

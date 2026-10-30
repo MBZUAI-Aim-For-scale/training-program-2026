@@ -3,7 +3,7 @@ import logging
 # Fix gRPC C-core fork safety issues when using multiprocessing with gcsfs
 os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "1"
 os.environ["GRPC_POLL_STRATEGY"] = "poll"
-
+from datetime import datetime
 import re
 import shutil
 import subprocess
@@ -24,6 +24,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="google.cloud")
 # ==============================================================================
 CURRENT_FILE = Path(__file__).resolve()
 PKG_DIR = CURRENT_FILE.parent.parent
+
 
 
 def _find_base_dir(start: Path) -> Path:
@@ -624,7 +625,7 @@ ref_model_var = _obs["var"]
 ref_model_unit_cvt = None
 nc_mask = resolve_path(JJAS_MASK_FILE)
 shpfile_dir = SHAPEFILE_MASK_FILE
-CLIMATOLOGY_SHAPEFILE = join(shpfile_dir, "ETH_Zones.geojson")
+CLIMATOLOGY_SHAPEFILE = join(shpfile_dir, "ETH_Zones_woreda.geojson")
 polygon = False
 
 wet_init = 1
@@ -782,6 +783,603 @@ def check_data() -> int:
                     print(f"          gs://{parent} not found")
     print(f"  summary: {len(items) - missing - errors} ok, {missing} missing, {errors} error(s)")
     return 1 if errors else (2 if missing else 0)
+
+
+
+# ==============================================================================
+# Onset verification config
+# ==============================================================================
+CLIM_ONSET_PCTL_EARLY = 25
+CLIM_ONSET_PCTL_LATE  = 75
+DPI = 300
+PLOT_COLORS = {
+    "early": "#1b9e77",
+    "normal": "#66a61e",
+    "late": "#d95f02",
+    "no_onset": "#999999"
+}
+REF_ACCUM_MM = 20.0
+REF_DAILY_MM = 0.1
+ROLLING_DAYS = 3
+plot_obs_days = 30
+
+# ==============================================================================
+# Forecast Verification Paths & Configuration
+# ==============================================================================
+ONSET_INFO_DIR = DATA_DIR / "onset_info"
+
+# CORRECTED: ONSET_DATA_DIR points to where forecast data actually lives
+ONSET_DATA_DIR = ONSET_INFO_DIR / "data"  # data/onset_info/data
+
+# ONSET_VERIFICATION_DIR points to Monsoon_Data (reference files, models, results)
+ONSET_VERIFICATION_DIR = ONSET_INFO_DIR / "Monsoon_Data"  # data/onset_info/Monsoon_Data
+
+# ONSET_FEATURE_DATA_DIR for dissemination cells
+ONSET_FEATURE_DATA_DIR = ONSET_INFO_DIR / "onset_features"
+
+MESSAGE_CSV_PATH = ONSET_VERIFICATION_DIR / "message_progression.csv"
+ONSET_PADDING_CSV = ONSET_VERIFICATION_DIR / "onset_padding.csv"
+
+ONSET_RUN_OUTPUT_ROOT = ONSET_INFO_DIR / "operational" / "monsoon-onset" / "IMERG" / "data" / "ethiopia" / "OUTPUT"
+ONSET_RUN_INPUT_ROOT = ONSET_INFO_DIR / "operational" / "monsoon-onset" / "IMERG" / "data" / "ethiopia" / "PKL"
+
+ENACTS_CLIM_PKL_PATH = ONSET_RUN_INPUT_ROOT / "imd_clim_mok_date_wide.pkl"
+
+MESSAGE_YEAR = datetime.now().year
+YEAR = MESSAGE_YEAR
+
+# Base directories for processed data and reference files
+ONSET_PROCESSED_DIR = ONSET_VERIFICATION_DIR / "Processed_Data"
+ONSET_REFERENCE_DIR = ONSET_VERIFICATION_DIR / "reference"
+
+# ==============================================================================
+# Operational Pipeline Defaults
+# ==============================================================================
+DEFAULT_WORK_DIR = ONSET_PROCESSED_DIR / str(YEAR)
+DEFAULT_COEF_DIR = ONSET_VERIFICATION_DIR / "results" / "dry_spell_aifs_aifs_ens"
+DEFAULT_COEF_TAG = "clim_mok_date_2022_year2022"
+DEFAULT_BLEND_MODEL = "blended_model"
+DEFAULT_REGION = "Ethiopia"
+DEFAULT_ISSUE_DATE = f"{YEAR}-06-15"
+
+DEFAULT_MODEL_SINGLE = "aifs"
+DEFAULT_MODEL_ENS = "aifs_ens"
+
+
+
+# ==============================================================================
+# Onset Forecast Specs (AIFS)
+# ==============================================================================
+ONSET_FORECAST_AIFS_SPEC = {
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+    "type": "rainfall_forecast",
+    "input": {
+        # CORRECTED: Uses ONSET_DATA_DIR which points to data/onset_info/data
+        "nc_folder": str(ONSET_DATA_DIR / "forecast" / "aifs_v2" / "single"),
+        "file_regex": rf"^{YEAR}_adm3\.nc$",
+        "value_col": "tp",
+        "wide_day_dim": "day",
+        "wide_prefix": "rain",
+        "parallel": True,
+        "workers": 9,
+    },
+    "dimensions": {
+        "rename": {
+            "time": "time",
+            "day": "day",
+            "number": "number",
+        }
+    },
+    "options": {
+        "window": 3,
+        "onset_definition": {
+            "wet_day_min_mm": 1.0,
+            "follow_days": 21,
+            "dry_spell": {
+                "mode": "consecutive_dry",
+                "min_dry_days": 5,
+                "dry_day_min_mm": 1.0,
+            },
+        },
+        "min_day": 1,
+        "max_day": 45,
+    },
+    "thresholds": {
+        "file": str(ONSET_REFERENCE_DIR / "thresholds_df.csv"),
+        "lat_col": "lat",
+        "lon_col": "lon",
+        "adm3_col": "adm3_name",
+        "thresh_col": "onset_threshold",
+    },
+    "mok": {
+        "file": str(ONSET_REFERENCE_DIR / "MOK_Onset_May.csv"),
+        "year_col": "Year",
+        "day_col": "MOK",
+        "base_date": "05-01",
+    },
+    "filter": {
+        "dissemination_cells_file": str(ONSET_VERIFICATION_DIR / "dissemination_cells.csv"),
+    },
+}
+
+# ==============================================================================
+# Onset Forecast Specs (AIFS ENS)
+# ==============================================================================
+ONSET_FORECAST_AIFS_ENS_SPEC = {
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+    "type": "rainfall_forecast",
+    "input": {
+        "nc_folder": str(ONSET_DATA_DIR / "forecast" / "aifs_v2" / "ensemble"),
+        "file_regex": rf"^{YEAR}_adm3\.nc$",
+        "value_col": "tp",
+        "wide_day_dim": "day",
+        "wide_prefix": "rain",
+        "parallel": True,
+        "workers": 9,
+    },
+    "dimensions": {
+        "rename": {
+            "time": "time",
+            "day": "day",
+            "number": "number",
+        }
+    },
+    "options": {
+        "window": 3,
+        "onset_definition": {
+            "wet_day_min_mm": 1.0,
+            "follow_days": 21,
+            "dry_spell": {
+                "mode": "consecutive_dry",
+                "min_dry_days": 5,
+                "dry_day_min_mm": 1.0,
+            },
+        },
+        "min_day": 1,
+        "max_day": 45,
+    },
+    "thresholds": {
+        "file": str(ONSET_REFERENCE_DIR / "thresholds_df.csv"),
+        "lat_col": "lat",
+        "lon_col": "lon",
+        "adm3_col": "adm3_name",
+        "thresh_col": "onset_threshold",
+    },
+    "mok": {
+        "file": str(ONSET_REFERENCE_DIR / "MOK_Onset_May.csv"),
+        "year_col": "Year",
+        "day_col": "MOK",
+        "base_date": "05-01",
+    },
+    "filter": {
+        "dissemination_cells_file": str(ONSET_VERIFICATION_DIR / "dissemination_cells.csv"),
+        "max_number": 30,
+    },
+}
+
+# ==============================================================================
+# Onset Forecast Specs (GenCast)
+# ==============================================================================
+ONSET_FORECAST_GENCAST_SPEC = {
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+    "type": "rainfall_forecast",
+    "input": {
+        "nc_folder": str(ONSET_DATA_DIR / "forecast" / "gencast"),
+        "file_regex": rf"^{YEAR}_.*_adm3\.nc$",
+        "value_col": "tp",
+        "wide_day_dim": "day",
+        "wide_prefix": "rain",
+        "parallel": True,
+        "workers": 9,
+    },
+    "dimensions": {
+        "rename": {
+            "latitude": "lat",
+            "longitude": "lon",
+            "time": "time",
+            "day": "day",
+            "number": "number",
+        }
+    },
+    "options": {
+        "window": 3,
+        "onset_definition": {
+            "wet_day_min_mm": 1.0,
+            "follow_days": 21,
+            "dry_spell": {
+                "mode": "consecutive_dry",
+                "min_dry_days": 5,
+                "dry_day_min_mm": 1.0,
+            },
+        },
+        "min_day": 1,
+        "max_day": 45,
+    },
+    "thresholds": {
+        "file": str(ONSET_REFERENCE_DIR / "thresholds_df.csv"),
+        "lat_col": "lat",
+        "lon_col": "lon",
+        "adm3_col": "adm3_name",
+        "thresh_col": "onset_threshold",
+    },
+    "mok": {
+        "file": str(ONSET_REFERENCE_DIR / "MOK Onset May.csv"),
+        "year_col": "Year",
+        "day_col": "MOK",
+        "base_date": "05-01",
+    },
+    "filter": {
+        "dissemination_cells_file": str(ONSET_VERIFICATION_DIR / "dissemination_cells.csv"),
+        "max_number": 30,
+    },
+}
+
+# ==============================================================================
+# Onset Forecast Specs (IMD Climatology MOK Date)
+# ==============================================================================
+ONSET_FORECAST_IMD_CLIM_SPEC = {
+    "type": "ground_truth_rainfall",
+    "input": {
+        "nc_folder": str(ONSET_DATA_DIR / "ENACTS"),
+        "gt_path": str(ONSET_VERIFICATION_DIR / "Models" / "dry_spell" / "imd_clim_mok_date_wide.pkl"),
+        "file_regex": r"^[0-9]{4}_adm3\.nc$",
+        "value_col": "precip",
+        "parallel": False,
+        "workers": 10,
+    },
+    "dimensions": {
+        "rename": {
+            "TIME": "time",
+            "time": "time",
+        }
+    },
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+    "options": {
+        "window": 3,
+        "onset_definition": {
+            "wet_day_min_mm": 1.0,
+            "follow_days": 21,
+            "dry_spell": {
+                "mode": "consecutive_dry",
+                "min_dry_days": 5,
+                "dry_day_min_mm": 1.0,
+            },
+        },
+        "cutoff_month_day": "05-01",
+        "cell_transform_enabled": False,
+    },
+    "thresholds": {
+        "file": str(ONSET_REFERENCE_DIR / "thresholds_df.csv"),
+        "lat_col": "lat",
+        "lon_col": "lon",
+        "adm3_col": "adm3_name",
+        "thresh_col": "onset_threshold",
+    },
+    "mok": {
+        "file": str(ONSET_REFERENCE_DIR / "MOK Onset May.csv"),
+        "year_col": "Year",
+        "day_col": "MOK",
+        "base_date": "05-01",
+    },
+    "filter": {
+        "dissemination_cells_file": str(ONSET_VERIFICATION_DIR / "dissemination_cells.csv"),
+    },
+    "paths": {
+        "climatology_out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+        "climatology_out_stem": "imd_clim_mok_date_clim_issue",
+    },
+    "climatologies": {
+        "clim": {
+            "out_stem": "imd_clim_mok_date_clim_issue",
+            "onset_col": "mr_onset_day",
+            "conditional": True,
+            "train_year_min": 2000,
+            "train_year_max": 2022,
+            "test_year_min": YEAR,
+            "test_year_max": YEAR,
+            "cv_by_year": False,
+            "season_start_md": "05-01",
+            "issue_end_md": "07-31",
+            "forecast_window": 28,
+            "min_onset_years": 10,
+        },
+        "clim_unc": {
+            "out_stem": "imd_clim_mok_date_clim_unc_issue",
+            "onset_col": "mr_onset_day",
+            "conditional": False,
+            "train_year_min": 2000,
+            "train_year_max": 2022,
+            "test_year_min": YEAR,
+            "test_year_max": YEAR,
+            "cv_by_year": False,
+            "season_start_md": "05-01",
+            "issue_end_md": "07-31",
+            "forecast_window": 28,
+            "min_onset_years": 10,
+        },
+    },
+}
+
+# ==============================================================================
+# Onset Forecast Specs (NGCM)
+# ==============================================================================
+ONSET_FORECAST_NGCM_SPEC = {
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+    "type": "rainfall_forecast",
+    "input": {
+        "nc_folder": str(ONSET_DATA_DIR / "forecast" / "gcm"),
+        "file_regex": rf"^{YEAR}_.*_adm3\.nc$",
+        "value_col": "tp",
+        "wide_day_dim": "day",
+        "wide_prefix": "rain",
+        "parallel": True,
+        "workers": 9,
+    },
+    "dimensions": {
+        "rename": {
+            "time": "time",
+            "day": "day",
+            "number": "number",
+        }
+    },
+    "options": {
+        "window": 3,
+        "onset_definition": {
+            "wet_day_min_mm": 1.0,
+            "follow_days": 21,
+            "dry_spell": {
+                "mode": "consecutive_dry",
+                "min_dry_days": 5,
+                "dry_day_min_mm": 1.0,
+            },
+        },
+        "min_day": 1,
+        "max_day": 45,
+    },
+    "thresholds": {
+        "file": str(ONSET_REFERENCE_DIR / "thresholds_df.csv"),
+        "lat_col": "lat",
+        "lon_col": "lon",
+        "adm3_col": "adm3_name",
+        "thresh_col": "onset_threshold",
+    },
+    "mok": {
+        "file": str(ONSET_REFERENCE_DIR / "MOK Onset May.csv"),
+        "year_col": "Year",
+        "day_col": "MOK",
+        "base_date": "05-01",
+    },
+    "filter": {
+        "dissemination_cells_file": str(ONSET_VERIFICATION_DIR / "dissemination_cells.csv"),
+        "max_number": 30,
+    },
+}
+
+# ==============================================================================
+# Onset Forecast Specs (Combine Forecasts Template - Clim MOK Date)
+# ==============================================================================
+# Translated from combine_template_clim_mok_date_2026.yml for use in the
+# onset_forecast pipeline (feeds into 3_combine_forecasts).
+ONSET_FORECAST_COMBINE_CLIM_SPEC = {
+    "type": "combine_forecasts",
+    "input": {
+        "ground_truth_wide_rds": str(ONSET_VERIFICATION_DIR/ "Models" / "dry_spell" / "imd_clim_mok_date_wide.pkl"),
+        "climatologies": {
+            "clim": {
+                "rds": str(ONSET_PROCESSED_DIR / str(YEAR) / "imd_clim_mok_date_clim_issue.pkl"),
+                "out_prefix": "clim_p_onset",
+            },
+            "clim_unc": {
+                "rds": str(ONSET_PROCESSED_DIR / str(YEAR) / "imd_clim_mok_date_clim_unc_issue.pkl"),
+                "out_prefix": "clim_unc_p_onset",
+            },
+        },
+    },
+    "options": {
+        "join": "inner",
+        "plus_label_template": "day_{plus}plus",
+        "trim_forecasts_after_true_onset": True,
+        "default_prob_col": "predicted_prob",
+    },
+    "forecasts": {
+        "aifs_ens": {
+            "max_day": 45,
+            "sources": [
+                {
+                    "file": str(ONSET_PROCESSED_DIR / str(YEAR) / f"aifs_ens_{YEAR}_wide.pkl"),
+                    "years": f"{YEAR}:{YEAR}",
+                }
+            ],
+            "constants": [
+                {"col": "onset_thresh", "out": "onset_thresh"},
+                {"col": "mok_date", "out": "mok_date"},
+            ],
+            "daily": [
+                {"col": "predicted_prob", "out": "p_onset", "add_plus": True},
+                {"col": "predicted_prob_clim_mok_date", "out": "p_onset_clim_mok_date", "add_plus": True},
+                {"col": "predicted_prob_mok", "out": "p_onset_mok", "add_plus": True},
+                {"col": "forecast_rain", "out": "rain_mean", "add_plus": False},
+            ],
+        },
+        "aifs": {
+            "max_day": 45,
+            "sources": [
+                {
+                    "file": str(ONSET_PROCESSED_DIR / str(YEAR) / f"aifs_{YEAR}_wide.pkl"),
+                    "years": f"{YEAR}:{YEAR}",
+                    "prob_col": "predicted_prob_clim_mok_date",
+                }
+            ],
+            "daily": [
+                {"col": "predicted_prob", "out": "p_onset", "add_plus": True},
+                {"col": "predicted_prob_mok", "out": "p_onset_mok", "add_plus": True},
+                {"col": "predicted_prob_clim_mok_date", "out": "p_onset_clim_mok_date", "add_plus": True},
+                {"col": "forecast_rain", "out": "rain_mean", "add_plus": False},
+            ],
+        },
+    },
+    "climatology": {
+        "max_day": 28,
+        "prob_col": "predicted_prob",
+    },
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+}
+
+# ==============================================================================
+# Onset Forecast Specs (Combine Forecasts Template - NGCM & AIFS)
+# ==============================================================================
+# Translated from combine_template_clim_mok_date_2026.yml for use in the
+# onset_forecast pipeline (feeds into 3_combine_forecasts).
+ONSET_FORECAST_COMBINE_NGCM_AIFS_SPEC = {
+    "type": "combine_forecasts",
+    "input": {
+        "ground_truth_wide_rds": str(ONSET_VERIFICATION_DIR / "Models" / "dry_spell" / "imd_clim_mok_date_wide.pkl"),
+        "climatologies": {
+            "clim": {
+                "rds": str(ONSET_PROCESSED_DIR / str(YEAR) / "imd_clim_mok_date_clim_issue.pkl"),
+                "out_prefix": "clim_p_onset",
+            },
+            "clim_unc": {
+                "rds": str(ONSET_PROCESSED_DIR / str(YEAR) / "imd_clim_mok_date_clim_unc_issue.pkl"),
+                "out_prefix": "clim_unc_p_onset",
+            },
+        },
+    },
+    "options": {
+        "join": "inner",
+        "plus_label_template": "day_{plus}plus",
+        "trim_forecasts_after_true_onset": True,
+        "default_prob_col": "predicted_prob",
+    },
+    "forecasts": {
+        "ngcm": {
+            "max_day": 45,
+            "sources": [
+                {
+                    "file": str(ONSET_PROCESSED_DIR / str(YEAR) / f"ngcm_{YEAR}_wide.pkl"),
+                    "years": f"{YEAR}:{YEAR}",
+                }
+            ],
+            "constants": [
+                {"col": "onset_thresh", "out": "onset_thresh"},
+                {"col": "mok_date", "out": "mok_date"},
+            ],
+            "daily": [
+                {"col": "predicted_prob", "out": "p_onset", "add_plus": True},
+                {"col": "predicted_prob_clim_mok_date", "out": "p_onset_clim_mok_date", "add_plus": True},
+                {"col": "predicted_prob_mok", "out": "p_onset_mok", "add_plus": True},
+                {"col": "forecast_rain", "out": "rain_mean", "add_plus": False},
+            ],
+        },
+        "aifs": {
+            "max_day": 45,
+            "sources": [
+                {
+                    "file": str(ONSET_PROCESSED_DIR / str(YEAR) / f"aifs_{YEAR}_wide.pkl"),
+                    "years": f"{YEAR}:{YEAR}",
+                    "prob_col": "predicted_prob_clim_mok_date",
+                }
+            ],
+            "daily": [
+                {"col": "predicted_prob", "out": "p_onset", "add_plus": True},
+                {"col": "predicted_prob_mok", "out": "p_onset_mok", "add_plus": True},
+                {"col": "predicted_prob_clim_mok_date", "out": "p_onset_clim_mok_date", "add_plus": True},
+                {"col": "forecast_rain", "out": "rain_mean", "add_plus": False},
+            ],
+        },
+    },
+    "climatology": {
+        "max_day": 28,
+        "prob_col": "predicted_prob",
+    },
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+}
+
+# ==============================================================================
+# Onset Forecast Specs (Combine Forecasts Template - GenCast & AIFS)
+# ==============================================================================
+# Translated from combine_template_clim_mok_date_2026.yml for use in the
+# onset_forecast pipeline (feeds into 3_combine_forecasts).
+ONSET_FORECAST_COMBINE_GENCAST_AIFS_SPEC = {
+    "type": "combine_forecasts",
+    "input": {
+        "ground_truth_wide_rds": str(ONSET_VERIFICATION_DIR / "Models" / "dry_spell" / "imd_clim_mok_date_wide.pkl"),
+        "climatologies": {
+            "clim": {
+                "rds": str(ONSET_PROCESSED_DIR / str(YEAR) / "imd_clim_mok_date_clim_issue.pkl"),
+                "out_prefix": "clim_p_onset",
+            },
+            "clim_unc": {
+                "rds": str(ONSET_PROCESSED_DIR / str(YEAR) / "imd_clim_mok_date_clim_unc_issue.pkl"),
+                "out_prefix": "clim_unc_p_onset",
+            },
+        },
+    },
+    "options": {
+        "join": "inner",
+        "plus_label_template": "day_{plus}plus",
+        "trim_forecasts_after_true_onset": True,
+        "default_prob_col": "predicted_prob",
+    },
+    "forecasts": {
+        "gencast": {
+            "max_day": 45,
+            "sources": [
+                {
+                    "file": str(ONSET_PROCESSED_DIR / str(YEAR) / f"gencast_{YEAR}_wide.pkl"),
+                    "years": f"{YEAR}:{YEAR}",
+                }
+            ],
+            "constants": [
+                {"col": "onset_thresh", "out": "onset_thresh"},
+                {"col": "mok_date", "out": "mok_date"},
+            ],
+            "daily": [
+                {"col": "predicted_prob", "out": "p_onset", "add_plus": True},
+                {"col": "predicted_prob_clim_mok_date", "out": "p_onset_clim_mok_date", "add_plus": True},
+                {"col": "predicted_prob_mok", "out": "p_onset_mok", "add_plus": True},
+                {"col": "forecast_rain", "out": "rain_mean", "add_plus": False},
+            ],
+        },
+        "aifs": {
+            "max_day": 45,
+            "sources": [
+                {
+                    "file": str(ONSET_PROCESSED_DIR / str(YEAR) / f"aifs_{YEAR}_wide.pkl"),
+                    "years": f"{YEAR}:{YEAR}",
+                    "prob_col": "predicted_prob_clim_mok_date",
+                }
+            ],
+            "daily": [
+                {"col": "predicted_prob", "out": "p_onset", "add_plus": True},
+                {"col": "predicted_prob_mok", "out": "p_onset_mok", "add_plus": True},
+                {"col": "predicted_prob_clim_mok_date", "out": "p_onset_clim_mok_date", "add_plus": True},
+                {"col": "forecast_rain", "out": "rain_mean", "add_plus": False},
+            ],
+        },
+    },
+    "climatology": {
+        "max_day": 28,
+        "prob_col": "predicted_prob",
+    },
+    "output": {
+        "out_dir": str(ONSET_PROCESSED_DIR / str(YEAR)),
+    },
+}
 
 
 if __name__ == "__main__":

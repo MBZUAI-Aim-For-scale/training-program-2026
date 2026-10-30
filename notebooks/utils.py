@@ -31,6 +31,7 @@ import xarray as xr
 from PIL import Image, ImageDraw
 
 import config
+from ai_weather.runtime import check_runtime_python, select_runtime_python
 
 # ======================================================================
 # Safe config access
@@ -1720,7 +1721,7 @@ def run_momp_benchmark(
             env["ROMP_BENCHMARK_COVERAGE"] = str(
                 run_config["benchmark_coverage"]
             )
-    cmd = [sys.executable, "-u", str(rmp), "--mode", mode]
+    cmd = [select_runtime_python(PROJECT_ROOT), "-u", str(rmp), "--mode", mode]
     if model_key:
         cmd.extend(["--model", model_key])
     if spec_path:
@@ -2399,6 +2400,13 @@ def sanitized_driver_argv(driver_path, mode):
 
 def execute_momp_benchmark(mode="det"):
     """Execute the full MOMP driver pipeline for the given mode."""
+    python = select_runtime_python(PROJECT_ROOT)
+    if python != os.path.abspath(sys.executable):
+        result = run_momp_benchmark(mode=mode, stream=True)
+        if not result["ok"]:
+            raise RuntimeError(result.get("stderr") or result.get("stdout") or "Benchmark worker failed.")
+        return
+    print(check_runtime_python(python, os.environ.copy(), PROJECT_ROOT), flush=True)
     print("=" * 60)
     print(f"Initializing MOMP Benchmark Execution [{mode.upper()} MODE]")
     print("=" * 60)

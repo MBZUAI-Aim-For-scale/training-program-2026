@@ -7,6 +7,7 @@ from typing import Union
 
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 
 class OnsetContingencyTests(unittest.TestCase):
@@ -65,6 +66,38 @@ class OnsetContingencyTests(unittest.TestCase):
         self.assertEqual(summary["overall_true_positive"], 2)
         self.assertEqual(summary["overall_num_onset"], 2)
         self.assertEqual(metrics.iloc[0].mae_combined, 0)
+
+    def test_wrong_timing_is_both_a_false_alarm_and_a_missed_observed_event(self):
+        metrics, summary = self.compute(pd.DataFrame([self.row(5, 14)]),
+                                        verification_window=(1, 15), tolerance_days=3)
+        result = metrics.iloc[0]
+        self.assertEqual(result.true_positive, 0)
+        self.assertEqual(result.false_positive, 1)
+        self.assertEqual(result.false_negative, 1)
+        self.assertEqual(result.true_positive + result.false_negative, result.num_onset)
+        self.assertEqual(summary["overall_false_negative"], 1)
+        self.assertEqual(result.mae_combined, 9)
+
+    def test_spatial_rates_include_missed_events_with_wrong_timing(self):
+        path = Path("apps/benchmarking/ROMP/momp/metrics/error.py")
+        tree = ast.parse(path.read_text())
+        function = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                        and n.name == "create_spatial_far_mr_mae")
+        ns = {"pd": pd, "np": np, "xr": xr}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), ns)  # noqa: S102
+        metrics, _ = self.compute(pd.DataFrame([self.row(5, 14), self.row(10, 10)]),
+                                  verification_window=(1, 15), tolerance_days=3)
+        grid = xr.DataArray([[1]], dims=("lat", "lon"), coords={"lat": [10.], "lon": [38.]})
+        spatial = ns["create_spatial_far_mr_mae"]({2004: metrics}, {2004: grid})
+        self.assertEqual(spatial["miss_rate"].item(), .5)
+        self.assertEqual(spatial["false_alarm_rate"].item(), .5)
+        self.assertEqual(spatial["mean_mae"].item(), 4.5)
+
+    def test_false_alarm_timing_error_can_exceed_the_window_length(self):
+        metrics, _ = self.compute(pd.DataFrame([self.row(100, 20)]),
+                                  verification_window=(16, 30), tolerance_days=5)
+        self.assertEqual(metrics.iloc[0].mae_combined, 80)
+        self.assertEqual(metrics.iloc[0].false_positive, 1)
 
     def test_no_observed_onset_does_not_create_nan_error_samples(self):
         metrics, _ = self.compute(pd.DataFrame([self.row(None, 20)]), verification_window=(16, 30))

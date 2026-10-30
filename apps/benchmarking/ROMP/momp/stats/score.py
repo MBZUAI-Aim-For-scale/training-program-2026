@@ -447,8 +447,8 @@ def calculate_rps(forecast_obs_df):
         fair_rps_values.append(fair_rps_forecast)
     
     # Calculate overall RPS (average over all forecasts)
-    rps = np.mean(rps_values)
-    fair_rps = np.mean(fair_rps_values)
+    rps = np.mean(rps_values) if rps_values else np.nan
+    fair_rps = np.mean(fair_rps_values) if fair_rps_values else np.nan
     
 
     
@@ -464,6 +464,43 @@ def calculate_rps(forecast_obs_df):
     print(f"Number of forecasts: {rps_results['n_forecasts']}")
     
     return rps_results
+
+
+def calculate_paired_rps(forecast_pairs, reference_pairs):
+    """Score the same cases on both sides, requiring two effective members.
+
+    A single unsupported climatology case must not poison the mean Fair RPS.
+    Exclude the corresponding model case too, so RPSS compares like samples.
+    """
+    keys = ['init_time', 'lat', 'lon']
+    supported = []
+    input_counts = []
+    for label, pairs in (("forecast", forecast_pairs), ("reference", reference_pairs)):
+        input_counts.append(pairs.groupby(keys).ngroups)
+        member_column = ('total_members_with_onset' if 'total_members_with_onset' in pairs
+                         else 'total_members')
+        members = pd.to_numeric(pairs[member_column], errors='coerce')
+        valid = pairs[keys].copy()
+        valid['_supported'] = np.isfinite(members) & (members >= 2)
+        mask = valid.groupby(keys)['_supported'].transform('all')
+        filtered = pairs.loc[mask].copy()
+        excluded = input_counts[-1] - filtered.groupby(keys).ngroups
+        if excluded:
+            warnings.warn(
+                f"Fair RPS excluded {excluded} {label} cases with fewer than two "
+                "usable members or a nonfinite member count; RPSS uses common supported cases.",
+                RuntimeWarning, stacklevel=2,
+            )
+        supported.append(filtered)
+
+    if all(not frame.empty for frame in supported):
+        supported = match_samples(*supported)
+    else:
+        supported = [frame.iloc[:0] for frame in supported]
+    scores = [calculate_rps(frame) for frame in supported]
+    for result, count in zip(scores, input_counts):
+        result['n_excluded_forecasts'] = count - result['n_forecasts']
+    return tuple(scores)
 
 
 

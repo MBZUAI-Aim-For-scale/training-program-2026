@@ -37,6 +37,15 @@ def metric_model_options(catalog, discovered_models):
     return models, categories
 
 
+def metric_comparison_groups(models, categories):
+    """Keep onset-error and probabilistic score columns in their own tables."""
+    groups = [
+        ("Onset error metrics", [model for model in models if categories[model] != "Probabilistic"]),
+        ("Probabilistic skill metrics", [model for model in models if categories[model] == "Probabilistic"]),
+    ]
+    return [(label, group) for label, group in groups if group]
+
+
 def load_probabilistic_metric_table(output_root):
     columns = {
         "Fair_Brier_Score": ("Fair Brier Score", 1),

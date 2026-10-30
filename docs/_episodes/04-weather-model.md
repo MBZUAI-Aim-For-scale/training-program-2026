@@ -257,13 +257,13 @@ The pipeline enforces a strict separation between two evaluation tracks. Determi
 **How deterministic scoring works:**
 
 1. Onset is detected in the observations and in the forecast for each grid cell and year.
-2. A forecast onset is a hit if it falls within the matching tolerance of the observed onset. Otherwise it is a false alarm (onset forecast but not observed, or too far off), and an observed onset with no matching forecast is a miss. Cells where neither has an onset are correct negatives.
+2. A forecast onset is a hit if it falls within the matching tolerance of the observed onset. Otherwise it is a false alarm (onset forecast but not observed, or too far off), and an observed onset with no matching forecast is a miss. When both dates are in the verification window but outside tolerance, the pair contributes one false alarm and one miss. Cells where neither has an onset are correct negatives.
 3. FAR and MR come from these counts. MAE measures the timing error for the matched onsets.
 4. Metrics are computed per grid cell and mapped, then optionally aggregated to regions.
 
 > #### Metric Trade-offs
 > 
-> Because the three metrics trade off against each other, a model that never predicts onset has zero false alarms but a 100% miss rate. A model that always predicts onset has zero misses but many false alarms. Climatology behaves like the second case (Figure 5).
+> Read the three metrics together. A model that never predicts onset misses every observed event; its false-alarm ratio is undefined because it makes no event forecasts. A model that always predicts onset can still miss observed events when its timing falls outside tolerance, and can also produce many false alarms. Historical figures should be regenerated with the corrected timing-miss calculation before comparing miss rates.
 {: .tip}
 
 ### 2. Probabilistic Track (Ensemble Forecasts)

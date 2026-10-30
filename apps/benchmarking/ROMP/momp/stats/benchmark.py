@@ -134,6 +134,9 @@ def compute_onset_metrics_with_windows(
 ) -> Tuple[pd.DataFrame, Dict[str, Union[int, float, Tuple[int, int]]]]:
     """
     Computes contingency matrix metrics (TP, FP, FN, TN, MAE) following verification window logic.
+
+    Timing errors outside tolerance leave both a false predicted event (FP)
+    and a missed observed event (FN) when both dates fall in the window.
     """
     forecast_bin_start = verification_window[0]
     forecast_bin_end = verification_window[1]
@@ -176,11 +179,15 @@ def compute_onset_metrics_with_windows(
             # interval. Earlier onsets are non-events here, not dropped rows.
             if is_model_event:
                 abs_diff_days = abs((model_onset - observed_onset).days) if pd.notna(observed_onset) else None
-                if is_observed_event and abs_diff_days <= tolerance_days:
+                if is_observed_event and abs_diff_days is not None and abs_diff_days <= tolerance_days:
                     TP += 1
                     mae_tp.append(abs_diff_days)
                 else:
                     FP += 1
+                    # The predicted date is a false alarm and the observed
+                    # in-window event was also missed at the allowed tolerance.
+                    if is_observed_event:
+                        FN += 1
                     if abs_diff_days is not None:
                         mae_fp.append(abs_diff_days)
             elif is_observed_event:

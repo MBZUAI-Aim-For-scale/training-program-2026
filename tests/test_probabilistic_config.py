@@ -175,7 +175,9 @@ class ProbabilisticConfigTests(unittest.TestCase):
         bs = {"fair_brier_score": .2, "bin_fair_brier_scores": {"Days 1-5": .2}}
         auc = {"auc": .7, "bin_auc_scores": {"Days 1-5": .7}}
         score_results = {"BS": bs, "BS_ref": bs, "AUC": auc, "AUC_ref": auc,
-                         "RPS": {"fair_rps": .3}, "skill_results": {
+                         "RPS": {"fair_rps": .3, "n_forecasts": 10, "n_excluded_forecasts": 2},
+                         "RPS_ref": {"fair_rps": .4, "n_forecasts": 10, "n_excluded_forecasts": 3},
+                         "skill_results": {
                              "fair_brier_skill_score": 0, "fair_rps_skill_score": 0,
                              "bin_fair_brier_skill_scores": {"Days 1-5": 0}}}
         with tempfile.TemporaryDirectory() as folder:
@@ -185,3 +187,12 @@ class ProbabilisticConfigTests(unittest.TestCase):
             self.assertEqual(list(Path(folder).iterdir()), [])
             self.assertEqual(binned["Bin"], ["Days 1-5"])
             self.assertEqual(overall["AUC"], .7)
+            self.assertEqual(overall["Reference_Fair_RPS"], .4)
+            self.assertEqual(overall["RPS_N_Forecasts"], 10)
+            ns["save_score_results"](score_results, model="test", verification_window=(1, 15),
+                                     dir_out=folder, save_csv_score=True)
+            saved = pd.read_csv(Path(folder) / "overall_skill_scores_test_1-15.csv").iloc[0]
+            self.assertEqual(saved["Reference_Fair_RPS"], .4)
+            self.assertEqual(saved["Score_Definition"], "paired_fair_rps_v2")
+            self.assertEqual(saved["RPS_N_Excluded_Forecasts"], 2)
+            self.assertEqual(saved["Reference_RPS_N_Excluded_Forecasts"], 3)
