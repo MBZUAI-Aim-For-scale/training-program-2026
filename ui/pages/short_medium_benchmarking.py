@@ -3742,8 +3742,6 @@ def page() -> None:
             ow = st.multiselect("Lead times", lead_options, default=lead_options,
                                 key=f"metrics_leads_{tuple(lead_options)}")
             ow = sorted(ow, key=lead_window_sort_key)
-            st.caption("N/A means a metric is not computed for that model, no result was saved for that lead time, or the score is mathematically undefined. RPSS requires supported forecast/reference cases and a finite, nonzero reference Fair RPS. BSS/RPSS percentages and AUC are included from probabilistic summaries when available.")
-            st.caption("Onset error metrics and probabilistic scores are shown separately because they evaluate different forecast types. MAE includes timing errors for false alarms and can exceed the length of the lead-time window.")
             st.caption("Scroll the table horizontally to view all models and lead times on smaller screens.")
             if summary_errors:
                 st.warning("Some probabilistic summaries could not be read: " + "; ".join(summary_errors))

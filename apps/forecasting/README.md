@@ -103,6 +103,11 @@ Every setting (thresholds, dry-spell length and window, search start) can be cha
   into `outputs/_obs/chirps/`) from the search start to the day before the forecast, then the
   forecast's daily rainfall put on the CHIRPS grid. CHIRPS covers land, 50°S–50°N, and runs about
   a month behind; days missing before the forecast are flagged on the page.
+- **Unavailable observations:** onset maps and movie requests show a local CHIRPS availability
+  message; the forecast rainfall chart remains available on its native grid. Missing, empty or
+  invalid observation dates do not stop the forecast page. To preload CHIRPS, place yearly
+  files named `chirps-v2.0.<year>.days_p25.nc` in `$DEMO3_DATA/CHIRPS/` (default
+  `/data/CHIRPS/` in the container), or allow downloads into `outputs/_obs/chirps/`.
 - **Possible onset:** confirming onset needs the wet spell plus the dry-spell window (24 days for
   ICPAC, 35 for Moron–Robertson), longer than a 10–15 day forecast. A wet spell whose check runs
   past the end of the data is shown as possible onset, not onset.

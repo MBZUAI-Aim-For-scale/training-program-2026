@@ -224,13 +224,20 @@ def onset_results(paths: dict, keys: list, init, lead_days, box, region_name):
     todo = [k for k in picked if not gifs[k].exists()]
     if todo and st.button(f"Make {len(todo)} onset movie{'s' if len(todo) > 1 else ''}", type="primary",
                           key="forecast_onset_movie_go"):
+        failed = False
         for k in todo:  # one after another
             bar = st.progress(0.0, text=f"{catalog.BY_KEY[k].name}: drawing frames…")
-            onset_view.make_movie(paths[k], catalog.BY_KEY[k], box, region_name, init, lead_days, defn,
-                                  search_from, lambda i, n, name=catalog.BY_KEY[k].name:
-                                  bar.progress(i / n, text=f"{name}: frame {i} of {n}"))
-            bar.empty()
-        st.rerun()
+            try:
+                onset_view.make_movie(paths[k], catalog.BY_KEY[k], box, region_name, init, lead_days, defn,
+                                      search_from, lambda i, n, name=catalog.BY_KEY[k].name:
+                                      bar.progress(i / n, text=f"{name}: frame {i} of {n}"))
+            except OSError as e:
+                failed = True
+                st.error(f"Couldn't make onset movie for {catalog.BY_KEY[k].name}: {e}")
+            finally:
+                bar.empty()
+        if not failed:
+            st.rerun()
     done = [k for k in picked if gifs[k].exists()]
     tabs = st.tabs([catalog.BY_KEY[k].name for k in done]) if len(done) > 1 else [st.container()] * len(done)
     for tab, k in zip(tabs, done):

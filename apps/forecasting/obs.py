@@ -58,7 +58,11 @@ def last_day() -> pd.Timestamp | None:
     for y in (year, year - 1):
         try:
             with xr.open_dataset(_file(y)) as ds:
-                return pd.Timestamp(ds.time.values[-1])
+                if "time" not in ds:
+                    continue
+                dates = pd.DatetimeIndex(ds.time.values).dropna()
+                if not dates.empty:
+                    return pd.Timestamp(dates.max()).normalize()
         except (OSError, ValueError):
             continue
     return None
@@ -67,7 +71,12 @@ def last_day() -> pd.Timestamp | None:
 def daily(box: Box, start, end) -> xr.DataArray:
     """Daily rainfall (mm/day), dims (time, lat, lon), for start..end inclusive.
     Days CHIRPS doesn't have yet are simply absent."""
-    start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
+    start, end = pd.Timestamp(start), pd.Timestamp(end)
+    if pd.isna(start) or pd.isna(end):
+        raise FileNotFoundError(f"{NAME} observation dates are unavailable.")
+    start, end = start.normalize(), end.normalize()
+    if start > end:
+        raise ValueError("Observation start date must not be after the end date.")
     parts = []
     for y in range(start.year, end.year + 1):
         try:
@@ -78,7 +87,8 @@ def daily(box: Box, start, end) -> xr.DataArray:
             da = ds.precip.rename(latitude="lat", longitude="lon")
             da = da.sel(time=slice(max(start, pd.Timestamp(y, 1, 1)), min(end, pd.Timestamp(y, 12, 31))),
                         lat=slice(box.lat_min, box.lat_max), lon=slice(box.lon_min, box.lon_max))
-            parts.append(da.load())
+            if all(da.sizes[dim] > 0 for dim in ("time", "lat", "lon")):
+                parts.append(da.load())
     if not parts:
         raise FileNotFoundError(f"no {NAME} data for {start:%Y-%m-%d}..{end:%Y-%m-%d}")
     out = xr.concat(parts, "time") if len(parts) > 1 else parts[0]
