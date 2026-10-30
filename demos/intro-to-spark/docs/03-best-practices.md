@@ -27,10 +27,11 @@
 
 ## Sharing one Spark between teams
 
-- One container per team: `docker run --device nvidia.com/gpu=all --name team-uae --memory 30g --cpus 4 ...`. The `--memory` limit caps
-  CPU-side RAM only. **It does not cap CUDA allocations**: a container limited to 8 GiB filled 16 GiB on the GPU
-  (verified on GB10, driver 580.95, NGC PyTorch 26.06; Lab 04 section 5). One team's GPU job can therefore use
-  memory the others need, so schedule heavy GPU jobs so teams don't overlap.
+- One container per team: `docker run --device nvidia.com/gpu=all --name team-kenya --memory 30g --cpus 4 ...`. The `--memory` limit caps
+  CPU-side RAM only. **It does not cap CUDA allocations** (verified on a GB10 Spark, driver 580.95, NGC
+  PyTorch 26.06: a container with `--memory 8g` filled 16 GiB on the GPU while its cgroup counter stayed at
+  0.4 GiB; the same 16 GiB on the CPU was OOM-killed at 8 GiB). Any team can still exhaust the shared 128 GB,
+  so schedule heavy GPU jobs so teams don't overlap, and watch `free -h` rather than `docker stats`.
 - Run Jupyter bound to `127.0.0.1` and reach it by SSH tunnel: `ssh -L 8888:localhost:8888 user@spark`.
   Do **not** run with an empty token on a shared network.
 - Agree who runs heavy jobs when; use `nvidia-smi` and `docker stats` to see load.

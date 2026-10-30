@@ -7,18 +7,19 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${1:-8890}"   # 8888 is Demo 1's JupyterLab sandbox, 8500-8502 the demo dashboards
 TOKEN="${JUPYTER_TOKEN:-$(openssl rand -hex 8)}"
-CACHE="${HOME}/.cache/earth2studio"   # model weights, shared by your runs, survives container restarts
-mkdir -p "$CACHE"
+DATA="${SPARK_INTRO_DATA:-${HOME}/.cache/spark-intro}"   # model weights (~35 GB) and LLM; survives restarts
+mkdir -p "$DATA"
 
 echo "Jupyter token: ${TOKEN}"
 echo "On your laptop: ssh -N -L ${PORT}:localhost:${PORT} <spark>   then open http://localhost:${PORT}"
 
-# --memory is deliberately not set: on Spark it caps CPU RAM only, not GPU memory (Lab 04, section 5).
-docker run --rm -it --device nvidia.com/gpu=all --ipc=host \
+# --memory is deliberately not set: on Spark it caps CPU RAM only, not GPU memory (Lab 01).
+docker run --rm -it --device nvidia.com/gpu=all \
+  --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
   --name "spark-intro-${USER}-${PORT}" \
   -p "127.0.0.1:${PORT}:8888" \
   -v "${HERE}:/workspace/intro-to-spark" \
-  -v "${CACHE}:/root/.cache/earth2studio" \
+  -v "${DATA}:/workspace/data" \
   -e JUPYTER_TOKEN="${TOKEN}" \
   spark-intro \
   jupyter lab --ip 0.0.0.0 --allow-root --no-browser \

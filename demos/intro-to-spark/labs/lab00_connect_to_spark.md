@@ -37,7 +37,7 @@ If the last command fails with `unresolvable CDI devices`, see [Demo 3 SETUP ste
 ```bash
 git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git   # skip if already cloned
 cd training-program-2026
-docker build -t spark-intro demos/intro-to-spark/docker      # once per Spark; skip if `docker images` lists it
+docker build -t spark-intro demos/intro-to-spark/docker      # once per Spark, 30-60 min; skip if `docker images` lists it
 bash demos/intro-to-spark/docker/run.sh <your-port>          # prints a token; keep this terminal open (or use tmux)
 ```
 
@@ -47,14 +47,14 @@ bash demos/intro-to-spark/docker/run.sh <your-port>          # prints a token; k
 ssh -N -L <your-port>:localhost:<your-port> spark
 ```
 
-Open `http://localhost:<your-port>`, paste the token, and open `labs/lab01_system_tour.ipynb`.
+Open `http://localhost:<your-port>`, paste the token, and open `labs/lab01_know_your_spark.ipynb`.
 
 ## Why it's done this way
 
 - Jupyter listens only on the Spark's localhost; the tunnel is the only way in, and it's encrypted.
-- One container per person or team keeps sessions separate. Note it does **not** limit GPU memory (Lab 04).
-- Your notebooks and outputs live on the Spark's disk (mounted into the container), and model weights are
-  cached in `~/.cache/earth2studio`, so nothing is lost when the container stops.
+- One container per person or team keeps sessions separate. Note it does **not** limit GPU memory (Lab 01).
+- Your notebooks and outputs live on the Spark's disk (mounted into the container), and model weights (~35 GB)
+  are cached in `~/.cache/spark-intro`, so nothing is lost when the container stops.
 
 ## If something fails
 

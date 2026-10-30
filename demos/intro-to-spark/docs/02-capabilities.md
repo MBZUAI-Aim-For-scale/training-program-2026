@@ -1,8 +1,7 @@
 # What can Spark do for weather and climate?
 
 Rough guide to workloads. "Expected" means *expected from specs and model sizes, not measured*.
-Replace these guesses with measurements as you run models (Lab 03, Demo 3) and record them in the
-[one-pager](05-hardware-one-pager-spark-vs-cloud.md).
+Measured numbers for many of these are in the [one-pager](05-hardware-one-pager-spark-vs-cloud.md).
 
 | Workload | Expected on Spark | Why |
 |---|---|---|

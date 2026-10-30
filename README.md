@@ -21,7 +21,7 @@ The program is designed to provide an interactive learning experience over the A
 │   └── raw            <- The original, immutable data dump.
 │
 ├── demos              <- src for each demos
-│   ├── intro-to-spark <- Intro to DGX Spark: background docs + hands-on labs 00-06
+│   ├── intro-to-spark <- Intro to DGX Spark: background docs + Africa-focused labs 00-11
 │   ├── demo3          <- Demo3 source code
 │   ├── demo4          <- Demo4 source code
 │   ├── demo5          <- Demo5 source code
