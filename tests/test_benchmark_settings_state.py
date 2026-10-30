@@ -5,6 +5,8 @@ from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import MagicMock
 
+from ui.utils.benchmark_messages import cancellation_warning, execution_status
+
 
 class BenchmarkSettingsStateTests(unittest.TestCase):
     def run_actions(self, *, clicked=False, selected=True, ok=True, signature="20"):
@@ -25,13 +27,36 @@ class BenchmarkSettingsStateTests(unittest.TestCase):
         st.spinner.return_value = nullcontext()
         runner = MagicMock(return_value={"ok": ok, "returncode": 0 if ok else 1,
                                          "stderr": "example failure" if not ok else ""})
-        namespace = dict(st=st, settings_signature="15", run_clicked=clicked,
-                         active_rows=[{"_row_key": "a", "_exec_key": "a"}] if selected else [],
-                         model_run_windows={}, shared_settings={"wet_day_threshold": 15},
-                         ground_truth="CHIRPS", benchmark_coverage="Ethiopia",
-                         forecast_window="1-15 days", run_momp_benchmark=runner,
-                         ROMP_DEMO_OUT_DIR=Path("outputs"), List=list, Dict=dict, Any=object)
-        exec(compile(ast.Module(body=page.body[start:end], type_ignores=[]),
+        namespace = {"st": st, "settings_signature": "15", "run_clicked": clicked,
+                         "active_rows": [{"_row_key": "a", "_exec_key": "a"}] if selected else [],
+                         "model_run_windows": {}, "shared_settings": {"wet_day_threshold": 15},
+                         "ground_truth": "CHIRPS", "benchmark_coverage": "Ethiopia",
+                         "forecast_window": "1-15 days", "run_momp_benchmark": runner,
+                         "ROMP_DEMO_OUT_DIR": Path("outputs"), "List": list, "Dict": dict, "Any": object}
+        publisher = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                         and node.name == "_record_finished_benchmark")
+        exec(compile(ast.Module(body=[publisher], type_ignores=[]), "job_completion", "exec"), namespace)  # noqa: S102
+
+        class ImmediateJob:
+            def __init__(self, execute, plans, signature):
+                self.execute, self.plans, self.signature = execute, plans, signature
+
+            def start(self):
+                self.runs = []
+                for plan in self.plans:
+                    result = self.execute(plan["mode"], plan["model_key"], plan["config"])
+                    self.runs.append(result)
+                return self
+
+            def snapshot(self):
+                return {"status": "completed" if ok else "failed", "runs": self.runs, "done": True}
+
+        def render_job():
+            namespace["_record_finished_benchmark"](st.session_state["benchmark_active_job"])
+
+        namespace.update(BenchmarkJob=ImmediateJob, render_benchmark_job=render_job,
+                         cancellation_warning=cancellation_warning, execution_status=execution_status)
+        exec(compile(ast.Module(body=page.body[start:end], type_ignores=[]),  # noqa: S102
                      "dashboard_actions", "exec"), namespace)
         return st, runner
 

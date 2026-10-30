@@ -7,6 +7,9 @@ padded shapefile clipping & boundary overlay rendering for spatial maps, persist
 robust argument filtering for onset analysis, and error-proof tab routing.
 """
 from __future__ import annotations
+from ai_weather.benchmark_job import BenchmarkJob
+from ui.utils.parameter_help import PARAMETER_HELP
+from ui.utils.benchmark_messages import cancellation_warning, execution_status
 from ai_weather.spatial import climatology_boundary_path
 from ai_weather.spatial import apply_jjas_mask
 
@@ -2246,13 +2249,14 @@ def _locate_run_momp() -> Optional[Path]:
     return None
 
 
-def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
+def _spawn_no_fork(argv, env, cwd, timeout, on_line=None, cancel_event=None):
     """
     Run `argv` in `cwd` using posix_spawn on Unix to prevent memory fragmentation and fork-safety issues.
     """
     import select
     import signal
     import time
+    from ai_weather.benchmark_job import track_worker, untrack_worker
 
     started = time.time()
 
@@ -2266,6 +2270,9 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
             for line in proc.stdout:
                 if on_line:
                     on_line(line.rstrip("\n"))
+                if cancel_event is not None and cancel_event.is_set():
+                    proc.kill()
+                    break
                 if time.time() - started > timeout:
                     proc.kill()
                     timed_out = True
@@ -2273,7 +2280,7 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
         finally:
             proc.stdout.close()
             proc.wait()
-        return (124 if timed_out else proc.returncode), timed_out
+        return (130 if cancel_event is not None and cancel_event.is_set() else 124 if timed_out else proc.returncode), timed_out
 
     read_fd, write_fd = os.pipe()
     actions = [
@@ -2286,20 +2293,63 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
     shell_argv = ["/bin/sh", "-c", 'cd "$1" && shift && exec "$@"', "sh", str(cwd), *map(str, argv)]
 
     try:
-        pid = os.posix_spawn("/bin/sh", shell_argv, env, file_actions=actions)
+        pid = os.posix_spawn("/bin/sh", shell_argv, env, file_actions=actions, setpgroup=0)
     except BaseException:
         os.close(read_fd)
         os.close(write_fd)
         raise
     os.close(write_fd)
+    track_worker(pid)
+    status = None
+    termination_attempted = False
+
+    def poll_exit():
+        nonlocal status
+        if status is None:
+            exited, child_status = os.waitpid(pid, os.WNOHANG)
+            if exited:
+                status = child_status
+
+    def terminate_group():
+        nonlocal termination_attempted
+        termination_attempted = True
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            poll_exit()
+            return
+        except PermissionError:
+            poll_exit()
+            if status is None:
+                raise
+        deadline = time.time() + 0.2
+        while status is None and time.time() < deadline:
+            poll_exit()
+            if status is None:
+                time.sleep(0.02)
+        try:
+            # The group may already be gone after graceful termination.
+            os.killpg(pid, 0)
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            poll_exit()
+            if status is None:
+                raise
+            if on_line:
+                on_line("[stop-warning] The main benchmark process exited, but the operating system blocked verification of remaining worker cleanup.")
 
     timed_out = False
     buf = b""
     try:
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                terminate_group()
+                break
             left = timeout - (time.time() - started)
             if left <= 0:
-                os.kill(pid, signal.SIGKILL)
+                terminate_group()
                 timed_out = True
                 break
 
@@ -2319,24 +2369,28 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
 
         if buf and on_line:
             on_line(buf.decode("utf-8", "replace").rstrip("\r"))
-    except BaseException:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    except BaseException as exc:
+        if isinstance(exc, PermissionError) and on_line:
+            on_line(f"[stop-warning] The operating system denied process management for PID {pid}. Worker shutdown is not confirmed.")
+        if not termination_attempted:
+            terminate_group()
         raise
     finally:
         os.close(read_fd)
-        _, status = os.waitpid(pid, 0)
+        if status is None:
+            _, status = os.waitpid(pid, 0)
+        untrack_worker(pid)
 
     rc = os.waitstatus_to_exitcode(status)
-    return (124 if timed_out else rc), timed_out
+    return (130 if cancel_event is not None and cancel_event.is_set() else 124 if timed_out else rc), timed_out
 
 
 def run_momp_benchmark(
     mode: str,
     model_key: Optional[str] = None,
     run_config: Optional[Dict[str, Any]] = None,
+    progress=None,
+    cancel_event=None,
 ) -> Dict[str, Any]:
     mode = mode.lower()
     if mode not in ("det", "deterministic", "prob", "probabilistic"):
@@ -2420,21 +2474,30 @@ def run_momp_benchmark(
     try:
         import time
         cmd[0] = select_runtime_python(PROJECT_ROOT)
-        runtime_info = check_runtime_python(cmd[0], env, PROJECT_ROOT, _spawn_no_fork)
-        live = st.empty()
-        lines: List[str] = [runtime_info]
+        from collections import deque
+        def spawn(argv, child_env, cwd, timeout, on_line=None):
+            return _spawn_no_fork(argv, child_env, cwd, timeout, on_line, cancel_event=cancel_event)
+        runtime_info = check_runtime_python(cmd[0], env, PROJECT_ROOT, spawn)
+        live = st.empty() if progress is None else None
+        lines = deque([runtime_info], maxlen=2000)
+        stop_warnings = []
         started = time.time()
         last_draw = 0.0
 
         def _on_line(line: str) -> None:
             nonlocal last_draw
             lines.append(line)
+            if line.startswith("[stop-warning]"):
+                stop_warnings.append(line.removeprefix("[stop-warning]").strip())
+            if progress is not None:
+                progress(line)
+                return
             now = time.time()
             if now - last_draw > 1.0:
-                live.code(f"[{int(now - started)}s elapsed] {' '.join(cmd[-4:])}\n" + "\n".join(lines[-15:]))
+                live.code(f"[{int(now - started)}s elapsed] {' '.join(cmd[-4:])}\n" + "\n".join(list(lines)[-15:]))
                 last_draw = now
 
-        returncode, timed_out = _spawn_no_fork(cmd, env, str(PROJECT_ROOT.resolve()), 1800, _on_line)
+        returncode, timed_out = spawn(cmd, env, str(PROJECT_ROOT.resolve()), 1800, _on_line)
 
         text = "\n".join(lines)
         if timed_out:
@@ -2446,13 +2509,17 @@ def run_momp_benchmark(
             "runtime_dir": str(ROMP_DEMO_OUT_DIR),
             "stdout": text,
             "stderr": "",
-            "ok": (not timed_out) and returncode == 0,
+            "ok": (not timed_out) and returncode == 0 and not (cancel_event is not None and cancel_event.is_set()),
+            "cancelled": cancel_event is not None and cancel_event.is_set(),
+            "stop_warning": " ".join(stop_warnings),
             "command": " ".join(cmd),
         }
     except Exception as e:
         import traceback
+        cancelled = cancel_event is not None and cancel_event.is_set()
         return {
-            "mode": mode, "returncode": 1, "ok": False,
+            "mode": mode, "returncode": 130 if cancelled else 1, "ok": False, "cancelled": cancelled,
+            "stop_warning": "The operating system denied worker shutdown. Some processes may still be running." if cancelled and isinstance(e, PermissionError) else "",
             "runtime_dir": str(ROMP_DEMO_OUT_DIR),
             "stdout": "",
             "stderr": f"Could not run benchmark process: {type(e).__name__}: {e!r}\n" + traceback.format_exc(),
@@ -2522,7 +2589,7 @@ def render_kpi_row(models: int, presets: int, status: str, runtime: str) -> None
     )
 
 
-def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None) -> Dict[str, Any]:
+def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None, run_windows_renderer=None) -> Dict[str, Any]:
     section_header("Shared settings", "sky")
     st.markdown("Optional settings applied to every selected model in this benchmark.")
 
@@ -2568,6 +2635,8 @@ def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None)
 
         baseline_forecast_choice = st.selectbox("Baseline forecast", ["climatology", "custom"], index=0, key="shared_baseline_fc")
         baseline_forecast = st.text_input("Baseline forecast name", value="climatology", key="shared_baseline_custom") if baseline_forecast_choice == "custom" else "climatology"
+        if run_windows_renderer is not None:
+            run_windows_renderer()
 
     with advanced_column:
         st.markdown("**ADVANCED TEMPORAL & VERIFICATION SETTINGS**")
@@ -3115,21 +3184,70 @@ def render_initialization_settings(row_key):
             "date_filter_year": int(reference_year) if reference_year is not None else None}
 
 
+def _record_finished_benchmark(job):
+    snapshot = job.snapshot()
+    runs = snapshot["runs"]
+    completed = snapshot["status"] == "completed"
+    cancelled = snapshot["status"] == "cancelled"
+    if completed:
+        st.session_state["benchmark_settings_signature"] = job.signature
+    st.session_state["benchmark_last_run"] = {
+        "ok": completed, "cancelled": cancelled,
+        "returncode": 130 if cancelled else max((int(r.get("returncode", 1)) for r in runs), default=1),
+        "mode": runs[-1].get("mode", "") if runs else "",
+        "runtime_dir": runs[-1].get("runtime_dir", str(ROMP_DEMO_OUT_DIR)) if runs else str(ROMP_DEMO_OUT_DIR),
+        "command": "\n".join(r.get("command", "") for r in runs), "runs": runs,
+    }
+    st.session_state.pop("benchmark_active_job", None)
+    st.cache_data.clear()
+
+
+@st.fragment(run_every=1)
+def render_benchmark_job():
+    job = st.session_state.get("benchmark_active_job")
+    if job is None:
+        return
+    snapshot = job.snapshot()
+    if snapshot["done"]:
+        _record_finished_benchmark(job)
+        st.rerun()
+        return
+    st.info("Stopping benchmark…" if snapshot["stopping"] else "Benchmark running. You can stop it below.")
+    if st.button("Stop Benchmark", key="btn_stop_benchmark", disabled=snapshot["stopping"]):
+        job.cancel()
+        st.info("Stop requested; terminating benchmark workers.")
+    if snapshot["logs"]:
+        for line in snapshot["logs"]:
+            if line.startswith("[stop-warning]"):
+                st.warning(line.removeprefix("[stop-warning]").strip())
+        st.code("\n".join(snapshot["logs"][-20:]), language="text")
+
+
 def page() -> None:
     _inject_theme_css()
 
     presets = get_benchmark_presets()
-    st.markdown('<div class="page-title">Forecast Benchmarking</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="page-subtitle">'
-        "Evaluate AI weather model skill against observational references "
-        "across the Ethiopian highlands."
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    title_column, guide_column = st.columns([3, 1])
+    with title_column:
+        st.markdown('<div class="page-title">Forecast Benchmarking</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="page-subtitle">'
+            "Evaluate AI weather model skill against observational references "
+            "across the Ethiopian highlands."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    with guide_column:
+        with st.popover("Parameter guide", width="stretch"):
+            st.caption("Expand a parameter for its meaning and usage.")
+            for parameter, instruction in PARAMETER_HELP.items():
+                with st.expander(parameter):
+                    st.markdown(instruction)
 
     last_run = st.session_state.get("benchmark_last_run")
-    status_text = "Completed" if last_run and last_run.get("ok") else ("Failed" if last_run else "Idle")
+    status_text = ("Stop requested" if cancellation_warning(last_run) else "Cancelled") if last_run and last_run.get("cancelled") else (
+        "Completed" if last_run and last_run.get("ok") else "Failed" if last_run else "Idle")
     render_kpi_row(
         len(CONFIG_BENCHMARK_MODEL_CATALOG or {}),
         len(presets),
@@ -3204,67 +3322,70 @@ def page() -> None:
                     unsafe_allow_html=True,
                 )
 
-    # Model run windows
-    section_header("Model run windows", "amber")
     model_run_windows: Dict[str, Dict[str, Any]] = {}
     verification_problems = []
     observation_years = available_observation_years(ground_truth)
-    if active_rows:
-        cs, ce = compute_common_model_window(active_rows, observation_years)
-        if cs and ce:
-            st.info(f"Shared model/observation window: {cs:%Y-%m-%d} to {ce:%Y-%m-%d}.")
-        for row in active_rows:
-            rk = row["_row_key"]
-            avs, ave = row["_start_date"], row["_end_date"]
-            if observation_years:
-                shared_start = max(avs, date(min(observation_years), 1, 1))
-                shared_end = min(ave, date(max(observation_years), 12, 31))
-                if shared_start < shared_end:
-                    avs, ave = shared_start, shared_end
-                else:
-                    verification_problems.append(f"{row['Model']}: no shared model/observation evaluation period.")
-            des, dee = (max(cs, avs), min(ce, ave)) if cs and ce else (avs, ave)
-            if des > dee:
-                des, dee = avs, ave
-            with st.expander(f"{row['Model']} - available {row['Date Range']}"):
-                st.caption("The month/day range defines the season repeated in each evaluation year. Dates use shared model/observation coverage; baseline years use observation coverage.")
-                c1, c2 = st.columns(2)
-                if st.session_state.get(f"es_{rk}") is not None and not avs <= st.session_state[f"es_{rk}"] <= ave:
-                    st.session_state[f"es_{rk}"] = min(max(st.session_state[f"es_{rk}"], avs), ave)
-                eval_start = c1.date_input("Evaluation Start", value=des, min_value=avs, max_value=ave, key=f"es_{rk}")
-                if eval_start is None:
-                    verification_problems.append(f"{row['Model']}: select Evaluation Start.")
-                    eval_start = des
-                if st.session_state.get(f"ee_{rk}") is not None and not eval_start <= st.session_state[f"ee_{rk}"] <= ave:
-                    st.session_state[f"ee_{rk}"] = min(max(st.session_state[f"ee_{rk}"], eval_start), ave)
-                eval_end = c2.date_input("Evaluation End", value=max(dee, eval_start), min_value=eval_start, max_value=ave, key=f"ee_{rk}")
-                if eval_end is None:
-                    verification_problems.append(f"{row['Model']}: select Evaluation End.")
-                    eval_end = max(dee, eval_start)
-                first_year = min(observation_years) if observation_years else avs.year
-                last_year = max(observation_years) if observation_years else ave.year
-                default_start = max(first_year, min(int(getattr(config, "start_year_clim", des.year)), last_year))
-                if st.session_state.get(f"bsy_{rk}") is not None and not first_year <= st.session_state[f"bsy_{rk}"] <= last_year:
-                    st.session_state[f"bsy_{rk}"] = min(max(int(st.session_state[f"bsy_{rk}"]), first_year), last_year)
-                c3, c4 = st.columns(2)
-                bsy = c3.number_input("Baseline Start Year", min_value=first_year, max_value=last_year, value=default_start, key=f"bsy_{rk}")
-                if bsy is None:
-                    verification_problems.append(f"{row['Model']}: enter Baseline Start Year.")
-                    bsy = default_start
-                if st.session_state.get(f"bey_{rk}") is not None and not int(bsy) <= st.session_state[f"bey_{rk}"] <= last_year:
-                    st.session_state[f"bey_{rk}"] = min(max(int(st.session_state[f"bey_{rk}"]), int(bsy)), last_year)
-                default_end = max(int(bsy), min(int(getattr(config, "end_year_clim", dee.year)), last_year))
-                bey = c4.number_input("Baseline End Year", min_value=int(bsy), max_value=last_year, value=default_end, key=f"bey_{rk}")
-                if bey is None:
-                    verification_problems.append(f"{row['Model']}: enter Baseline End Year.")
-                    bey = default_end
+
+    def render_model_run_windows():
+        section_header("Model run windows", "amber")
+        if not active_rows:
+            st.caption("Select models above to set evaluation dates and baseline years.")
+        if active_rows:
+            cs, ce = compute_common_model_window(active_rows, observation_years)
+            if cs and ce:
+                st.info(f"Shared model/observation window: {cs:%Y-%m-%d} to {ce:%Y-%m-%d}.")
+            for row in active_rows:
+                rk = row["_row_key"]
+                avs, ave = row["_start_date"], row["_end_date"]
+                if observation_years:
+                    shared_start = max(avs, date(min(observation_years), 1, 1))
+                    shared_end = min(ave, date(max(observation_years), 12, 31))
+                    if shared_start < shared_end:
+                        avs, ave = shared_start, shared_end
+                    else:
+                        verification_problems.append(f"{row['Model']}: no shared model/observation evaluation period.")
+                des, dee = (max(cs, avs), min(ce, ave)) if cs and ce else (avs, ave)
+                if des > dee:
+                    des, dee = avs, ave
+                with st.expander(f"{row['Model']} - available {row['Date Range']}"):
+                    st.caption("The month/day range defines the season repeated in each evaluation year. Dates use shared model/observation coverage; baseline years use observation coverage.")
+                    c1, c2 = st.columns(2)
+                    if st.session_state.get(f"es_{rk}") is not None and not avs <= st.session_state[f"es_{rk}"] <= ave:
+                        st.session_state[f"es_{rk}"] = min(max(st.session_state[f"es_{rk}"], avs), ave)
+                    eval_start = c1.date_input("Evaluation Start", value=des, min_value=avs, max_value=ave, key=f"es_{rk}")
+                    if eval_start is None:
+                        verification_problems.append(f"{row['Model']}: select Evaluation Start.")
+                        eval_start = des
+                    if st.session_state.get(f"ee_{rk}") is not None and not eval_start <= st.session_state[f"ee_{rk}"] <= ave:
+                        st.session_state[f"ee_{rk}"] = min(max(st.session_state[f"ee_{rk}"], eval_start), ave)
+                    eval_end = c2.date_input("Evaluation End", value=max(dee, eval_start), min_value=eval_start, max_value=ave, key=f"ee_{rk}")
+                    if eval_end is None:
+                        verification_problems.append(f"{row['Model']}: select Evaluation End.")
+                        eval_end = max(dee, eval_start)
+                    first_year = min(observation_years) if observation_years else avs.year
+                    last_year = max(observation_years) if observation_years else ave.year
+                    default_start = max(first_year, min(int(getattr(config, "start_year_clim", des.year)), last_year))
+                    if st.session_state.get(f"bsy_{rk}") is not None and not first_year <= st.session_state[f"bsy_{rk}"] <= last_year:
+                        st.session_state[f"bsy_{rk}"] = min(max(int(st.session_state[f"bsy_{rk}"]), first_year), last_year)
+                    c3, c4 = st.columns(2)
+                    bsy = c3.number_input("Baseline Start Year", min_value=first_year, max_value=last_year, value=default_start, key=f"bsy_{rk}")
+                    if bsy is None:
+                        verification_problems.append(f"{row['Model']}: enter Baseline Start Year.")
+                        bsy = default_start
+                    if st.session_state.get(f"bey_{rk}") is not None and not int(bsy) <= st.session_state[f"bey_{rk}"] <= last_year:
+                        st.session_state[f"bey_{rk}"] = min(max(int(st.session_state[f"bey_{rk}"]), int(bsy)), last_year)
+                    default_end = max(int(bsy), min(int(getattr(config, "end_year_clim", dee.year)), last_year))
+                    bey = c4.number_input("Baseline End Year", min_value=int(bsy), max_value=last_year, value=default_end, key=f"bey_{rk}")
+                    if bey is None:
+                        verification_problems.append(f"{row['Model']}: enter Baseline End Year.")
+                        bey = default_end
                 
-                model_run_windows[rk] = {
-                    "eval_start": eval_start,
-                    "eval_end": eval_end,
-                    "baseline_start_year": int(bsy),
-                    "baseline_end_year": int(bey),
-                }
+                    model_run_windows[rk] = {
+                        "eval_start": eval_start,
+                        "eval_end": eval_end,
+                        "baseline_start_year": int(bsy),
+                        "baseline_end_year": int(bey),
+                    }
 
     def render_advanced_settings():
         if not active_rows:
@@ -3282,7 +3403,7 @@ def page() -> None:
                 window_label = ", ".join(f"{start}–{end}" for start, end in windows)
                 st.caption(f"Next run: {initialization['init_type'].title()} · Days {window_label} · Horizon {verification['max_forecast_day']} days")
 
-    shared_settings = render_shared_settings(ground_truth, advanced_renderer=render_advanced_settings)
+    shared_settings = render_shared_settings(ground_truth, advanced_renderer=render_advanced_settings, run_windows_renderer=render_model_run_windows)
     dry_extension = shared_settings["dry_spell_search_extension"]
     if 0 < dry_extension < shared_settings["dry_spell_limit"]:
         verification_problems.append("Dry spell search extension must be 0 (disabled) or at least the dry spell limit.")
@@ -3326,7 +3447,7 @@ def page() -> None:
         st.error(problem)
     st.markdown('<div class="run-section">', unsafe_allow_html=True)
     c1, _ = st.columns([1, 2])
-    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready or bool(observation_problems or verification_problems))
+    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready or bool(observation_problems or verification_problems) or st.session_state.get("benchmark_active_job") is not None)
     st.markdown("</div>", unsafe_allow_html=True)
 
     import hashlib
@@ -3346,45 +3467,40 @@ def page() -> None:
     if run_clicked and not active_rows:
         st.warning("Select at least one model in the Models table, then click Run Benchmark.")
 
-    if run_clicked and active_rows:
-        runs: List[Dict[str, Any]] = []
-        with st.spinner("Running benchmark..."):
-            for row in active_rows:
-                rk, ek = row["_row_key"], row["_exec_key"]
-                rc = dict(model_run_windows.get(rk, {}))
-                rc.update(shared_settings)
-                rc.update({
-                    "ground_truth": ground_truth,
-                    "benchmark_coverage": benchmark_coverage,
-                    "forecast_window": forecast_window,
-                })
-                mode = "prob" if row.get("_probabilistic") else "det"
-                result = run_momp_benchmark(mode, ek, rc)
-                result["model"] = row.get("Model", ek)
-                runs.append(result)
-
-        st.cache_data.clear()
-        if all(r.get("ok") for r in runs):
-            st.session_state["benchmark_settings_signature"] = settings_signature
-        st.session_state["benchmark_last_run"] = {
-            "ok": all(r.get("ok") for r in runs),
-            "returncode": max(int(r.get("returncode", 1)) for r in runs),
-            "mode": runs[-1].get("mode", ""),
-            "runtime_dir": runs[-1].get("runtime_dir", str(ROMP_DEMO_OUT_DIR)),
-            "command": "\n".join(r.get("command", "") for r in runs),
-            "runs": runs,
-        }
+    if run_clicked and active_rows and st.session_state.get("benchmark_active_job") is None:
+        plans = []
+        for row in active_rows:
+            rc = dict(model_run_windows.get(row["_row_key"], {}))
+            rc.update(shared_settings)
+            rc.update({"ground_truth": ground_truth, "benchmark_coverage": benchmark_coverage,
+                       "forecast_window": forecast_window})
+            plans.append({"mode": "prob" if row.get("_probabilistic") else "det",
+                          "model_key": row["_exec_key"], "label": row.get("Model", row["_exec_key"]), "config": rc})
+        st.session_state["benchmark_active_job"] = BenchmarkJob(run_momp_benchmark, plans, settings_signature).start()
         st.rerun()
+
+    if st.session_state.get("benchmark_active_job") is not None:
+        render_benchmark_job()
 
     last_run = st.session_state.get("benchmark_last_run")
     if last_run:
-        if last_run.get("ok"):
+        if last_run.get("cancelled"):
+            cleanup_warning = cancellation_warning(last_run)
+            if cleanup_warning:
+                st.warning("Stop requested. Worker shutdown could not be fully verified.")
+                st.caption(cleanup_warning)
+            else:
+                st.info("Benchmark cancelled by you. Remaining queued models were skipped.")
+            st.caption("Results from the interrupted run may be incomplete. Use Run Benchmark to generate a complete set of results.")
+        elif last_run.get("ok"):
             st.success("Latest benchmark run completed successfully.")
         else:
             st.error("Latest benchmark run failed. See the execution log below for the cause.")
-        with st.expander("Latest benchmark execution log", expanded=not last_run.get("ok")):
-            for result in last_run.get("runs", []):
-                st.write(f"{result.get('model', 'Benchmark')} — exit code {result.get('returncode', 'unknown')}")
+        with st.expander("Latest benchmark execution log", expanded=not last_run.get("ok") and not last_run.get("cancelled")):
+            results = last_run.get("runs", [])
+            for index, result in enumerate(results):
+                cancelled = last_run.get("cancelled") and index == len(results) - 1
+                st.write(f"{result.get('model', 'Benchmark')} — {execution_status(result, cancelled=cancelled)}")
                 if result.get("command"):
                     st.code(result["command"], language="bash")
                 log = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr")).strip()
