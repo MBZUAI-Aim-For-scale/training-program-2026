@@ -21,10 +21,12 @@ class MapConfigurationTests(unittest.TestCase):
         for mask in (None, "/configured/external/jjas_100mm_rainfall_mask_0p25.nc", "/custom/jjas.nc"):
             with self.subTest(mask=mask):
                 st, column = MagicMock(), MagicMock()
-                st.columns.side_effect = lambda count, target=column: [target] * count
+                st.columns.side_effect = lambda count, target=column, **_: [target] * count
                 column.number_input.side_effect = lambda label, *, value, **_: value
                 column.selectbox.side_effect = lambda label, options, index=0, **_: options[index]
                 column.text_input.side_effect = lambda label, *, value, **_: value
+                st.selectbox.side_effect = column.selectbox.side_effect
+                st.text_input.side_effect = column.text_input.side_effect
                 ns = {"st": st, "section_header": MagicMock(), "config": SimpleNamespace(nc_mask=mask), "Dict": dict, "Any": object,
                       "EXTERNAL_DATA_DIR": Path("/configured/external"), "ONSET_REFERENCE_DIR": Path("/reference")}
                 exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), "exec"), ns)  # noqa: S102

@@ -41,7 +41,7 @@ from ai_weather.map_extent import geographic_extent
 from ai_weather.precipitation import precipitation_to_mm
 from ai_weather.runtime import check_runtime_python, select_runtime_python
 from ai_weather.spatial import clip_map_artist, clip_to_boundary, load_boundary_frame
-from ui.utils.verification_settings import parse_verification_settings
+from ui.utils.verification_settings import initialization_matches_schedule, parse_verification_settings, temporal_settings_errors
 
 # ======================================================================
 # Environment snapshot at startup.
@@ -1491,12 +1491,15 @@ def build_metrics_table_html(table, models, windows):
     css = (
         "<style>"
         ".all-metrics-table{width:100%;border-collapse:collapse;"
-        "font-size:0.9rem;min-width:700px}"
+        f"font-size:0.9rem;min-width:{180 + 100 * len(models) * len(windows)}px}}"
         ".all-metrics-table th,.all-metrics-table td{border:1px solid #e5e7eb;"
-        "padding:6px 8px;text-align:right}"
+        "padding:6px 8px;text-align:right;min-width:100px}"
         ".all-metrics-table th{background:#f8fafc;color:#0f1b2a;font-weight:600}"
         ".all-metrics-table td:first-child,.all-metrics-table th:first-child{"
         "text-align:left}"
+        ".all-metrics-table tbody td:first-child,"
+        ".all-metrics-table thead tr:first-child th:first-child{"
+        "min-width:180px;position:sticky;left:0;z-index:2;background:#f8fafc}"
         "</style>"
     )
     parts = [
@@ -1541,7 +1544,6 @@ def build_metrics_table_html(table, models, windows):
                     diff = val - cv
                     if abs(diff) > 1e-6:
                         better = (diff > 0) if higher_better else (diff < 0)
-                        better = diff < 0
                         intensity = min(abs(diff) / scale, 1.0)
                         alpha = 0.08 + (0.35 * intensity)
                         color = "34,197,94" if better else "239,68,68"
@@ -2520,7 +2522,7 @@ def render_kpi_row(models: int, presets: int, status: str, runtime: str) -> None
     )
 
 
-def render_shared_settings(ground_truth: str = "CHIRPS") -> Dict[str, Any]:
+def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None) -> Dict[str, Any]:
     section_header("Shared settings", "sky")
     st.markdown("Optional settings applied to every selected model in this benchmark.")
 
@@ -2534,39 +2536,45 @@ def render_shared_settings(ground_truth: str = "CHIRPS") -> Dict[str, Any]:
     dry_spell_limit = c4.number_input("Dry spell limit", min_value=0, value=7, format="%d", key="shared_dry_spell")
     dry_spell_search_extension = c5.number_input("Dry spell search extension", min_value=0, value=int(getattr(config, "dry_extent", 21)), format="%d", key="shared_dry_ext")
 
-    st.markdown("**MASKS AND BASELINE**")
-    m1, m2 = st.columns(2)
-    default_mask = EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc"
-    seasonal_mask = EXTERNAL_DATA_DIR / "jjas_seasonal_mask_0p25.nc"
-    mask_options = {
-        "No mask": "",
-        "JJAS 100mm rainfall mask": str(default_mask),
-        "JJAS seasonal 0.25 mask": str(seasonal_mask),
-        "Custom path": "__custom__",
-    }
-    configured_mask = str(getattr(config, "nc_mask", None) or "")
-    default_mask_choice = next((label for label, value in mask_options.items() if value == configured_mask), "Custom path")
-    area_mask_choice = m1.selectbox("Area mask file", list(mask_options.keys()),
-                                   index=list(mask_options).index(default_mask_choice), key="shared_area_mask_from_config")
-    area_mask_file = mask_options[area_mask_choice]
-    if area_mask_choice == "Custom path":
-        area_mask_file = m2.text_input("Area mask file path", value=configured_mask, key="shared_area_mask_custom")
+    masks_column, advanced_column = st.columns(2, gap="large")
+    with masks_column:
+        st.markdown("**MASKS AND BASELINE**")
+        default_mask = EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc"
+        seasonal_mask = EXTERNAL_DATA_DIR / "jjas_seasonal_mask_0p25.nc"
+        mask_options = {
+            "No mask": "",
+            "JJAS 100mm rainfall mask": str(default_mask),
+            "JJAS seasonal 0.25 mask": str(seasonal_mask),
+            "Custom path": "__custom__",
+        }
+        configured_mask = str(getattr(config, "nc_mask", None) or "")
+        default_mask_choice = next((label for label, value in mask_options.items() if value == configured_mask), "Custom path")
+        area_mask_choice = st.selectbox("Area mask file", list(mask_options.keys()),
+                                       index=list(mask_options).index(default_mask_choice), key="shared_area_mask_from_config")
+        area_mask_file = mask_options[area_mask_choice]
+        if area_mask_choice == "Custom path":
+            area_mask_file = st.text_input("Area mask file path", value=configured_mask, key="shared_area_mask_custom")
 
-    t1, t2 = st.columns(2)
-    default_threshold = ONSET_REFERENCE_DIR / "thresholds_df.csv"
-    threshold_options = {
-        "Dataset default": "",
-        "Reference thresholds CSV": str(default_threshold),
-        "Custom path": "__custom__",
-    }
-    onset_threshold_choice = t1.selectbox("Onset threshold file", list(threshold_options.keys()), index=0, key="shared_onset_thresh")
-    onset_threshold_file = threshold_options[onset_threshold_choice]
-    if onset_threshold_choice == "Custom path":
-        onset_threshold_file = t2.text_input("Onset threshold file path", value="", key="shared_onset_custom")
+        default_threshold = ONSET_REFERENCE_DIR / "thresholds_df.csv"
+        threshold_options = {
+            "Dataset default": "",
+            "Reference thresholds CSV": str(default_threshold),
+            "Custom path": "__custom__",
+        }
+        onset_threshold_choice = st.selectbox("Onset threshold file", list(threshold_options.keys()), index=0, key="shared_onset_thresh")
+        onset_threshold_file = threshold_options[onset_threshold_choice]
+        if onset_threshold_choice == "Custom path":
+            onset_threshold_file = st.text_input("Onset threshold file path", value="", key="shared_onset_custom")
 
-    b1, b2 = st.columns(2)
-    baseline_forecast_choice = b1.selectbox("Baseline forecast", ["climatology", "custom"], index=0, key="shared_baseline_fc")
-    baseline_forecast = b2.text_input("Baseline forecast name", value="climatology", key="shared_baseline_custom") if baseline_forecast_choice == "custom" else "climatology"
+        baseline_forecast_choice = st.selectbox("Baseline forecast", ["climatology", "custom"], index=0, key="shared_baseline_fc")
+        baseline_forecast = st.text_input("Baseline forecast name", value="climatology", key="shared_baseline_custom") if baseline_forecast_choice == "custom" else "climatology"
+
+    with advanced_column:
+        st.markdown("**ADVANCED TEMPORAL & VERIFICATION SETTINGS**")
+        if advanced_renderer is None:
+            st.info("Select models above to configure initialization schedules and verification windows.")
+        else:
+            advanced_renderer()
 
     return {
         "wet_day_threshold": float(wet_day_threshold),
@@ -3009,33 +3017,102 @@ def render_reference_figure_gallery(paths, view_mode, filter_key):
 # ======================================================================
 # Main Page
 # ======================================================================
+@st.cache_data(show_spinner=False, ttl=300, max_entries=32)
+def inspect_model_temporal_coverage(model_key, first_year, last_year):
+    """Read only initialization/lead coordinates, never load forecast fields."""
+    meta = CONFIG_BENCHMARK_MODEL_CATALOG.get(model_key, {})
+    folder, pattern = meta.get("dir"), meta.get("file_pattern", "{}.nc")
+    dates, horizons, failures = [], {}, []
+    for year in range(first_year, last_year + 1):
+        path = config.join(folder, pattern.format(year))
+        if not config.exists(path):
+            continue
+        try:
+            with config.open_dataset(path) as ds:
+                time_name = next((name for name in ds.coords if str(name).casefold()
+                                  in {"time", "init_time", "initialization_time", "forecast_reference_time"}), None)
+                if time_name:
+                    times = pd.to_datetime(ds[time_name].values, errors="coerce")
+                    dates.extend((int(t.year), int(t.month), int(t.day)) for t in times if not pd.isna(t))
+                lead_name = next((name for name in ds.coords if str(name).casefold() in {"day", "step", "lead", "lead_time"}), None)
+                if lead_name:
+                    values = np.asarray(ds[lead_name].values)
+                    if np.issubdtype(values.dtype, np.timedelta64):
+                        values = values / np.timedelta64(1, "D")
+                    else:
+                        values = values.astype(float)
+                        units = str(ds[lead_name].attrs.get("units", "")).casefold()
+                        for unit, divisor in (("hour", 24), ("minute", 1440), ("second", 86400)):
+                            if unit in units:
+                                values = values / divisor
+                                break
+                    finite = values[np.isfinite(values)]
+                    if finite.size:
+                        horizons[year] = int(np.floor(finite.max()))
+        except Exception as exc:
+            failures.append(f"{year}: {type(exc).__name__}: {exc}")
+    return {"dates": dates, "horizons": horizons, "failures": failures}
+
+
 def render_verification_window_settings(row_key, forecast_window):
-    selected_window = (1, 15) if forecast_window == "1-15 days" else (16, 30)
-    c7, c8 = st.columns(2)
-    text = c7.text_input("Verification Window List", value=repr((selected_window,)),
-                         key=f"vwl_{row_key}_{selected_window[0]}")
+    options = ["Days 1–15", "Days 16–30", "Both windows"]
+    selected = 0 if forecast_window == "1-15 days" else 1
+    choice = st.selectbox("Verification windows", options, index=selected,
+                          key=f"verification_windows_{row_key}_{selected}")
+    windows = (((1, 15),), ((16, 30),), ((1, 15), (16, 30)))[options.index(choice)]
+    defaults = dict(zip(getattr(config, "verification_window_list", ((1, 15), (16, 30))),
+                        getattr(config, "tolerance_days_list", (3, 5))))
+    columns = st.columns(len(windows))
+    tolerances = []
     errors = []
+    for column, window in zip(columns, windows):
+        default = int(defaults.get(window, 3 if window[1] <= 15 else 5))
+        tolerance = column.number_input(f"Tolerance: days {window[0]}–{window[1]}",
+            min_value=0, max_value=window[1] - window[0] + 1,
+            value=max(0, min(default, window[1] - window[0] + 1)), step=1,
+            key=f"verification_tolerance_{row_key}_{window[0]}_{window[1]}")
+        if tolerance is None:
+            errors.append(f"Enter a tolerance for days {window[0]}–{window[1]}.")
+            tolerance = default
+        tolerances.append(int(tolerance))
+    required_horizon = max(end for _, end in windows)
+    st.number_input("Max Forecast Day (automatic)", min_value=required_horizon,
+                    max_value=required_horizon, value=required_horizon, disabled=True,
+                    key=f"verification_horizon_{row_key}_{required_horizon}")
     try:
-        windows, defaults, required_horizon = parse_verification_settings(text, day_bins=config.day_bins)
+        parse_verification_settings(repr(windows), repr(tuple(tolerances)), day_bins=config.day_bins)
     except ValueError as exc:
         errors.append(str(exc))
-        windows, defaults, required_horizon = (selected_window,), (3 if selected_window[1] == 15 else 5,), selected_window[1]
-    tolerance_text = c8.text_input("Tolerance Days List", value=repr(defaults),
-                                   key=f"tdl_{row_key}_{windows}")
-    try:
-        _, tolerances, _ = parse_verification_settings(repr(windows), tolerance_text)
-    except ValueError as exc:
-        errors.append(str(exc))
-        tolerances = defaults
-    c9, _ = st.columns(2)
-    horizon_key = f"max_forecast_day_{row_key}_{selected_window[0]}"
-    if st.session_state.get(horizon_key, required_horizon) < required_horizon:
-        st.session_state[horizon_key] = required_horizon
-    horizon = c9.number_input("Max Forecast Day", min_value=required_horizon, max_value=60,
-                              value=required_horizon, key=horizon_key,
-                              help="Must reach the last day of every verification window.")
-    return {"verification_window_list": repr(windows), "tolerance_days_list": repr(tolerances),
-            "max_forecast_day": int(horizon)}, errors
+    return {"verification_window_list": repr(windows), "tolerance_days_list": repr(tuple(tolerances)),
+            "max_forecast_day": required_horizon}, errors
+
+
+def render_initialization_settings(row_key):
+    modes = ["weekly", "daily", "monthly"]
+    default_mode = getattr(config, "init_type", "weekly")
+    default_mode = default_mode if default_mode in modes else "weekly"
+    mode = st.selectbox("Initialization schedule", modes, index=modes.index(default_mode),
+                        format_func=str.title, key=f"initialization_schedule_{row_key}")
+    if mode == "weekly":
+        defaults = [int(day) for day in getattr(config, "init_days", (0, 3)) if 0 <= int(day) <= 6] if default_mode == mode else [0, 3]
+        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        days = st.multiselect("Initialization weekdays", list(range(7)), default=defaults or [0, 3],
+                             format_func=lambda day: weekdays[day], key=f"initialization_weekdays_{row_key}")
+    elif mode == "monthly":
+        defaults = [int(day) for day in getattr(config, "init_days", (1, 15)) if 1 <= int(day) <= 31] if default_mode == mode else [1, 15]
+        days = st.multiselect("Initialization days of month", list(range(1, 32)), default=defaults or [1, 15],
+                             key=f"initialization_monthdays_{row_key}")
+        st.caption("Days that do not exist in a month are skipped.")
+    else:
+        days = list(range(7))
+        st.caption("Daily scheduling uses every available date within the evaluation season.")
+    reference_year = int(getattr(config, "date_filter_year", 2024))
+    reference_year = st.number_input("Reference calendar year", min_value=1900, max_value=2100,
+        value=max(1900, min(reference_year, 2100)), disabled=mode != "weekly",
+        help="Weekly scheduling uses this year to align weekdays across historical forecast years. It does not change evaluation years.",
+        key=f"initialization_reference_year_{row_key}")
+    return {"init_type": mode, "initialization_days": sorted(days),
+            "date_filter_year": int(reference_year) if reference_year is not None else None}
 
 
 def page() -> None:
@@ -3139,38 +3216,76 @@ def page() -> None:
         for row in active_rows:
             rk = row["_row_key"]
             avs, ave = row["_start_date"], row["_end_date"]
+            if observation_years:
+                shared_start = max(avs, date(min(observation_years), 1, 1))
+                shared_end = min(ave, date(max(observation_years), 12, 31))
+                if shared_start < shared_end:
+                    avs, ave = shared_start, shared_end
+                else:
+                    verification_problems.append(f"{row['Model']}: no shared model/observation evaluation period.")
             des, dee = (max(cs, avs), min(ce, ave)) if cs and ce else (avs, ave)
             if des > dee:
                 des, dee = avs, ave
             with st.expander(f"{row['Model']} - available {row['Date Range']}"):
+                st.caption("The month/day range defines the season repeated in each evaluation year. Dates use shared model/observation coverage; baseline years use observation coverage.")
                 c1, c2 = st.columns(2)
+                if st.session_state.get(f"es_{rk}") is not None and not avs <= st.session_state[f"es_{rk}"] <= ave:
+                    st.session_state[f"es_{rk}"] = min(max(st.session_state[f"es_{rk}"], avs), ave)
                 eval_start = c1.date_input("Evaluation Start", value=des, min_value=avs, max_value=ave, key=f"es_{rk}")
-                eval_end = c2.date_input("Evaluation End", value=dee, min_value=avs, max_value=ave, key=f"ee_{rk}")
+                if eval_start is None:
+                    verification_problems.append(f"{row['Model']}: select Evaluation Start.")
+                    eval_start = des
+                if st.session_state.get(f"ee_{rk}") is not None and not eval_start <= st.session_state[f"ee_{rk}"] <= ave:
+                    st.session_state[f"ee_{rk}"] = min(max(st.session_state[f"ee_{rk}"], eval_start), ave)
+                eval_end = c2.date_input("Evaluation End", value=max(dee, eval_start), min_value=eval_start, max_value=ave, key=f"ee_{rk}")
+                if eval_end is None:
+                    verification_problems.append(f"{row['Model']}: select Evaluation End.")
+                    eval_end = max(dee, eval_start)
+                first_year = min(observation_years) if observation_years else avs.year
+                last_year = max(observation_years) if observation_years else ave.year
+                default_start = max(first_year, min(int(getattr(config, "start_year_clim", des.year)), last_year))
+                if st.session_state.get(f"bsy_{rk}") is not None and not first_year <= st.session_state[f"bsy_{rk}"] <= last_year:
+                    st.session_state[f"bsy_{rk}"] = min(max(int(st.session_state[f"bsy_{rk}"]), first_year), last_year)
                 c3, c4 = st.columns(2)
-                bsy = c3.number_input("Baseline Start Year", min_value=avs.year, max_value=ave.year, value=des.year, key=f"bsy_{rk}")
-                bey = c4.number_input("Baseline End Year", min_value=avs.year, max_value=ave.year, value=dee.year, key=f"bey_{rk}")
-                init_days = st.multiselect("Initialization Days", list(range(16)), default=[0, 3], key=f"id_{rk}")
+                bsy = c3.number_input("Baseline Start Year", min_value=first_year, max_value=last_year, value=default_start, key=f"bsy_{rk}")
+                if bsy is None:
+                    verification_problems.append(f"{row['Model']}: enter Baseline Start Year.")
+                    bsy = default_start
+                if st.session_state.get(f"bey_{rk}") is not None and not int(bsy) <= st.session_state[f"bey_{rk}"] <= last_year:
+                    st.session_state[f"bey_{rk}"] = min(max(int(st.session_state[f"bey_{rk}"]), int(bsy)), last_year)
+                default_end = max(int(bsy), min(int(getattr(config, "end_year_clim", dee.year)), last_year))
+                bey = c4.number_input("Baseline End Year", min_value=int(bsy), max_value=last_year, value=default_end, key=f"bey_{rk}")
+                if bey is None:
+                    verification_problems.append(f"{row['Model']}: enter Baseline End Year.")
+                    bey = default_end
                 
-                with st.expander("Advanced Temporal & Verification Settings"):
-                    c5, c6 = st.columns(2)
-                    init_type = c5.selectbox("Init Type", ["weekly", "daily", "monthly"], index=0, key=f"init_type_{rk}")
-                    date_filter_year = c6.number_input("Date Filter Year", min_value=2000, max_value=2030, value=2024, key=f"date_filter_year_{rk}")
-                    
-                    verification_settings, errors = render_verification_window_settings(rk, forecast_window)
-                    verification_problems.extend(f"{row['Model']}: {error}" for error in errors)
-
                 model_run_windows[rk] = {
                     "eval_start": eval_start,
                     "eval_end": eval_end,
                     "baseline_start_year": int(bsy),
                     "baseline_end_year": int(bey),
-                    "initialization_days": sorted(init_days),
-                    "init_type": init_type,
-                    "date_filter_year": int(date_filter_year),
-                    **verification_settings,
                 }
 
-    shared_settings = render_shared_settings(ground_truth)
+    def render_advanced_settings():
+        if not active_rows:
+            st.info("Select models above to configure their schedules and verification windows.")
+            return
+        st.caption("Per-model controls apply to the next benchmark run. The summary updates as you edit.")
+        for index, row in enumerate(active_rows):
+            rk = row["_row_key"]
+            with st.expander(row["Model"], expanded=index == 0):
+                initialization = render_initialization_settings(rk)
+                verification, errors = render_verification_window_settings(rk, forecast_window)
+                model_run_windows[rk].update({**initialization, **verification})
+                verification_problems.extend(f"{row['Model']}: {error}" for error in errors)
+                windows = parse_verification_settings(verification["verification_window_list"])[0]
+                window_label = ", ".join(f"{start}–{end}" for start, end in windows)
+                st.caption(f"Next run: {initialization['init_type'].title()} · Days {window_label} · Horizon {verification['max_forecast_day']} days")
+
+    shared_settings = render_shared_settings(ground_truth, advanced_renderer=render_advanced_settings)
+    dry_extension = shared_settings["dry_spell_search_extension"]
+    if 0 < dry_extension < shared_settings["dry_spell_limit"]:
+        verification_problems.append("Dry spell search extension must be 0 (disabled) or at least the dry spell limit.")
 
     if PHASE_2_AVAILABLE or PHASE_3_AVAILABLE:
         section_header("Data Readiness & Fair Comparison", "green")
@@ -3193,12 +3308,20 @@ def page() -> None:
     observation_problems = []
     for row in active_rows:
         window = model_run_windows[row["_row_key"]]
-        start, end = window["eval_start"], window["eval_end"]
-        missing = sorted(set(range(start.year, end.year + 1)) - set(observation_years))
-        if start > end:
-            observation_problems.append(f"{row['Model']}: evaluation start must precede end.")
-        elif missing:
-            observation_problems.append(f"{row['Model']}: {ground_truth} observations are missing for {missing}. Adjust the evaluation dates or supply those files.")
+        errors = temporal_settings_errors({**window, "probabilistic": row.get("_probabilistic", False)}, observation_years)
+        observation_problems.extend(f"{row['Model']}: {error}" for error in errors)
+        if not errors:
+            coverage = inspect_model_temporal_coverage(row["_exec_key"], window["eval_start"].year, window["eval_end"].year)
+            if coverage["failures"]:
+                observation_problems.append(f"{row['Model']}: cannot read forecast metadata: {'; '.join(coverage['failures'])}")
+            elif not coverage["dates"]:
+                observation_problems.append(f"{row['Model']}: no forecast initialization dates are available for these years. Adjust the evaluation period or model data configuration.")
+            elif not any(initialization_matches_schedule(parts, window) for parts in coverage["dates"]):
+                observation_problems.append(f"{row['Model']}: no forecast initialization dates match this schedule and evaluation season. Adjust the selected days or dates.")
+            required_days = window["max_forecast_day"] + max(0, int(shared_settings["wet_spell_length"]) - 1)
+            too_short = [year for year, end in coverage["horizons"].items() if end < required_days]
+            if too_short:
+                observation_problems.append(f"{row['Model']}: forecast files for {too_short} need at least {required_days} days to verify the selected window and wet spell.")
     for problem in observation_problems + verification_problems:
         st.error(problem)
     st.markdown('<div class="run-section">', unsafe_allow_html=True)
@@ -3467,22 +3590,60 @@ def page() -> None:
     # Tab 2: All Metrics
     if res_tabs[1].open:
         with res_tabs[1]:
+            from ui.utils.metric_filters import (
+                lead_window_sort_key, load_probabilistic_metric_table,
+                metric_model_label, metric_model_options,
+            )
+
             st.markdown("### ALL METRICS")
             tbl: Dict[tuple, float] = {}
-            mods: set = set()
-            wins: set = set()
-            for o in map_outputs:
-                vals = load_metric_values_by_window_cached(o["path"])
-                for w, metrics in vals.items():
-                    for mn, val in metrics.items():
-                        tbl[(mn, w, o["model_label"])] = val
-                        mods.add(o["model_label"])
-                        wins.add(w)
-            if tbl:
-                pref_m = ["GraphCast", "FuXi", "AIFS Single", "AIFS Ensemble", "GenCast", "Traditional Climatology"]
-                om = [m for m in pref_m if m in mods] + sorted(mods - set(pref_m))
-                ow = [w for w in ["Days 1–15", "Days 16–30"] if w in wins] + sorted(wins - {"Days 1–15", "Days 16–30"})
-                st.markdown(build_metrics_table_html(tbl, om, ow), unsafe_allow_html=True)
+            for output in map_outputs:
+                values = load_metric_values_by_window_cached(output["path"])
+                for window, metrics in values.items():
+                    for metric, value in metrics.items():
+                        tbl[(metric, window, metric_model_label(output["model_label"]))] = value
+            probability_table, summary_errors = load_probabilistic_metric_table(ROMP_DEMO_OUT_DIR)
+            tbl.update(probability_table)
+            models, categories = metric_model_options(
+                CONFIG_BENCHMARK_MODEL_CATALOG, {key[2] for key in tbl} |
+                {output["model_label"] for output in map_outputs} |
+                {getattr(config, "ref_model", "climatology")})
+            lead_options = sorted({key[1] for key in tbl} | {"Days 1–15", "Days 16–30"}, key=lead_window_sort_key)
+            category_options = ["All"] + [category for category in ("Deterministic", "Probabilistic", "Climatology", "Other")
+                                          if category in categories.values()]
+            category = st.radio("Metric model category", category_options, horizontal=True, key="metrics_model_category")
+            eligible = [model for model in models if category == "All" or categories[model] == category]
+            all_models = st.checkbox("All models", value=True, key=f"metrics_all_models_{category}")
+            chosen_models = st.multiselect("Models to compare", eligible, default=eligible, disabled=all_models,
+                                          key=f"metrics_models_{category}")
+            om = eligible if all_models else chosen_models
+            ow = st.multiselect("Lead times", lead_options, default=lead_options,
+                                key=f"metrics_leads_{tuple(lead_options)}")
+            ow = sorted(ow, key=lead_window_sort_key)
+            st.caption("N/A means no saved result for that model, metric and lead time. BSS/RPSS percentages and AUC are included from probabilistic summaries when available.")
+            st.caption("Scroll the table horizontally to view all models and lead times on smaller screens.")
+            if summary_errors:
+                st.warning("Some probabilistic summaries could not be read: " + "; ".join(summary_errors))
+            if om and ow:
+                selected = {key: value for key, value in tbl.items() if key[2] in om and key[1] in ow}
+                present_metrics = {key[0] for key in selected}
+                if not present_metrics:
+                    present_metrics = ({"Fair Brier Score", "Fair Brier Skill Score (%)", "Fair RPS", "Fair RPS Skill Score (%)", "AUC", "Reference AUC"}
+                                       if all(categories[model] == "Probabilistic" for model in om)
+                                       else {"Mean Absolute Error days", "Miss Rate fraction", "False Alarm Rate fraction"})
+                # Keep configured models visible even before they have generated outputs.
+                for metric in present_metrics:
+                    for window in ow:
+                        for model in om:
+                            selected.setdefault((metric, window, model), None)
+                st.markdown(build_metrics_table_html(selected, om, ow).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
+                missing = [model for model in om if not any(
+                    key[2] == model and key[1] in ow and value is not None and np.isfinite(value)
+                    for key, value in tbl.items())]
+                if missing:
+                    st.info("No saved results for the selected lead times: " + ", ".join(missing))
+            else:
+                st.info("Select at least one model and one lead time to compare results.")
 
             st.divider()
             section_header("Detailed Metric Distributions", "violet")
@@ -3490,9 +3651,14 @@ def page() -> None:
                 "Distribution statistics computed directly from gridded model outputs. "
                 "Green = better (lower than baseline), Red = worse (higher than baseline). Bold = best value."
             )
-            stats_df = compute_metric_distribution_stats()
+            spatial_models = {metric_model_label(output["model_label"]) for output in map_outputs}
+            stats_df = compute_metric_distribution_stats() if om and ow and set(om) & spatial_models else pd.DataFrame()
+            if not stats_df.empty:
+                stats_df = stats_df.copy()
+                stats_df["Model"] = stats_df["Model"].map(metric_model_label)
+                stats_df = stats_df[stats_df["Model"].isin(om) & stats_df["Lead Window"].isin(ow)]
             if stats_df.empty:
-                info_box("No distribution statistics could be computed from the available outputs.", "amber")
+                info_box("No gridded distributions are available for these selections. Scalar probabilistic results, when available, are shown above.", "amber")
             else:
                 # Normalize string helper to prevent Unicode en-dash / hyphen key lookup misses
                 def _norm(s):
@@ -3540,13 +3706,12 @@ def page() -> None:
                     "aifs ensemble": 3, "gencast": 4,
                     "traditional climatology": 5, "climatology": 5
                 }
-                window_order = {"days 1-15": 0, "days 16-30": 1}
 
                 df_sorted = stats_df.copy()
                 df_sorted["metric_sort"] = df_sorted["Metric"].apply(lambda m: metric_order.get(_norm(m), 999))
                 df_sorted["model_sort"] = df_sorted["Model"].apply(lambda m: model_order.get(_norm(m), 999))
-                df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lambda w: window_order.get(_norm(w), 999))
-                df_sorted = df_sorted.sort_values(["model_sort", "window_sort", "metric_sort"])
+                df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lead_window_sort_key)
+                df_sorted = df_sorted.sort_values(["window_sort", "model_sort", "metric_sort"])
 
                 html_blocks = []
                 for (model_label, window_label), group_df in df_sorted.groupby(["Model", "Lead Window"], sort=False):
@@ -3603,7 +3768,7 @@ def page() -> None:
                             )
                             cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
 
-                        unit_str = "fraction" if is_fraction else "days"
+                        unit_str = "%" if is_fraction else "days"
                         cells_html.append(
                             f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; '
                             f'color:#64748b; background-color:#ffffff;">{unit_str}</td>'

@@ -25,6 +25,9 @@ class RuntimeConfigTests(unittest.TestCase):
         self.assertEqual(cfg.dry_extent, 0)
         self.assertIsNone(cfg.nc_mask)
         self.assertEqual(cfg.thresh_file, '/resolved/thresholds.csv')
+        with patch.dict(os.environ, {'ROMP_INIT_DAYS': ''}, clear=True):
+            namespace['apply_env_vars_to_cfg'](cfg)
+        self.assertEqual(cfg.init_days, ())
 
 
 if __name__ == '__main__':

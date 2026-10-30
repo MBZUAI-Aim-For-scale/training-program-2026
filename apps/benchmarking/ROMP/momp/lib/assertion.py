@@ -61,7 +61,7 @@ class ROMPValidator:
 
             sy = self.cfg.start_year_clim
             ey = self.cfg.end_year_clim
-            if sd > ed:
+            if sy > ey:
                 self._add_error(f"start_year_clim ({sy}) is after end_year_clim ({ey})")
 
         except Exception as e:

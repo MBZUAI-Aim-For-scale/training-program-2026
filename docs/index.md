@@ -12,7 +12,6 @@ These Lessons are designed to provide an interactive learning experience over th
 
 We have sent out a pretraining survey to participants to get a broader sense of their forecast benchmarking ‘wishlist’, so we can allow participants to dive more deeply into a topic area of interest. We have initially grouped country participants as follows, but will refine based on our upcoming pretraining sessions with participants to work together on phenomena goals. We are designing working sessions that will be country-focused, region-focused, and phenomenon-focused. We are aiming to assign facilitators to a country to join them throughout their training week, loosely aligned with phenomena of interest and background.
 
-More details about the files we'll use and where to download them are available on the [Setup]({{ '/setup/' | relative_url }}) page.
 
 > **Prerequisites**
 > 

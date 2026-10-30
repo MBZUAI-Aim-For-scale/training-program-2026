@@ -492,7 +492,8 @@ def apply_env_vars_to_cfg(cfg):
         except ValueError:
             pass
 
-    if val := os.getenv("ROMP_INIT_DAYS"):
+    if "ROMP_INIT_DAYS" in os.environ:
+        val = os.environ["ROMP_INIT_DAYS"]
         try:
             cfg.init_days = tuple(sorted(set(int(day.strip()) for day in val.split(",") if day.strip())))
         except ValueError:
@@ -549,6 +550,14 @@ def apply_env_vars_to_cfg(cfg):
 # ------------------------------------------------------------------------------
 def validate_runtime_config(cfg):
     """Check the final merged settings, after spec and dashboard overrides."""
+    mode = getattr(cfg, "init_type", "weekly")
+    days = getattr(cfg, "init_days", (0, 3))
+    if mode not in {"weekly", "daily", "monthly"}:
+        raise ValueError("Initialization schedule must be weekly, daily or monthly.")
+    if mode != "daily":
+        low, high = (0, 6) if mode == "weekly" else (1, 31)
+        if not days or any(type(day) is not int or not low <= day <= high for day in days):
+            raise ValueError(f"{mode.title()} initialization days must be nonempty integers in {low}–{high}.")
     windows = tuple(tuple(window) for window in cfg.verification_window_list)
     if not windows or len(windows) != len(cfg.tolerance_days_list):
         raise ValueError("Verification windows and tolerances must be nonempty and match in length.")

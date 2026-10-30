@@ -240,57 +240,83 @@ def load_thresh_file(*, thresh_file=None, thresh_var=None, wet_threshold=None, r
 
 
 def get_initialization_dates(year=None, *, date_filter_year=None, init_days=None, start_date=None, end_date=None, init_type="weekly", **kwargs):
+    """Select seasonal dates, preserving weekly reference-calendar anchoring."""
     kwargs_clean = kwargs.copy()
     kw_year = kwargs_clean.pop("year", None)
     year = year if year is not None else kw_year
+    init_type = str(init_type).strip().lower()
+    if init_type not in {"weekly", "daily", "monthly"}:
+        raise ValueError("Init Type must be weekly, daily or monthly.")
 
     if init_type == "monthly":
         return get_initialization_dates_monthly(year, date_filter_year=date_filter_year, init_days=init_days, start_date=start_date, end_date=end_date, **kwargs_clean)
 
     if date_filter_year is None:
         date_filter_year = getattr(params, "date_filter_year", 2024)
-    if init_days is None:
-        init_days = getattr(params, "init_days", (0, 3))
+    year = int(year if year is not None else date_filter_year)
     if start_date is None:
         start_date = getattr(params, "start_date", (2003, 5, 1))
     if end_date is None:
         end_date = getattr(params, "end_date", (2023, 7, 31))
 
-    start_MMDD = start_date[1:]
-    end_MMDD = end_date[1:]
+    # Validate month/day using a leap year; absent dates are omitted naturally.
+    datetime(2000, *start_date[1:])
+    datetime(2000, *end_date[1:])
+    start_md = start_date[1] * 100 + start_date[2]
+    end_md = end_date[1] * 100 + end_date[2]
+    calendar_year = year if init_type == "daily" else int(date_filter_year)
+    dates = pd.date_range(f"{calendar_year}-01-01", f"{calendar_year}-12-31", freq="D")
+    month_days = dates.month * 100 + dates.day
+    in_season = ((month_days >= start_md) & (month_days <= end_md) if start_md <= end_md
+                 else (month_days >= start_md) | (month_days <= end_md))
+    dates = dates[in_season]
 
-    start_date_obj = datetime(date_filter_year, *start_MMDD)
-    end_date_obj = datetime(date_filter_year, *end_MMDD)
-    date_range = pd.date_range(start_date_obj, end_date_obj, freq='D')
-
-    filtered_dates = date_range[date_range.weekday.isin(init_days)]
-    filtered_dates_yr = pd.to_datetime(filtered_dates.strftime(f'{year}-%m-%d'))
-
-    return filtered_dates_yr
+    if init_type == "weekly":
+        if init_days is None:
+            init_days = (getattr(params, "init_days", (0, 3))
+                         if getattr(params, "init_type", "weekly") == "weekly" else (0, 3))
+        try:
+            days = tuple(init_days)
+        except TypeError:
+            raise ValueError("Initialization weekdays must be a nonempty sequence of integers from 0 to 6.") from None
+        if not days or any(isinstance(day, bool) or not isinstance(day, (int, np.integer)) or not 0 <= day <= 6 for day in days):
+            raise ValueError("Initialization weekdays must be integers from 0 (Monday) to 6 (Sunday), with at least one selected.")
+        dates = dates[dates.weekday.isin(days)]
+        # A leap-day initialization in the reference calendar may not exist in
+        # the target historical year. Skip it rather than fail the whole run.
+        dates = pd.to_datetime(dates.strftime(f"{year}-%m-%d"), errors="coerce").dropna()
+    return pd.DatetimeIndex(dates)
 
 
 def get_initialization_dates_monthly(year=None, *, date_filter_year=None, init_days=None, start_date=None, end_date=None, **kwargs):
+    """Select valid month days within the configured inclusive seasonal bounds."""
     kwargs_clean = kwargs.copy()
     kw_year = kwargs_clean.pop("year", None)
     year = year if year is not None else kw_year
+    year = int(year if year is not None else (date_filter_year or getattr(params, "date_filter_year", 2024)))
 
     if start_date is None:
         start_date = getattr(params, "start_date", (2003, 5, 1))
     if end_date is None:
         end_date = getattr(params, "end_date", (2023, 7, 31))
     if init_days is None:
-        init_days = getattr(params, "init_days", (1, 15))
-
-    start_month = start_date[1]
-    end_month   = end_date[1]
-    
-    filtered_dates_yr = pd.DatetimeIndex([
-        pd.Timestamp(year, month, day)
-        for month in range(start_month, end_month + 1)
-        for day in init_days
-    ])
-
-    return filtered_dates_yr
+        init_days = (getattr(params, "init_days", (1, 15))
+                     if getattr(params, "init_type", "weekly") == "monthly" else (1, 15))
+    try:
+        days = tuple(init_days)
+    except TypeError:
+        raise ValueError("Monthly initialization days must be a nonempty sequence of integers from 1 to 31.") from None
+    if not days or any(isinstance(day, bool) or not isinstance(day, (int, np.integer)) or not 1 <= day <= 31 for day in days):
+        raise ValueError("Monthly initialization days must be integers from 1 to 31, with at least one selected.")
+    datetime(2000, *start_date[1:])
+    datetime(2000, *end_date[1:])
+    start_md = start_date[1] * 100 + start_date[2]
+    end_md = end_date[1] * 100 + end_date[2]
+    dates = pd.date_range(f"{year}-01-01", f"{year}-12-31", freq="D")
+    month_days = dates.month * 100 + dates.day
+    in_season = ((month_days >= start_md) & (month_days <= end_md) if start_md <= end_md
+                 else (month_days >= start_md) | (month_days <= end_md))
+    return dates[in_season & dates.day.isin(days)]
 
 
 def load_imd_rainfall(year=None, *, obs_dir=None, obs_file_pattern=None, obs_var=None, obs_unit_cvt=None, region=None, 

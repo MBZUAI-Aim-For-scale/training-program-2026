@@ -76,6 +76,23 @@ class ProbabilisticConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "AUC"):
             self.ns["validate_runtime_config"](self.cfg)
 
+    def test_invalid_initialization_settings_fail_before_other_processing(self):
+        for mode, days in (("weekly", []), ("weekly", [15]), ("monthly", [0]), ("invalid", [0])):
+            with self.subTest(mode=mode, days=days):
+                cfg = SimpleNamespace(**{**vars(self.cfg), "init_type": mode, "init_days": days})
+                with self.assertRaisesRegex(ValueError, "nitialization"):
+                    self.ns["validate_runtime_config"](cfg)
+        self.cfg.init_type, self.cfg.init_days = "daily", ()
+        self.ns["validate_runtime_config"](self.cfg)
+
+    def test_original_validator_rejects_reversed_baseline_years(self):
+        validator = runpy.run_path("apps/benchmarking/ROMP/momp/lib/assertion.py")["ROMPValidator"]
+        cfg = {"start_date": (2020, 5, 1), "end_date": (2024, 7, 31),
+               "start_year_clim": 2024, "end_year_clim": 2020}
+        check = validator(cfg)
+        check._check_temporal()
+        self.assertTrue(any("start_year_clim" in error for error in check.errors))
+
     def test_reliability_flag_survives_setting_dataclass(self):
         from dataclasses import asdict
 

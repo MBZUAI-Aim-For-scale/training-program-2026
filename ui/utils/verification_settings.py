@@ -1,6 +1,66 @@
 """Validate editable dashboard verification windows before launching a run."""
 
 import ast
+from calendar import monthrange
+from datetime import date
+
+
+def temporal_settings_errors(settings, observation_years):
+    """Return actionable preflight errors without importing weather processing."""
+    errors = []
+    start, end = settings["eval_start"], settings["eval_end"]
+    if start >= end:
+        errors.append("Evaluation End must be after Evaluation Start.")
+    available = set(observation_years)
+    missing = sorted(set(range(start.year, end.year + 1)) - available)
+    if missing:
+        errors.append(f"Observations are missing for evaluation years {missing}.")
+    first, last = settings["baseline_start_year"], settings["baseline_end_year"]
+    if first > last:
+        errors.append("Baseline End Year must be at least Baseline Start Year.")
+    elif not set(range(first, last + 1)).issubset(available):
+        errors.append("Baseline years must all have observation files available.")
+    elif settings.get("probabilistic") and last - first < 1:
+        errors.append("Probabilistic fair scores need at least two baseline observation years.")
+    mode, days = settings["init_type"], settings["initialization_days"]
+    reference_year = settings.get("date_filter_year")
+    if mode == "weekly" and (type(reference_year) is not int or not 1 <= reference_year <= 9999):
+        errors.append("Enter a valid reference calendar year for weekly initialization.")
+    if mode not in {"weekly", "daily", "monthly"}:
+        errors.append("Choose a weekly, daily or monthly initialization schedule.")
+    elif mode != "daily":
+        low, high = (0, 6) if mode == "weekly" else (1, 31)
+        if not days or any(type(day) is not int or not low <= day <= high for day in days):
+            errors.append("Select at least one valid initialization weekday." if mode == "weekly"
+                          else "Select at least one initialization day of month (1–31).")
+        elif mode == "monthly":
+            first_md, last_md = (start.month, start.day), (end.month, end.day)
+            def in_season(md):
+                return first_md <= md <= last_md if first_md <= last_md else md >= first_md or md <= last_md
+            if not any(in_season((month, day)) for year in range(start.year, end.year + 1)
+                       for month in range(1, 13) for day in days if day <= monthrange(year, month)[1]):
+                errors.append("Selected days of month do not occur within the evaluation season.")
+    return errors
+
+
+def initialization_matches_schedule(parts, settings):
+    year, month, day = parts
+    start, end = settings["eval_start"], settings["eval_end"]
+    if not start.year <= year <= end.year:
+        return False
+    first, last, md = (start.month, start.day), (end.month, end.day), (month, day)
+    if not (first <= md <= last if first <= last else md >= first or md <= last):
+        return False
+    mode = settings["init_type"]
+    if mode == "daily":
+        return True
+    if mode == "monthly":
+        return day in settings["initialization_days"]
+    try:
+        weekday = date(settings["date_filter_year"], month, day).weekday()
+    except ValueError:
+        return False
+    return weekday in settings["initialization_days"]
 
 
 def parse_verification_settings(window_text, tolerance_text=None, day_bins=None):
