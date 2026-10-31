@@ -48,8 +48,31 @@ class MetricFilterTests(unittest.TestCase):
             model_dir.mkdir()
             pd.DataFrame([{"Fair_Brier_Skill_Score": -.25, "Fair_RPS_Skill_Score": float("nan"),
                            "AUC": .577, "AUC_ref": .845}]).to_csv(model_dir / "overall_skill_scores_aifs_ens_16-30.csv", index=False)
-            table, errors = load_probabilistic_metric_table(folder)
+            table, baselines, errors = load_probabilistic_metric_table(folder)
             self.assertEqual(errors, [])
             self.assertEqual(table[("Fair Brier Skill Score (%)", "Days 16–30", "AIFS Ensemble")], -25)
             self.assertEqual(table[("AUC", "Days 16–30", "AIFS Ensemble")], .577)
             self.assertIsNone(table[("Fair RPS Skill Score (%)", "Days 16–30", "AIFS Ensemble")])
+            self.assertEqual(baselines[("AUC", "Days 16–30", "AIFS Ensemble")], .845)
+            self.assertEqual(baselines[("Fair RPS Skill Score (%)", "Days 16–30", "AIFS Ensemble")], 0)
+
+    def test_score_baselines_use_saved_references_or_skill_identity(self):
+        with tempfile.TemporaryDirectory() as folder:
+            model_dir = Path(folder) / "gencast"
+            model_dir.mkdir()
+            source = model_dir / "overall_skill_scores_gencast_1-15.csv"
+            pd.DataFrame([{"Fair_Brier_Score": .2, "Fair_Brier_Skill_Score": -.25,
+                           "Fair_RPS": .3, "Fair_RPS_Skill_Score": .4,
+                           "Reference_Fair_RPS": .5, "AUC": .8, "AUC_ref": .7}]).to_csv(source, index=False)
+            _, baselines, errors = load_probabilistic_metric_table(folder)
+            self.assertEqual(errors, [])
+            self.assertAlmostEqual(baselines[("Fair Brier Score", "Days 1–15", "GenCast")], .16)
+            self.assertEqual(baselines[("Fair RPS", "Days 1–15", "GenCast")], .5)
+            data = pd.read_csv(source)
+            data["Reference_Fair_Brier_Score"] = .18
+            data["Fair_RPS_Skill_Score"] = 1.
+            data = data.drop(columns="Reference_Fair_RPS")
+            data.to_csv(source, index=False)
+            _, baselines, _ = load_probabilistic_metric_table(folder)
+            self.assertEqual(baselines[("Fair Brier Score", "Days 1–15", "GenCast")], .18)
+            self.assertIsNone(baselines[("Fair RPS", "Days 1–15", "GenCast")])

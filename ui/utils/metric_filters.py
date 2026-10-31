@@ -47,6 +47,7 @@ def metric_comparison_groups(models, categories):
 
 
 def load_probabilistic_metric_table(output_root):
+    """Return saved scores, per-model comparison baselines, and read errors."""
     columns = {
         "Fair_Brier_Score": ("Fair Brier Score", 1),
         "Fair_Brier_Skill_Score": ("Fair Brier Skill Score (%)", 100),
@@ -55,7 +56,7 @@ def load_probabilistic_metric_table(output_root):
         "AUC": ("AUC", 1),
         "AUC_ref": ("Reference AUC", 1),
     }
-    table, failures = {}, []
+    table, baselines, failures = {}, {}, []
     for source in sorted(Path(output_root).glob("*/overall_skill_scores_*.csv")):
         match = re.fullmatch(r"overall_skill_scores_(.+)_(\d+)-(\d+)\.csv", source.name)
         if not match:
@@ -66,14 +67,30 @@ def load_probabilistic_metric_table(output_root):
             data = pd.read_csv(source, nrows=1)
             if data.empty:
                 continue
+
+            def number(column, summary=data):
+                value = pd.to_numeric(summary[column], errors="coerce").iloc[0] if column in summary else None
+                return float(value) if pd.notna(value) and math.isfinite(float(value)) else None
+
             for column, (metric, scale) in columns.items():
                 if column not in data:
                     continue
-                value = pd.to_numeric(data[column], errors="coerce").iloc[0]
-                if pd.notna(value) and math.isfinite(float(value)):
-                    table[(metric, window, label)] = float(value) * scale
-                else:
-                    table[(metric, window, label)] = None
+                value = number(column)
+                table[(metric, window, label)] = value * scale if value is not None else None
+            baselines[("AUC", window, label)] = number("AUC_ref")
+            baselines[("Fair Brier Skill Score (%)", window, label)] = 0.0
+            baselines[("Fair RPS Skill Score (%)", window, label)] = 0.0
+            for metric, score_column, skill_column, reference_column in (
+                ("Fair Brier Score", "Fair_Brier_Score", "Fair_Brier_Skill_Score", "Reference_Fair_Brier_Score"),
+                ("Fair RPS", "Fair_RPS", "Fair_RPS_Skill_Score", "Reference_Fair_RPS"),
+            ):
+                reference = number(reference_column)
+                if reference is None:
+                    score, skill = number(score_column), number(skill_column)
+                    if score is not None and skill is not None and skill != 1:
+                        reference = score / (1 - skill)
+                baselines[(metric, window, label)] = (
+                    reference if reference is not None and math.isfinite(reference) else None)
         except (OSError, ValueError) as exc:
             failures.append(f"{source.name}: {exc}")
-    return table, failures
+    return table, baselines, failures

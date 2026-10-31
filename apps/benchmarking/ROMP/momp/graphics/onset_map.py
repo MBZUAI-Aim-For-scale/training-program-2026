@@ -54,7 +54,10 @@ def plot_spatial_climatology_onset(
         shpfile_dir = kwargs.pop("climatology_shpfile", None) or climatology_boundary_path(weather_config)
         if not weather_config.exists(shpfile_dir):
             raise FileNotFoundError(f"Climatology Ethiopia boundary not found: {shpfile_dir}")
-    outlines = get_region_outline(shpfile_dir, region=region) if shpfile_dir else []
+    if is_ethiopia:
+        outlines = get_region_outline(shpfile_dir, region=region, strict=True)
+    else:
+        outlines = get_region_outline(shpfile_dir, region=region) if shpfile_dir else []
     if is_ethiopia and not outlines:
         raise ValueError(f"Could not load Ethiopia zones for climatology overlay and margins: {shpfile_dir}")
     # Extract DataArray

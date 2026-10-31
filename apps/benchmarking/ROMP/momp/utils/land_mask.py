@@ -81,8 +81,8 @@ def _sanitize_dataset_coords(ds: xr.Dataset) -> xr.Dataset:
 
 def ensure_local_shapefile(shpfile_path=None, region="Ethiopia") -> str:
     """
-    Ensures region shapefile exists locally. Downloads shapefile components
-    from GCS bucket to /tmp/shapefile_<region> if needed.
+    Preserve explicit GeoJSON sources, including GCS objects. Materialize legacy
+    shapefile components under /tmp/shapefile_<region> when needed.
     """
     region_clean = str(region).replace(" ", "_")
     local_tmp_dir = f"/tmp/shapefile_{region_clean}"
@@ -90,6 +90,8 @@ def ensure_local_shapefile(shpfile_path=None, region="Ethiopia") -> str:
 
     if shpfile_path:
         p_str = str(shpfile_path).strip()
+        if p_str.startswith("gs://") and Path(p_str).suffix.lower() in {".geojson", ".json"}:
+            return p_str
         if os.path.exists(p_str):
             if os.path.isdir(p_str):
                 shps = glob.glob(os.path.join(p_str, "*.shp"))
@@ -148,16 +150,22 @@ def ensure_local_shapefile(shpfile_path=None, region="Ethiopia") -> str:
     return downloaded[0] if downloaded else (str(shpfile_path) if shpfile_path else "")
 
 
-def get_region_outline(shpfile_path=None, region="Ethiopia"):
-    """Loads polygon coordinate boundaries for the target region from shapefile."""
+def get_region_outline(shpfile_path=None, region="Ethiopia", strict=False):
+    """Load polygon outlines; required boundaries preserve their underlying read errors."""
     import geopandas as gpd
 
     try:
         real_path = ensure_local_shapefile(shpfile_path, region=region)
-        if not os.path.exists(real_path) and not str(real_path).endswith(".shp"):
-            return []
+        if Path(str(real_path)).suffix.lower() in {".geojson", ".json"}:
+            from ai_weather.spatial import load_boundary_frame
 
-        gdf = gpd.read_file(real_path)
+            gdf = load_boundary_frame(real_path)
+        else:
+            if not os.path.exists(real_path) and not str(real_path).endswith(".shp"):
+                if strict:
+                    raise FileNotFoundError(f"Boundary not found: {real_path}")
+                return []
+            gdf = gpd.read_file(real_path)
         if gdf.crs is not None:
             gdf = gdf.to_crs("EPSG:4326")
         if region and hasattr(gdf, "columns"):
@@ -174,8 +182,12 @@ def get_region_outline(shpfile_path=None, region="Ethiopia"):
                 if hasattr(g, "exterior"):
                     coords = list(g.exterior.coords)
                     boundaries.append(([c[0] for c in coords], [c[1] for c in coords]))
+        if strict and not boundaries:
+            raise ValueError(f"Boundary has no polygon outlines: {real_path}")
         return boundaries
     except Exception as e:
+        if strict:
+            raise ValueError(f"Could not load required boundary {shpfile_path}: {e}") from e
         print(f"[WARNING] Failed to load shapefile outline for '{region}': {e}")
         return []
 

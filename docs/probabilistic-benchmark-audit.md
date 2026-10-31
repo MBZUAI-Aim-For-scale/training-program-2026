@@ -1,5 +1,19 @@
 # Probabilistic benchmark configuration audit
 
+## Existing GCS GeoJSON fails during climatology rendering
+
+- The existence check used the configured authenticated GCS client, but `ensure_local_shapefile` treated a single GeoJSON object as a directory of shapefile components. Without a cached `.shp`, it returned the original `gs://` URI; `get_region_outline` then rejected it with a local `os.path.exists` check and returned no outlines. A stale cached shapefile could mask the failure and substitute a different boundary.
+- Shared clipping reads also passed remote URLs directly to GeoPandas/GDAL, which does not inherit the application's gcsfs credentials. Cloud GeoJSON is now read through `config.gcs_fs().open(...)` into a byte stream before GeoPandas parsing, using the same credentials as the existence check.
+- Explicit cloud GeoJSON sources retain priority over legacy cached shapefiles. Outline extraction, geometric masking and raster clipping reuse the shared boundary cache. Required Ethiopian climatology outlines use strict loading so permission, parse and geometry errors retain their underlying cause; optional legacy overlays retain their previous soft-failure behavior.
+- Validation: 139 tests pass, one opt-in test is skipped. New regressions cover authenticated GeoJSON parsing, outline/mask cache reuse, stale-shapefile exclusion, chained permission errors and retry after failure. A renderer smoke check passes for the onset raster, polygon overlay, exact clipping and boundary-derived margins with simulated GCS transport and real GeoJSON parsing. No live bucket access or weather benchmark was required. Type checking, compilation, whitespace checks and focused lint pass with no new legacy-file lint findings.
+
+## Probabilistic table highlighting
+
+- The probabilistic table previously had no climatology column, so the renderer could not find comparison baselines and left all scores uncolored. The summary loader now returns per-model/per-window references alongside scores and read errors.
+- BSS/RPSS use the climatology-relative skill baseline of zero; AUC uses saved `AUC_ref`. Fair RPS uses saved `Reference_Fair_RPS`, and Fair Brier Score uses `Reference_Fair_Brier_Score` when available. Older summaries recover a finite reference score from `score / (1 - skill)`; a missing or indeterminate reference remains neutral.
+- Green/red use the appropriate direction: lower for Fair Brier Score/RPS, higher for AUC/BSS/RPSS. Best finite values among the selected models are bold per metric and lead time, including ties. Reference AUC remains neutral. A best model that still loses to its reference is correctly red and bold.
+- Validation: 130 tests pass and one opt-in test is skipped. Loader/rendering regressions cover saved/derived/missing references, metric directions, tied best values, nonfinite scores and neutral reference rows. Live Streamlit AppTest checks pass for all-model and single-model probability filters. A rendered Chrome screenshot matches the existing table styling; the visual verdict is 97/100 in `.omx/state/probabilistic-highlighting/ralph-progress.json`. Utility/test Ruff checks, utility type checking, compilation and scoped whitespace checks pass, with no new page lint findings.
+
 ## Scientific runtime handoff for command-line and notebook runs
 
 - Reproduced the reported `_spropack` import failure directly with `/opt/anaconda3/bin/python`. The project `.venv` successfully imports SciPy and executes the scoring dependency probe.

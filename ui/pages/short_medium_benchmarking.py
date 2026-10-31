@@ -1482,7 +1482,8 @@ def load_metric_values_by_window_cached(nc_path_str: str):
     return res
 
 
-def build_metrics_table_html(table, models, windows):
+def build_metrics_table_html(table, models, windows, baselines=None):
+    baselines = baselines or {}
     metric_order = [
         "Mean Absolute Error days",
         "Miss Rate fraction",
@@ -1526,27 +1527,33 @@ def build_metrics_table_html(table, models, windows):
         higher_better = is_metric_higher_better(metric)
         for w in windows:
             cv = table.get((metric, w, clim))
+            references = {m: baselines.get((metric, w, m), cv) for m in models}
+            values = [table.get((metric, w, m)) for m in models]
+            finite = [value for value in values if value is not None and np.isfinite(value)]
+            best = ((max(finite) if higher_better else min(finite))
+                    if finite and metric != "Reference AUC" else None)
             diffs = [
-                abs(table.get((metric, w, m)) - cv)
+                abs(table.get((metric, w, m)) - references[m])
                 for m in models
                 if m != clim
                 and table.get((metric, w, m)) is not None
-                and cv is not None
+                and np.isfinite(table[(metric, w, m)])
+                and references[m] is not None and np.isfinite(references[m])
             ]
             scale = max(diffs) if diffs else None
             for m in models:
                 val = table.get((metric, w, m))
-                if val is None:
+                if val is None or not np.isfinite(val):
                     parts.append("<td>-</td>")
                     continue
                 style = ""
-                if m == clim:
+                reference = references[m]
+                if m == clim or metric == "Reference AUC":
                     style = (
                         "background-color: rgba(148,163,184,0.12);"
-                        "font-weight:600;"
                     )
-                elif cv is not None and scale:
-                    diff = val - cv
+                elif reference is not None and np.isfinite(reference) and scale:
+                    diff = val - reference
                     if abs(diff) > 1e-6:
                         better = (diff > 0) if higher_better else (diff < 0)
                         intensity = min(abs(diff) / scale, 1.0)
@@ -1555,6 +1562,8 @@ def build_metrics_table_html(table, models, windows):
                         style = (
                             f"background-color: rgba({color},{alpha:.2f});"
                         )
+                style += ("font-weight:700;" if best is not None and np.isclose(val, best, rtol=1e-10, atol=1e-8)
+                          else "font-weight:400;")
                 fmt = (
                     f"{val:.1f}"
                     if metric.startswith("Mean Absolute Error")
@@ -3724,7 +3733,7 @@ def page() -> None:
                 for window, metrics in values.items():
                     for metric, value in metrics.items():
                         tbl[(metric, window, metric_model_label(output["model_label"]))] = value
-            probability_table, summary_errors = load_probabilistic_metric_table(ROMP_DEMO_OUT_DIR)
+            probability_table, probability_baselines, summary_errors = load_probabilistic_metric_table(ROMP_DEMO_OUT_DIR)
             tbl.update(probability_table)
             models, categories = metric_model_options(
                 CONFIG_BENCHMARK_MODEL_CATALOG, {key[2] for key in tbl} |
@@ -3759,7 +3768,7 @@ def page() -> None:
                         for window in ow:
                             for model in group_models:
                                 selected.setdefault((metric, window, model), None)
-                    st.markdown(build_metrics_table_html(selected, group_models, ow).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
+                    st.markdown(build_metrics_table_html(selected, group_models, ow, baselines=probability_baselines).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
                 legacy_outputs = [output for output in map_outputs if
                                   metric_model_label(output["model_label"]) in om and
                                   set(output["windows"]) & set(ow) and

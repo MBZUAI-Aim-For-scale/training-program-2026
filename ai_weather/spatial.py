@@ -1,6 +1,7 @@
 """Shared geographic masking, exact plot clipping and cached boundary reads."""
 
 from functools import lru_cache
+from io import BytesIO
 from pathlib import Path
 
 import numpy as np
@@ -69,7 +70,14 @@ def apply_jjas_mask(data, mask_path):
 def _boundary_frame(path, modified_ns):
     import geopandas as gpd
 
-    frame = gpd.read_file(path)
+    if str(path).startswith("gs://") and Path(path).suffix.lower() in {".geojson", ".json"}:
+        from ai_weather import config
+
+        # GDAL does not inherit the authenticated gcsfs client used by config.exists.
+        with config.gcs_fs().open(config._strip(path), "rb") as source:
+            frame = gpd.read_file(BytesIO(source.read()))
+    else:
+        frame = gpd.read_file(path)
     if frame.crs is None:
         raise ValueError(f"Boundary has no coordinate reference system: {path}")
     frame = frame.to_crs("EPSG:4326")

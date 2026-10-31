@@ -69,7 +69,7 @@ class ClimatologyFramingTests(unittest.TestCase):
 
     def test_ethiopia_uses_zones_for_both_extent_and_overlay(self):
         _, ax, _ = self.render(region="Ethiopia")
-        self.outlines.assert_called_with("ETH_Zones.geojson", region="Ethiopia")
+        self.outlines.assert_called_with("ETH_Zones.geojson", region="Ethiopia", strict=True)
         self.assertEqual(self.basemap.call_args.args[2], "ETH_Zones.geojson")
         expected = geographic_extent(self.data.lon, self.data.lat, region_bounds=(35, 42, 5, 14))
         np.testing.assert_allclose(ax.get_extent(), expected)
