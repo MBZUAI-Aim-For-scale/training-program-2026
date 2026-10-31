@@ -85,9 +85,9 @@ PAGE_MODULE_MAPPING = {
 PRIMARY_MENU_CONFIG = {
     "Home": {"target": "Home", "label": "Home"},
     # "AI Lab Setup": {"target": "AI_Setup", "label": "Demo1"},
-    "AI Forecast": {"target": "AI Forecast", "label": "Forecasting"},
+    #"AI Forecast": {"target": "AI Forecast", "label": "Forecasting"},
     "AI Benchmarking": {"target": "SM_Benchmarking", "label": "Benchmarking"},
-     "Onset Message": {"target": "Onset Message", "label": "Message"},
+    # "Onset Message": {"target": "Onset Message", "label": "Message"},
 }
 
 COMING_SOON = {

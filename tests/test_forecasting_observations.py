@@ -8,6 +8,7 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 import xarray as xr
+from streamlit.testing.v1 import AppTest
 
 from apps.forecasting import compare, obs, onset, onset_view
 from apps.forecasting.regions import Box
@@ -49,15 +50,46 @@ class ForecastObservationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "forecast.nc"
             self.rain.to_dataset(name="tp").to_netcdf(path)
-            with patch.object(onset_view, "crop", return_value=self.rain.to_dataset(name="tp")), \
-                 patch.object(onset_view.onset, "forecast_daily", return_value=self.rain), \
-                 patch.object(obs, "last_day", return_value=None), \
-                 patch.object(obs, "_file", side_effect=OSError("offline")), \
-                 self.assertRaisesRegex(FileNotFoundError, "2025-05-01"):
-                onset_view.compute.__wrapped__(str(path), 0, (9, 11, 37, 39),
-                                               pd.Timestamp("2025-07-15"), 2,
-                                               onset.DEFINITIONS["icpac"],
-                                               pd.Timestamp("2025-05-01"))
+            for last in (None, pd.NaT):
+                with self.subTest(last=last), \
+                     patch.object(onset_view, "crop", return_value=self.rain.to_dataset(name="tp")), \
+                     patch.object(onset_view.onset, "forecast_daily", return_value=self.rain), \
+                     patch.object(obs, "last_day", return_value=last), \
+                     patch.object(obs, "_file", side_effect=OSError("offline")), \
+                     self.assertRaisesRegex(FileNotFoundError, "2025-05-01"):
+                    onset_view.compute.__wrapped__(str(path), 0, (9, 11, 37, 39),
+                                                   pd.Timestamp("2025-07-15"), 2,
+                                                   onset.DEFINITIONS["icpac"],
+                                                   pd.Timestamp("2025-05-01"))
+
+    def test_cached_view_handles_nat_and_keeps_the_rainfall_chart(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "forecast.nc"
+            self.rain.to_dataset(name="tp").to_netcdf(path)
+            source = '''
+from types import SimpleNamespace
+from unittest.mock import patch
+import pandas as pd
+import xarray as xr
+from apps.forecasting import catalog, compare, obs, onset, onset_view
+from apps.forecasting.regions import Box
+path = PATH_VALUE
+with xr.open_dataset(path) as opened:
+    dataset = opened.load()
+model = SimpleNamespace(key='observation_test', name='Test model')
+with patch.object(obs, 'last_day', return_value=pd.NaT), patch.object(obs, '_file', side_effect=OSError('offline')), patch.object(onset, 'forecast_daily', return_value=dataset.tp), patch.object(onset_view, 'crop', return_value=dataset), patch.object(compare, 'crop', return_value=dataset), patch.object(onset_view, 'usable', return_value=None), patch.dict(catalog.BY_KEY, {'observation_test': model}):
+    onset_view.view(path, dataset, model, pd.Timestamp('2025-07-15'), Box(9, 11, 37, 39), 'Ethiopia', 2, onset.DEFINITIONS['icpac'], pd.Timestamp('2025-05-03'))
+    compare.chart({'observation_test': path}, ['observation_test'], pd.Timestamp('2025-07-15'), 2, Box(9, 11, 37, 39), 'Ethiopia', 'tp')
+'''.replace('PATH_VALUE', repr(str(path)))
+            app = AppTest.from_string(source, default_timeout=30).run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.error), 1)
+            self.assertIn("CHIRPS", app.error[0].value)
+            self.assertIn("2025-05-03", app.error[0].value)
+            self.assertEqual(len(app.get("plotly_chart")), 1)
+            app.run()
+            self.assertFalse(app.exception)
+            self.assertEqual(len(app.get("plotly_chart")), 1)
 
     def test_available_requested_observations_work_without_latest_year_files(self):
         with tempfile.TemporaryDirectory() as folder:
