@@ -276,10 +276,6 @@ The runner selects a deterministic or probabilistic track for each worker. The s
 2. Fair versions of BS and RPS correct for the finite number of members, so ensembles of different sizes can be compared.
 3. BS/BSS score a yes/no event, RPS/RPSS score the complete ordered category distribution, AUC scores discrimination and reliability diagnoses calibration. RPS is a sum over cumulative category errors in this implementation. Its fair member correction uses the effective member count; a single-member reference is unsupported.
 
-> #### Calibration Limits
-> 
-> Calibration is a proposed extension here. Although an `apply_idr_calibration` setting exists, the active MOMP path does not fit or apply IDR. The saved figures are uncalibrated. Any claimed calibration gain needs held-out years, the same verification cases and an explicit reference.
-{: .tip}
 
 ### 3. Skill Score Definition
 
