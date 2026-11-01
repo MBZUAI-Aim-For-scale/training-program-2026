@@ -24,6 +24,7 @@ keypoints:
 <!-- MathJax -->
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 
+
 # The AI Weather Model Scorecard
 
 This lesson documents the complete ROMP (Rainy season Onset Metrics Package) / MOMP benchmarking workflow. 
@@ -41,30 +42,22 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 
 1. **SSH into the server** (from your local machine)
 
-```{bash}
-ssh <you>@country-spark
+	```{bash}
+	ssh <you>@country-spark
 
-```
+	```
 
 2. **Clone the repository and navigate to the project directory**
 
-```{bash}
-git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
-cd training-program-2026
+	```{bash}
+	git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
+	cd training-program-2026
 
-```
+	```
 
-3. **Initialize environment configuration**
 
-```{bash}
-test -f .env || cp .env.example .env
-${EDITOR:-nano} .env
 
-```
-
-Set the deployment's bucket and input-data locations in `.env`; preserve existing credentials and settings. The benchmark needs the prepared yearly rainfall/reforecast files, configured JJAS mask and `ETH_Zones.geojson`. Model weights alone are not benchmark inputs. The lesson bundle contains saved results, not the raw rainfall archive.
-
-4. **Start the container stack**
+3. **Start the container stack**
 
 ```{bash}
 bash docker/run.sh start
@@ -73,7 +66,7 @@ bash docker/run.sh start
 
 Use `bash docker/run.sh rebuild` after image/dependency changes. The current Compose file mounts the repository at `/app`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
 
-5. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
+4. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
 
 ```{bash}
 ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
@@ -82,7 +75,7 @@ ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
 
 Leave this terminal open. Port 8888 is useful only if a notebook server is running there.
 
-6. **Access dashboards**:
+5. **Access dashboards**:
 
 * **Streamlit UI**: `http://localhost:8501`; choose the short/medium-range benchmarking page.
 
@@ -321,31 +314,23 @@ The windows are disjoint: Days 16–30 is not a cumulative Days 1–30 forecast.
 
 ## Command-Line Execution (`run_momp.py`)
 
-`run_momp.py` is the command-line entry point. The dashboard at `ui/pages/short_medium_benchmarking.py` calls the same runner. Use these entry points with the settings in this lesson. Configure data locations in the existing `ai_weather/config.py` and `.env`.
----
+
+`run_momp.py` is the command-line entry point. The  Configure data locations in the existing `ai_weather/config.py` and `.env`.
+
 
 ### Step 1: Access the Container Environment
 
 Run from the repository root (`/app` inside the container). Prepared rainfall inputs, the mask and boundary must be accessible through the configured catalog. Check the selected paths before a long run.
 
-#### Option A: Interactive Shell (Recommended)
+#### Interactive Shell 
 
 Use the image's application environment explicitly, including when the host checkout contains a different `.venv`:
 
 ```{bash}
-docker exec -it -w /app -e ROMP_PYTHON=/opt/envs/app/bin/python ai_weather bash
-python -c "from scipy import stats; print(stats.mannwhitneyu([0, 1], [1, 2]))"
+docker exec -it -u 0 ai_weather bash
 
 ```
 
-#### Option B: One-Line Host Execution
-
-Inspect the existing runner options from the host without entering an interactive container shell:
-
-```{bash}
-docker exec -it -w /app -e ROMP_PYTHON=/opt/envs/app/bin/python ai_weather /opt/envs/app/bin/python run_momp.py --help
-
-```
 
 ### Step 2: Model Execution Syntax
 
@@ -356,19 +341,6 @@ Use `--mode` and optional `--model` directly with `run_momp.py`. The shared envi
 * **Deterministic Track** (AIFS Single, FuXi, GraphCast):
 
 ```{bash}
-export ROMP_REGION=Ethiopia ROMP_OBS=CHIRPS
-export ROMP_GROUND_TRUTH=CHIRPS ROMP_BENCHMARK_COVERAGE=Ethiopia
-export ROMP_INIT_TYPE=weekly ROMP_INIT_DAYS=0,3 ROMP_DATE_FILTER_YEAR=2024
-export ROMP_VERIFICATION_WINDOW_LIST='((1,15),(16,30))' ROMP_TOLERANCE_DAYS_LIST='(3,5)'
-export ROMP_MOK='(5,15)' ROMP_MAX_FORECAST_DAY=30
-export ROMP_WET_THRESHOLD=20 ROMP_WET_INIT=1 ROMP_WET_SPELL=3
-export ROMP_DRY_SPELL=7 ROMP_DRY_EXTENT=21
-export ROMP_YEARS=none ROMP_YEARS_CLIM=none
-export ROMP_ONSET_THRESHOLD_FILE='' ROMP_BASELINE_FORECAST=climatology
-unset ROMP_SPEC_PATH ROMP_FORECAST_WINDOW ROMP_AREA_MASK_FILE
-
-ROMP_EVAL_START=2000-05-01 ROMP_EVAL_END=2024-07-31 \
-ROMP_BASELINE_START_YEAR=2000 ROMP_BASELINE_END_YEAR=2024 \
 python run_momp.py --mode det --model AIFS
 
 ```
@@ -376,8 +348,6 @@ python run_momp.py --mode det --model AIFS
 * **Probabilistic / Ensemble Track** (AIFS Ensemble, GenCast):
 
 ```{bash}
-ROMP_EVAL_START=2003-05-01 ROMP_EVAL_END=2023-07-31 \
-ROMP_BASELINE_START_YEAR=2007 ROMP_BASELINE_END_YEAR=2024 \
 python run_momp.py --mode prob --model AIFS_ENS
 
 ```
@@ -389,8 +359,6 @@ Keep the shared exports above for both batches. The deterministic reference uses
 * **Batch All Deterministic Models**:
 
 ```{bash}
-ROMP_EVAL_START=2000-05-01 ROMP_EVAL_END=2024-07-31 \
-ROMP_BASELINE_START_YEAR=2000 ROMP_BASELINE_END_YEAR=2024 \
 python run_momp.py --mode det
 
 ```
@@ -398,8 +366,6 @@ python run_momp.py --mode det
 * **Batch All Probabilistic Models**:
 
 ```{bash}
-ROMP_EVAL_START=2003-05-01 ROMP_EVAL_END=2023-07-31 \
-ROMP_BASELINE_START_YEAR=2007 ROMP_BASELINE_END_YEAR=2024 \
 python run_momp.py --mode prob
 
 ```
@@ -632,46 +598,6 @@ All three AIFS Ensemble bins have negative BSS. Discrimination is strongest in D
 {: .warning}
 
 
-### Data Files
-
-The printed tables use the frozen lesson CSVs below, not mutable live outputs. Whole-window reference Fair BS is the mean of the three exported bin reference scores; reference Fair RPS is saved directly. Skill fractions and full-precision columns make the hand calculations reproducible.
-
-| File | Contents |
-| --- | --- |
-| [binned_skill_scores_aifs_ens_1-15.csv](../data/demo4/aifs_ens/binned_skill_scores_aifs_ens_1-15.csv) | Five-day bins; aifs_ens, Days 1-15 |
-| [binned_skill_scores_aifs_ens_16-30.csv](../data/demo4/aifs_ens/binned_skill_scores_aifs_ens_16-30.csv) | Five-day bins; aifs_ens, Days 16-30 |
-| [overall_skill_scores_aifs_ens_1-15.csv](../data/demo4/aifs_ens/overall_skill_scores_aifs_ens_1-15.csv) | Whole-window scores, paired-RPS counts and scoring provenance; aifs_ens, Days 1-15 |
-| [overall_skill_scores_aifs_ens_16-30.csv](../data/demo4/aifs_ens/overall_skill_scores_aifs_ens_16-30.csv) | Whole-window scores, paired-RPS counts and scoring provenance; aifs_ens, Days 16-30 |
-| [binned_skill_scores_gencast_1-15.csv](../data/demo4/gencast/binned_skill_scores_gencast_1-15.csv) | Five-day bins; gencast, Days 1-15 |
-| [binned_skill_scores_gencast_16-30.csv](../data/demo4/gencast/binned_skill_scores_gencast_16-30.csv) | Five-day bins; gencast, Days 16-30 |
-| [overall_skill_scores_gencast_1-15.csv](../data/demo4/gencast/overall_skill_scores_gencast_1-15.csv) | Whole-window scores, paired-RPS counts and scoring provenance; gencast, Days 1-15 |
-| [overall_skill_scores_gencast_16-30.csv](../data/demo4/gencast/overall_skill_scores_gencast_16-30.csv) | Whole-window scores, paired-RPS counts and scoring provenance; gencast, Days 16-30 |
-
-Run the following calculation example from the repository root or a notebook inside it. It reads the saved CSVs and checks the displayed BSS/RPSS identities; benchmark computation itself uses `run_momp.py` or the existing dashboard.
-
-```python
-from pathlib import Path
-import pandas as pd
-
-root = Path.cwd()
-while not (root / "run_momp.py").is_file():
-    if root == root.parent:
-        raise FileNotFoundError("Run this example inside the training repository")
-    root = root.parent
-bundle = root / "docs/data/demo4"
-binned = pd.concat([
-    pd.read_csv(bundle / "aifs_ens/binned_skill_scores_aifs_ens_1-15.csv"),
-    pd.read_csv(bundle / "aifs_ens/binned_skill_scores_aifs_ens_16-30.csv"),
-], ignore_index=True)
-binned["BSS_check"] = 1 - binned["Fair_Brier_Score_Forecast"] / binned["Fair_Brier_Score_Climatology"]
-assert (binned["BSS_check"] - binned["Fair_Brier_Skill_Score"]).abs().max() < 1e-10
-print(binned[["Bin", "Fair_Brier_Skill_Score", "AUC", "AUC_ref"]])
-for window in ("1-15", "16-30"):
-    row = pd.read_csv(bundle / f"aifs_ens/overall_skill_scores_aifs_ens_{window}.csv").iloc[0]
-    assert abs((1 - row.Fair_RPS / row.Reference_Fair_RPS) - row.Fair_RPS_Skill_Score) < 1e-10
-    print(window, "RPSS (%)", 100 * row.Fair_RPS_Skill_Score, "matched cases", row.RPS_N_Forecasts)
-```
-
 
 ### Reliability Analysis
 
@@ -796,11 +722,7 @@ Every benchmark result should state:
 | Blank cells or N/A | Masked cells, absent predictions/observations or a zero/nonfinite denominator | Metric-specific finite counts, actual coverage and saved reference scores; missing does not mean zero |
 | Very high miss rate despite predicted events | Forecast dates miss the timing tolerance, or events occur outside the interval | Check both date errors and the corrected FP/FN counting definition |
 | MAE exceeds 15 or 30 days | False-alarm date errors compare with observed onset outside the selected interval | Read `mae_combined` semantics and the color cap before treating it as an error |
-| Grid, boundary or unit problems | Different prepared inputs, source metadata or mask | Configured CHIRPS grid, `ETH_Zones.geojson`, mask and precipitation conversion logs |
-| RPSS is N/A | Old CSV, unsupported reference members, missing matched cases or zero reference RPS | `Score_Definition`, `Reference_Fair_RPS`, `RPS_N_Forecasts` and excluded-case counters |
-| Skill changes after a rerun | Evaluation/reference periods or retained sample sets differ | Compare evaluation/reference years, score definitions and retained-case counters in the saved CSVs |
-| SciPy `_spropack` import failure | Worker inherited a broken scientific environment | `.venv/bin/python` on the host or `ROMP_PYTHON=/opt/envs/app/bin/python` in this image; verify the dependency-check output |
-| Dashboard still shows old values | Cached result metadata or files from an earlier run | Use **Refresh saved results**; distinguish live `data/ROMP_OUTPUT/` from the frozen lesson bundle |
+
 
 
 ## Exercises

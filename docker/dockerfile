@@ -3,6 +3,14 @@ FROM nvcr.io/nvidia/pytorch:25.10-py3
 
 SHELL ["/bin/bash", "-c"]
 
+#ARG UID=1000
+#ARG GID=1000
+
+#RUN groupadd -g "$GID" appgroup \
+# && useradd -u "$UID" -g "$GID" -m appuser
+
+#USER appuser
+
 # Environment configuration
 ENV PIP_CONSTRAINT= \
     PIP_NO_CACHE_DIR=1 \
