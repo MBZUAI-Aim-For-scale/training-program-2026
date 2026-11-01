@@ -140,10 +140,13 @@ We want your feedback, in person and online, to improve this package.
 
 #### 2. Data and domain
 
-	- Observations or reference rainfall: CHIRPS, ENACTS or another gridded product.
-	- Forecasts: daily rainfall from each model's reforecasts, on a common grid (e.g. 0.25°).
-	- The configured `jjas_100mm_rainfall_mask_0p25.nc` uses True/1 = keep. Ethiopian plots use `ETH_Zones.geojson`; both resources must match the reference run.
-	- Models are registered centrally in `BENCHMARK_MODEL_CATALOG`.
+
+- Observations or reference rainfall: CHIRPS, ENACTS or another gridded product.
+- Forecasts: daily rainfall from each model's reforecasts, on a common grid (e.g. 0.25°).
+- The configured `jjas_100mm_rainfall_mask_0p25.nc` uses True/1 = keep.
+- Models are registered centrally in `BENCHMARK_MODEL_CATALOG` under `ai_weather/config.py`.
+
+
 
 #### 3. Verification set-up
 
