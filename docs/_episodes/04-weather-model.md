@@ -59,27 +59,27 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 
 3. **Start the container stack**
 
-```{bash}
-bash docker/run.sh start
+	```{bash}
+	bash docker/run.sh start
 
-```
+	```
 
-Use `bash docker/run.sh rebuild` after image/dependency changes. The current Compose file mounts the repository at `/app`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
+	Use `bash docker/run.sh rebuild` after image/dependency changes. The current Compose file mounts the repository at `/app`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
 
 4. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
 
-```{bash}
-ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
+	```{bash}
+	ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
 
-```
+	```
 
 Leave this terminal open. Port 8888 is useful only if a notebook server is running there.
 
 5. **Access dashboards**:
 
-* **Streamlit UI**: `http://localhost:8501`; choose the short/medium-range benchmarking page.
+	* **Streamlit UI**: `http://localhost:8501`; choose the short/medium-range benchmarking page.
 
-The numerical and figure-reading exercises use the saved CSVs and figures. Run benchmarks through `run_momp.py` or the existing dashboard at `ui/pages/short_medium_benchmarking.py`. Scientific regeneration requires the matching prepared input files and the settings stated below.
+	The numerical and figure-reading exercises use the saved CSVs and figures. Run benchmarks through `run_momp.py` or the existing dashboard at `ui/pages/short_medium_benchmarking.py`. Scientific regeneration requires the matching prepared input files and the settings stated below.
 
 
 ## Learning Objectives
@@ -94,22 +94,6 @@ By the end of this lesson, you will be able to:
 - Explain what reliability diagnostics motivate, and design a held-out calibration test; IDR is not executed by the active benchmark pipeline.
 - Diagnose and resolve common configuration, data, and pipeline errors.
 
-## Lesson Roadmap
-
-| Section | Purpose |
-| --- | --- |
-| Why Onset Matters | The user need and the definition of onset |
-| The ROMP Benchmarking Package | Motivation, capabilities, workflow and configuration |
-| Core Concepts for Benchmarking | Vocabulary needed to interpret any result |
-| Benchmarking Metrics | Deterministic and probabilistic metrics and skill scores |
-| Models and Evaluation Setup | What is compared, over which windows |
-| Running ROMP Benchmarks | Command-line execution and output structure |
-| Deterministic Evaluation | Worked example with maps and skill vs. climatology |
-| Probabilistic Evaluation | Worked example with skill scores and reliability |
-| Composite Metric Plots | Summarising many results at once |
-| Preliminary Model Results | Reference results to replicate and investigate |
-| Best Practices and Troubleshooting | Making benchmarks defensible and fixing failures |
-| Exercises and AI Almanac Activity | Hands-on practice and feedback |
 
 ## Why Onset Matters
 
@@ -157,10 +141,10 @@ We want your feedback, in person and online, to improve this package.
 
 #### 2. Data and domain
 
-- Observations or reference rainfall: CHIRPS, ENACTS or another gridded product.
-- Forecasts: daily rainfall from each model's reforecasts, on a common grid (e.g. 0.25°).
-- The configured `jjas_100mm_rainfall_mask_0p25.nc` uses True/1 = keep. Ethiopian plots use `ETH_Zones.geojson`; both resources must match the reference run.
-- Models are registered centrally in `BENCHMARK_MODEL_CATALOG`.
+	- Observations or reference rainfall: CHIRPS, ENACTS or another gridded product.
+	- Forecasts: daily rainfall from each model's reforecasts, on a common grid (e.g. 0.25°).
+	- The configured `jjas_100mm_rainfall_mask_0p25.nc` uses True/1 = keep. Ethiopian plots use `ETH_Zones.geojson`; both resources must match the reference run.
+	- Models are registered centrally in `BENCHMARK_MODEL_CATALOG`.
 
 #### 3. Verification set-up
 
