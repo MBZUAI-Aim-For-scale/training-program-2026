@@ -69,11 +69,10 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 4. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
 
 	```{bash}
-	ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
+	ssh -L 8501:localhost:8501 <you>@country-spark
 
 	```
 
-Leave this terminal open. Port 8888 is useful only if a notebook server is running there.
 
 5. **Access dashboards**:
 
@@ -386,7 +385,6 @@ python run_momp.py --mode prob
 > * **Evaluation Window**: 2000–2024, May–July initialization season; reference years 2000–2024
 > * **Compute Allocation**: serial or bounded CPU year workers; scoring does not use GPU acceleration
 > * **Spatial Domain**: 49 × 61 candidate grid positions at 0.25°; the JJAS mask, observed onset availability and metric denominators reduce finite coverage
-> * **Output Artifacts**: spatial NetCDFs, maps, [finite-cell summaries](../data/demo4/deterministic_summary.csv) and [derived skills](../data/demo4/deterministic_skill.csv)
 > 
 > *Note: the saved grids use `timing_matched_v2`. An out-of-tolerance in-window predicted/observed pair contributes both FP and FN. These corrected results supersede historical miss rates that counted only the false alarm.*
 > {: .note}
