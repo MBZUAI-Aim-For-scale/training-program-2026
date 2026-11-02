@@ -140,10 +140,11 @@ def host_ports(container: dict) -> list[int]:
     return sorted({int(b["HostPort"]) for bs in bindings.values() if bs for b in bs if b.get("HostPort")})
 
 
-def healthy(port: int, timeout: float = 3) -> bool:
+def healthy(port: int, timeout: float = 3, path: str | None = None) -> bool:
+    """Streamlit's health endpoint says ok, or (given a `path`, for other apps) that page loads."""
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/_stcore/health", timeout=timeout) as r:
-            return r.read().strip() == b"ok"
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}{path or '/_stcore/health'}", timeout=timeout) as r:
+            return bool(path) or r.read().strip() == b"ok"
     except OSError:
         return False
 
@@ -370,7 +371,7 @@ def step_health(run, sid, log, demo, timeout=240):
             raise Failed(f"container exited (code {c['State']['ExitCode'] if c else '?'}) before the page came up")
         ports = host_ports(c)
         actual = port if port in ports or not ports else ports[0]
-        if healthy(actual):
+        if healthy(actual, path=demo.get("health")):
             if actual != port:
                 raise Warn(f"page up on :{actual}, but demos.toml says :{port}; recreate the container to move it")
             return f"page up at http://localhost:{port}"

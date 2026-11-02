@@ -51,3 +51,5 @@ apps/outputs/
 
 #Demo 1 dashboard runtime files
 demos/demo1/state/
+# CDT's working files (mounted at /data in the cdt container)
+demos/demo2/data/

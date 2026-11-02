@@ -22,12 +22,17 @@ import spark_setup as setup
 
 # Every demo in the training program, in order. `container` is set once a demo has a Docker image;
 # `setup` is its id in demos.toml, whose steps spark_setup.py records in state/status.json.
-# `path` is added to the container's address, to open a page inside a bigger site.
+# `path` is added to the container's address, to open a page inside a bigger site; `health` is the page
+# that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
+# launches with their own button (named by `label`); they don't count towards the one-demo-at-a-time rule.
 DEMOS = [
     {"n": 1, "title": "Setting up your AI weather forecasting lab",
      "about": "Check the Spark and get a working environment before diving into the models.", "setup": "demo1"},
     {"n": 2, "title": "Observational data readiness",
-     "about": "How ENACTS is built by combining rain gauges with satellite products."},
+     "about": "How ENACTS is built by combining rain gauges with satellite products.",
+     "tools": [{"n": 2, "tool": "cdt", "label": "CDT", "title": "Climate Data Tools",
+                "about": "The CDT desktop app, in the browser over VNC.", "container": "cdt", "setup": "cdt",
+                "path": "/vnc.html?autoconnect=1&reconnect=1&resize=remote", "health": "/vnc.html"}]},
     {"n": 3, "title": "Running your first AI weather forecast",
      "about": "Run AI weather models locally, end to end, for your use case.",
      "container": "demo3", "setup": "demo3"},
@@ -101,7 +106,7 @@ CSS = f"""
   padding-left: 10px; margin: 1.6rem 0 .8rem; }}
 .d1-rule {{ border-bottom: 1px solid {LINE}; margin: -.3rem 0 1rem; }}
 
-div[class*="st-key-d1card-"], .st-key-d1launch {{ background: #fff; border: 1px solid {LINE};
+div[class*="st-key-d1card-"], div[class*="st-key-d1launch"] {{ background: #fff; border: 1px solid {LINE};
   border-left: 4px solid {LINE}; border-radius: 8px; padding: 20px 18px; gap: 1rem; }}
 /* the extra bottom margin makes up for Streamlit's -1rem under markdown, which let the dropdown overlap */
 .d1-demo {{ display: flex; align-items: center; gap: 16px; margin-bottom: 1rem; }}
@@ -143,7 +148,7 @@ div[class*="st-key-status-off-"] {{ --bg: #f1f2f4; --fg: {MUTED}; --b: {LINE}; }
 div[class*="st-key-status-failed-"] {{ --bg: #fdecea; --fg: {RED}; --b: #f5c9c0; }}
 
 .d1-prog {{ margin-left: calc(2.2rem + 16px); margin-bottom: 1rem; }}
-.st-key-d1launch .d1-prog {{ margin-left: 0; }}
+div[class*="st-key-d1launch"] .d1-prog {{ margin-left: 0; }}
 .d1-prog .bar {{ height: 8px; background: {PAGE}; border: 1px solid {LINE}; border-radius: 999px; overflow: hidden; }}
 .d1-prog .bar span {{ display: block; height: 100%; background: var(--p); border-radius: 999px;
   transition: width .6s ease; }}
@@ -154,11 +159,11 @@ div[class*="st-key-status-failed-"] {{ --bg: #fdecea; --fg: {RED}; --b: #f5c9c0;
 div[class*="st-key-d1card-"] div[data-testid="stExpander"] {{ margin-left: calc(2.2rem + 16px);
   width: calc(100% - 2.2rem - 16px); }}
 div[class*="st-key-d1card-"] div[data-testid="stExpander"] summary p,
-.st-key-d1launch div[data-testid="stExpander"] summary p {{ font-size: .85rem; }}
+div[class*="st-key-d1launch"] div[data-testid="stExpander"] summary p {{ font-size: .85rem; }}
 div[class*="st-key-d1card-"] div[data-testid="stCode"] pre,
 div[class*="st-key-d1card-"] div[data-testid="stCode"] code,
-.st-key-d1launch div[data-testid="stCode"] pre,
-.st-key-d1launch div[data-testid="stCode"] code {{ font-size: .72rem !important; line-height: 1.45; }}
+div[class*="st-key-d1launch"] div[data-testid="stCode"] pre,
+div[class*="st-key-d1launch"] div[data-testid="stCode"] code {{ font-size: .72rem !important; line-height: 1.45; }}
 
 /* Demo pages: the lesson blurb on the left, the launch card on the right */
 .d1-blurb {{ color: {INK}; font-size: 1.02rem; line-height: 1.6; margin-bottom: 1.2rem; }}
@@ -230,10 +235,25 @@ def status(demo: dict) -> tuple[str, str, str | None]:
     return "none", "Image not built", None
 
 
-def page_up(link: str | None) -> bool:
+def label(demo: dict) -> str:
+    return demo.get("label") or f"Demo {demo['n']}"
+
+
+def uid(demo: dict) -> str:
+    """Tells a demo's tools apart from the demo itself, in widget and session-state keys."""
+    return demo.get("tool") or str(demo["n"])
+
+
+def launch_href(demo: dict, **extra: str) -> str:
+    """The link a Launch or Open button follows: a new tab that starts the demo (or tool), then shows it."""
+    return "?" + "&".join(f"{k}={v}" for k, v in
+                          {"demo": demo["n"], "tool": demo.get("tool"), "launch": 1, **extra}.items() if v)
+
+
+def page_up(demo: dict, link: str | None) -> bool:
     """True once the page behind a status() link answers."""
     m = re.match(r"http://localhost:(\d+)", link or "")
-    return bool(m) and setup.healthy(int(m[1]))
+    return bool(m) and setup.healthy(int(m[1]), path=demo.get("health"))
 
 
 def last_run() -> dict | None:
@@ -302,13 +322,15 @@ def launch(demo: dict):
 
 def running_others(demo: dict) -> list[dict]:
     """Other demos whose container is running. Only one demo runs at a time on a Spark; Demo 1 (this
-    dashboard and its host checks) is left out of that rule, so it is never counted or stopped."""
+    dashboard and its host checks) is left out of that rule, so it is never counted or stopped; so are tools."""
+    if demo.get("tool"):
+        return []
     return [d for d in DEMOS if d["n"] != 1 and d.get("container") and d["container"] != demo.get("container")
             and (setup.inspect("container", d["container"]) or {}).get("State", {}).get("Running")]
 
 
 def names(demos: list[dict]) -> str:
-    return " and ".join(f"Demo {d['n']}" for d in demos)
+    return " and ".join(label(d) for d in demos)
 
 
 def stop(demos: list[dict]):
@@ -439,58 +461,63 @@ def demo_page(demo: dict):
         st.markdown(html, unsafe_allow_html=True)
     with card:
         launch_card(demo)
+        for tool in demo.get("tools", []):
+            launch_card(tool)
 
 
 @st.fragment(run_every=3)
 def launch_card(demo: dict):
-    kind, label, link = status(demo)
+    kind, text, link = status(demo)
     run = last_run()
     steps = steps_for(demo, run)
     mine = setup_running() and run and run["state"] == "running" and bool(steps)  # this demo is starting
-    with st.container(key="d1launch"):
-        st.markdown(f'<style>.st-key-d1launch {{ border-left-color: {KINDS[kind][0]} !important; }}</style>'
-                    f'<div class="d1-launch-k">On this Spark</div>'
+    key, name = uid(demo), label(demo)
+    go = f"Launch {name} ↗" if demo.get("tool") else "Launch ↗"
+    heading = f"{demo['title']} ({name})" if demo.get("tool") else "On this Spark"
+    with st.container(key=f"d1launch-{key}"):
+        st.markdown(f'<style>.st-key-d1launch-{key} {{ border-left-color: {KINDS[kind][0]} !important; }}</style>'
+                    f'<div class="d1-launch-k">{escape(heading)}</div>'
                     f'<div class="d1-launch-status"><span class="d1-tag {KINDS[kind][1]}">'
-                    f'{escape(label if not mine else "Starting")}</span></div>',
+                    f'{escape(text if not mine else "Starting")}</span></div>',
                     unsafe_allow_html=True)
-        with st.container(key=f"launch-page-{demo['n']}"):
+        with st.container(key=f"launch-page-{key}"):
             if kind == "running" and link:
-                st.link_button(f"Open Demo {demo['n']} ↗", f"?demo={demo['n']}&launch=1", type="primary",
-                               width="stretch", help="Opens the demo in a new tab")
+                st.link_button(f"Open {name} ↗", launch_href(demo), type="primary",
+                               width="stretch", help=f"Opens {name} in a new tab")
                 note = f"Running at <code>{escape(link)}</code>."
             elif not demo.get("container"):
-                st.button("Coming soon", key=f"soon-{demo['n']}", disabled=True, width="stretch")
+                st.button("Coming soon", key=f"soon-{key}", disabled=True, width="stretch")
                 note = "This demo doesn't have a container yet."
             elif setup_running() and not mine:
-                st.button("Launch ↗", key=f"busy-{demo['n']}", disabled=True, width="stretch",
+                st.button(go, key=f"busy-{key}", disabled=True, width="stretch",
                           help="Wait for the current setup run to finish")
                 note = "Another demo is being set up; this one can start when it finishes."
-            elif (others := [] if mine else running_others(demo)) and not st.session_state.get(f"confirm-{demo['n']}"):
+            elif (others := [] if mine else running_others(demo)) and not st.session_state.get(f"confirm-{key}"):
                 # Another demo is running: ask first, since launching this one stops it
-                st.button("Launch ↗", key=f"ask-{demo['n']}", type="primary", width="stretch",
+                st.button(go, key=f"ask-{key}", type="primary", width="stretch",
                           help=f"{names(others)} is running; you'll be asked before it's stopped",
-                          on_click=st.session_state.__setitem__, args=(f"confirm-{demo['n']}", True))
+                          on_click=st.session_state.__setitem__, args=(f"confirm-{key}", True))
                 note = f"Only one demo runs at a time on this Spark, and {names(others)} is running now."
             elif others:
-                st.warning(f"{names(others)} is running. Only one demo runs at a time, so launching Demo "
-                           f"{demo['n']} stops {names(others)}. Anyone using it will lose their place.")
+                st.warning(f"{names(others)} is running. Only one demo runs at a time, so launching "
+                           f"{name} stops {names(others)}. Anyone using it will lose their place.")
                 st.link_button(f"Stop {names(others)} and launch ↗",
-                               f"?demo={demo['n']}&launch=1&stop={','.join(d['container'] for d in others)}",
+                               launch_href(demo, stop=",".join(d["container"] for d in others)),
                                type="primary", width="stretch")
-                st.button("Cancel", key=f"cancel-{demo['n']}", width="stretch",
-                          on_click=st.session_state.pop, args=(f"confirm-{demo['n']}", None))
+                st.button("Cancel", key=f"cancel-{key}", width="stretch",
+                          on_click=st.session_state.pop, args=(f"confirm-{key}", None))
                 note = "Opens a new tab that stops the other demo, starts this one and then shows it."
             else:
-                st.session_state.pop(f"confirm-{demo['n']}", None)
-                st.link_button("Follow progress ↗" if mine else "Launch ↗", f"?demo={demo['n']}&launch=1",
+                st.session_state.pop(f"confirm-{key}", None)
+                st.link_button("Follow progress ↗" if mine else go, launch_href(demo),
                                type="primary", width="stretch",
-                               help="Opens a new tab that starts the container and then shows the demo")
+                               help=f"Opens a new tab that starts the container and then shows {name}")
                 note = ""
             if demo.get("container"):
-                st.button(f"Stop Demo {demo['n']}", key=f"stop-{demo['n']}", width="stretch",
+                st.button(f"Stop {name}", key=f"stop-{key}", width="stretch",
                           disabled=kind != "running" or bool(mine), on_click=stop, args=([demo],),
-                          help="Stops the demo's container; its tabs close themselves" if kind == "running"
-                          else "The demo isn't running")
+                          help="Stops the container; its tabs close themselves" if kind == "running"
+                          else f"{name} isn't running")
         if note:
             st.markdown(f'<div class="d1-launch-note">{note}</div>', unsafe_allow_html=True)
         if steps and (mine or any(s["status"] == "failed" for s in steps)):
@@ -502,12 +529,12 @@ def launch_card(demo: dict):
 def starting_page(demo: dict):
     # Already up (an Open link, or a reload): show it straight away, without the Starting page in between
     kind, _, link = status(demo)
-    if kind == "running" and page_up(link):
-        st.session_state[f"framed-{demo['n']}"] = link
-    if link := st.session_state.get(f"framed-{demo['n']}"):
+    if kind == "running" and page_up(demo, link):
+        st.session_state[f"framed-{uid(demo)}"] = link
+    if link := st.session_state.get(f"framed-{uid(demo)}"):
         demo_frame(demo, link)
         return
-    st.markdown(f'<div class="d1-page-title">Starting Demo {demo["n"]} · {escape(demo["title"])}</div>'
+    st.markdown(f'<div class="d1-page-title">Starting {label(demo)} · {escape(demo["title"])}</div>'
                 '<div class="d1-page-sub">This tab switches to the demo as soon as its page answers.</div>',
                 unsafe_allow_html=True)
     follow(demo)
@@ -516,7 +543,7 @@ def starting_page(demo: dict):
 def demo_frame(demo: dict, link: str):
     """The demo, filling this tab. The tab stays the launcher's, so it can close itself when the demo stops
     (a tab that had moved on to the demo's own address couldn't)."""
-    st.html(f"<script>document.title = {json.dumps(f'Demo {demo['n']} · {demo['title']}')};</script>",
+    st.html(f"<script>document.title = {json.dumps(f'{label(demo)} · {demo['title']}')};</script>",
             unsafe_allow_javascript=True)
     with st.container(key="demoframe"):
         st.iframe(link, height=800)
@@ -528,13 +555,13 @@ def watch(demo: dict):
     """Close the tab once the demo's container has stopped (two checks in a row, so one failed
     Docker query doesn't close it). Browsers only let a page close a tab that a link or script opened;
     otherwise the message stays."""
-    misses = f"misses-{demo['n']}"
+    misses = f"misses-{uid(demo)}"
     kind, _, _ = status(demo)
     st.session_state[misses] = 0 if kind == "running" else st.session_state.get(misses, 0) + 1
     if st.session_state[misses] < 2:
         return
     st.markdown('<style>.st-key-demoframe { display: none !important; }</style>'
-                f'<div class="d1-page-title">Demo {demo["n"]} was stopped</div>'
+                f'<div class="d1-page-title">{label(demo)} was stopped</div>'
                 '<div class="d1-page-sub">This tab closes itself. If it stays open, you can close it.</div>',
                 unsafe_allow_html=True)
     st.html("<script>window.close();</script>", unsafe_allow_javascript=True)
@@ -543,20 +570,20 @@ def watch(demo: dict):
 @st.fragment(run_every=2)
 def follow(demo: dict):
     kind, _, link = status(demo)
-    if kind == "running" and page_up(link):
-        st.session_state[f"framed-{demo['n']}"] = link
+    if kind == "running" and page_up(demo, link):
+        st.session_state[f"framed-{uid(demo)}"] = link
         st.rerun()
     # Start it once per tab (reloading the tab tries again), as soon as no other setup run holds the lock.
     # Other running demos are stopped first, but only the ones confirmed (in the link, or with the button below).
-    key = f"launched-{demo['n']}"
+    key = f"launched-{uid(demo)}"
     if key not in st.session_state and kind != "running" and not setup_running():
         others = running_others(demo)
         confirmed = set(st.query_params.get("stop", "").split(",")) | st.session_state.get("stop-ok", set())
         unconfirmed = [d for d in others if d["container"] not in confirmed]
         if unconfirmed:
-            st.warning(f"{names(unconfirmed)} is running. Only one demo runs at a time, so starting Demo "
-                       f"{demo['n']} stops {names(unconfirmed)}.")
-            st.button(f"Stop {names(unconfirmed)} and launch Demo {demo['n']}", type="primary",
+            st.warning(f"{names(unconfirmed)} is running. Only one demo runs at a time, so starting "
+                       f"{label(demo)} stops {names(unconfirmed)}.")
+            st.button(f"Stop {names(unconfirmed)} and launch {label(demo)}", type="primary",
                       on_click=st.session_state.__setitem__, args=("stop-ok", {d["container"] for d in others}))
             return
         if others:
@@ -596,9 +623,10 @@ try:
     current = BY_N.get(int(st.query_params.get("demo", 1)), BY_N[1])
 except ValueError:
     current = BY_N[1]
-# The tab a Launch or Open button opens shows only the demo (or its start-up progress), without the bar
-if current["n"] != 1 and st.query_params.get("launch") == "1" and current.get("container"):
-    starting_page(current)
+tool = next((t for t in current.get("tools", []) if t["tool"] == st.query_params.get("tool")), None)
+# The tab a Launch or Open button opens shows only the demo or tool (or its start-up progress), without the bar
+if current["n"] != 1 and st.query_params.get("launch") == "1" and (tool or current).get("container"):
+    starting_page(tool or current)
 else:
     navbar(current["n"])
     setup_page() if current["n"] == 1 else demo_page(current)
