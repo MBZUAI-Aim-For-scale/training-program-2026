@@ -466,8 +466,12 @@ def compute_onset_for_all_members(
 
     init_times = p_model.init_time.values
 
-    if not members:
+    if isinstance(members, str) and members.strip().lower() in ("all", ""):
+        members = None
+    if members is None or len(members) == 0:
         members = p_model.member.values if "member" in p_model.dims else [0]
+    if "member" in p_model.dims and not np.isin(members, p_model.member.values).all():
+        raise ValueError(f"Requested ensemble members {members} are not present in the forecast.")
 
     admin_dim = next(
         (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in p_model.dims),
@@ -552,8 +556,11 @@ def compute_onset_for_all_members(
                     else:
                         forecast_series = forecast_data.values
 
+                    if not np.isfinite(forecast_series).all():
+                        valid_forecasts -= 1
+                        continue
                     if len(forecast_series) < max_steps_needed:
-                        onset_day = None
+                        raise ValueError("Forecast series is shorter than the required onset detection horizon.")
                     else:
                         onset_day = None
                         for day in range(1, max_forecast_day + 1):
@@ -578,8 +585,8 @@ def compute_onset_for_all_members(
                                 else:
                                     onset_day = day
                                     break
-                except Exception:
-                    onset_day = None
+                except Exception as exc:
+                    raise ValueError(f"Could not detect onset for member {member}, initialization {init_time}, lat={lat}, lon={lon}: {exc}") from exc
 
                 onset_date = None
                 if onset_day is not None:
@@ -597,7 +604,7 @@ def compute_onset_for_all_members(
                 }
                 results_list.append(result)
 
-    onset_df = pd.DataFrame(results_list)
+    onset_df = pd.DataFrame(results_list, columns=["init_time", "lat", "lon", "member", "onset_day", "onset_date", "obs_onset_date"])
 
     print(f"\nProcessing Ensemble Summary:")
     print(f"Total potential forecasts: {total_potential_forecasts}")

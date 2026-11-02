@@ -77,6 +77,7 @@ PROJECT_ROOT = _bootstrap_paths()
 
 # Now safe to import config
 import config
+from ai_weather.runtime import check_runtime_python, select_runtime_python
 
 # ============================================================================
 # Paths - Use getattr with fallbacks for robustness
@@ -699,6 +700,16 @@ def run_single_model(mode, catalog_key, meta):
 
 
 def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
+    python = select_runtime_python(PROJECT_ROOT)
+    if python != os.path.abspath(sys.executable):
+        cmd = [python, str(Path(__file__).resolve()), "--mode", mode]
+        if model_key:
+            cmd.extend(["--model", model_key])
+        if in_process:
+            cmd.append("--in-process")
+        print(f"Using scientific Python: {python}", flush=True)
+        return subprocess.run(cmd, cwd=str(PROJECT_ROOT), env=os.environ.copy(), check=False).returncode
+    print(check_runtime_python(python, os.environ.copy(), PROJECT_ROOT), flush=True)
     models = select_models(mode, model_key)
 
     print(
@@ -716,7 +727,7 @@ def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
 
     for key, meta in models:
         cmd = [
-            sys.executable,
+            python,
             str(Path(__file__).resolve()),
             "--mode",
             mode,

@@ -57,6 +57,7 @@ ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_F
 
 import momp  # noqa: E402,F401
 import momp.params as params  # noqa: E402
+from ai_weather.runtime import check_runtime_python, select_runtime_python
 from momp.lib.loader import get_cfg, get_setting  # noqa: E402
 from momp.lib.assertion import ROMPValidator  # noqa: E402
 
@@ -313,12 +314,10 @@ def _apply_forecast_window(cfg, window: str):
         cfg.verification_window_list = ((1, 15),)
         cfg.tolerance_days_list = (3,)
         cfg.max_forecast_day = 15
-        cfg.day_bins = ((1, 5), (6, 10), (11, 15))
     elif "16-30" in window:
         cfg.verification_window_list = ((16, 30),)
         cfg.tolerance_days_list = (5,)
         cfg.max_forecast_day = 30
-        cfg.day_bins = ((16, 20), (21, 25), (26, 30))
 
 def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
     if not isinstance(spec, dict):
@@ -462,6 +461,16 @@ def apply_env_vars_to_cfg(cfg):
             except ValueError:
                 pass
 
+    # Preserve explicit empty values: the UI uses them to disable a mask or
+    # select scalar onset criteria instead of a threshold file.
+    for key, env_name in (("nc_mask", "ROMP_AREA_MASK_FILE"),
+                          ("thresh_file", "ROMP_ONSET_THRESHOLD_FILE")):
+        if env_name in os.environ:
+            value = os.environ[env_name].strip()
+            setattr(cfg, key, resolve_path(value) if value else None)
+    if "ROMP_BASELINE_FORECAST" in os.environ:
+        cfg.ref_model = os.environ["ROMP_BASELINE_FORECAST"].strip() or "climatology"
+
     # Verification and Advanced Temporal Settings
     if val := os.getenv("ROMP_INIT_TYPE"):
         cfg.init_type = val
@@ -484,7 +493,8 @@ def apply_env_vars_to_cfg(cfg):
         except ValueError:
             pass
 
-    if val := os.getenv("ROMP_INIT_DAYS"):
+    if "ROMP_INIT_DAYS" in os.environ:
+        val = os.environ["ROMP_INIT_DAYS"]
         try:
             cfg.init_days = tuple(sorted(set(int(day.strip()) for day in val.split(",") if day.strip())))
         except ValueError:
@@ -539,6 +549,43 @@ def apply_env_vars_to_cfg(cfg):
 # ------------------------------------------------------------------------------
 # Model configuration
 # ------------------------------------------------------------------------------
+def validate_runtime_config(cfg):
+    """Check the final merged settings, after spec and dashboard overrides."""
+    mode = getattr(cfg, "init_type", "weekly")
+    days = getattr(cfg, "init_days", (0, 3))
+    if mode not in {"weekly", "daily", "monthly"}:
+        raise ValueError("Initialization schedule must be weekly, daily or monthly.")
+    if mode != "daily":
+        low, high = (0, 6) if mode == "weekly" else (1, 31)
+        if not days or any(type(day) is not int or not low <= day <= high for day in days):
+            raise ValueError(f"{mode.title()} initialization days must be nonempty integers in {low}–{high}.")
+    windows = tuple(tuple(window) for window in cfg.verification_window_list)
+    if not windows or len(windows) != len(cfg.tolerance_days_list):
+        raise ValueError("Verification windows and tolerances must be nonempty and match in length.")
+    for start, end in windows:
+        if start < 1 or end < start or end > cfg.max_forecast_day:
+            raise ValueError(f"Verification window {(start, end)} exceeds forecast horizon {cfg.max_forecast_day} or is invalid.")
+        bins = [tuple(b) for b in cfg.day_bins if b[0] >= start and b[1] <= end]
+        covered = [day for low, high in bins for day in range(low, high + 1)]
+        if sorted(covered) != list(range(start, end + 1)):
+            raise ValueError(f"Day bins {cfg.day_bins} do not partition verification window {(start, end)}.")
+    # Keep the full bin catalog until all overrides are merged, then pass only
+    # active bins to the downstream validator and calculation stages.
+    cfg.day_bins = tuple(tuple(b) for b in cfg.day_bins
+                         if any(b[0] >= start and b[1] <= end for start, end in windows))
+    if getattr(cfg, "run_years_concurrently", None) is not None:
+        cfg.parallel = cfg.run_years_concurrently
+    if cfg.probabilistic:
+        required = set()
+        if cfg.skill_score:
+            required.update(("BS", "RPS"))
+        if cfg.plot_heatmap_bss_auc or cfg.plot_panel_heatmap_skill or cfg.plot_bar_bss_rpss_auc or cfg.save_csv_score:
+            required.update(("BS", "RPS", "AUC", "skill_score"))
+        missing = sorted(flag for flag in required if not getattr(cfg, flag, False))
+        if missing:
+            raise ValueError(f"Enabled probabilistic outputs require these metrics: {', '.join(missing)}.")
+
+
 def configure_model(cfg, catalog_key: str, meta, mode):
     name = _model_name(meta, catalog_key)
     cfg.model_list = (name,)
@@ -708,6 +755,7 @@ def run_single_model(mode, catalog_key, meta):
                 
         # Apply environment variables passed from Streamlit UI
         apply_env_vars_to_cfg(cfg)
+        validate_runtime_config(cfg)
 
         ROMPValidator(vars(cfg)).validate()
         
@@ -721,6 +769,16 @@ def run_single_model(mode, catalog_key, meta):
     print(f"\nMOMP [{mode.upper()}] {name}: completed.")
 
 def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
+    python = select_runtime_python(PROJECT_ROOT)
+    if python != os.path.abspath(sys.executable):
+        cmd = [python, str(Path(__file__).resolve()), "--mode", mode]
+        if model_key:
+            cmd.extend(["--model", model_key])
+        if in_process:
+            cmd.append("--in-process")
+        print(f"Using scientific Python: {python}", flush=True)
+        return subprocess.run(cmd, cwd=str(PROJECT_ROOT), env=os.environ.copy(), check=False).returncode
+    print(check_runtime_python(python, os.environ.copy(), PROJECT_ROOT), flush=True)
     models = select_models(mode, model_key)
     print(
         f"Models to run ({mode}): "
@@ -733,7 +791,7 @@ def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
     failures = []
     for key, meta in models:
         cmd = [
-            sys.executable,
+            python,
             str(Path(__file__).resolve()),
             "--mode",
             mode,

@@ -14,6 +14,10 @@ from momp.utils.practical import restore_args
 from itertools import product
 
 
+class NoClimatologyPairsError(ValueError):
+    """Raised when a target-year chunk produces no climatology pairs."""
+
+
 class NoForecastDataError(ValueError):
     """Raised when no requested year can provide forecast-observation pairs."""
 
@@ -72,6 +76,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
     results_list = []
 
     # Get unique combinations of init_time, lat, lon from the filtered forecast data
+    if onset_all_members.empty:
+        raise NoForecastDataError("No valid ensemble onset forecasts were produced.")
     forecast_groups = onset_all_members.groupby(['init_time', 'lat', 'lon'])
 
     # Add the "after max_forecast_day" bin
@@ -118,6 +124,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
 #        print("BBBBBB")
         
         total_members = len(group)
+        if total_members < 2:
+            continue
 
         # For each day bin (including the "after max_forecast_day" bin)
         for bin_idx, (bin_start, bin_end) in enumerate(extended_bins):
@@ -207,6 +215,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
             results_list.append(result)
 
     # Convert to DataFrame
+    if not results_list:
+        raise NoForecastDataError("No forecast cases have at least two valid ensemble members and an observed onset.")
     forecast_obs_df = pd.DataFrame(results_list)
 #    print("result_list = ", results_list)
 #    print("forecast_obs_df = ", forecast_obs_df)
@@ -626,6 +636,8 @@ def multi_year_climatological_forecast_obs_pairs(clim_onset, *, years, day_bins,
     """
 
     kwargs = restore_args(multi_year_climatological_forecast_obs_pairs, kwargs, locals())
+    # This argument is supplied positionally below; do not forward a duplicate keyword.
+    kwargs.pop("clim_onset", None)
 
     clim_onset_slice = clim_onset #!!!!! region subset
 
@@ -662,7 +674,9 @@ def multi_year_climatological_forecast_obs_pairs(clim_onset, *, years, day_bins,
 
     # Combine all years
     if not all_forecast_obs_pairs:
-        raise ValueError("No data was successfully processed for any target year")
+        raise NoClimatologyPairsError(
+            f"No data was successfully processed for target years {list(years)}"
+        )
 
     combined_forecast_obs = pd.concat(all_forecast_obs_pairs, ignore_index=True)
 

@@ -1,4 +1,10 @@
+from ai_weather.spatial import climatology_boundary_path
+from ai_weather.spatial import apply_jjas_mask
+from ai_weather.spatial import boundary_geometry
 import numpy as np
+from ai_weather.map_extent import geographic_extent
+from ai_weather import config as weather_config
+from ai_weather.spatial import clip_map_artist, clip_to_boundary
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -26,13 +32,24 @@ def spatial_metrics_map(da, model_name, *, years, shpfile_dir, polygon, dir_fig,
     Plot spatial maps of climatology onset day of year
     """
 
+    da = apply_jjas_mask(da, kwargs.get("nc_mask", getattr(weather_config, "nc_mask", None)))
+    boundary_path = None
+    if str(region).strip().casefold() == "ethiopia":
+        boundary_path = climatology_boundary_path(weather_config)
+        shpfile_dir = boundary_path
+        da = clip_to_boundary(da, boundary_path)
+    if domain_mask:
+        da = shp_mask(da, region=region)
+    if polygon_only:
+        da = polygon_mask(da)
+
     # Get coordinates
     lats = da.lat.values
     lons = da.lon.values
     var_name = da.name
     
     # Detect resolution from latitude spacing
-    lat_diff = abs(lats[1] - lats[0])
+    lat_diff = abs(lats[1] - lats[0]) if len(lats) > 1 else 1.0
     print(f"Detected resolution: {lat_diff:.1f} degrees")
 
     # Plot parameters
@@ -59,10 +76,12 @@ def spatial_metrics_map(da, model_name, *, years, shpfile_dir, polygon, dir_fig,
 
     
     # Define colormap levels 
+    finite_values = np.asarray(da.values, dtype=float)
+    finite_values = finite_values[np.isfinite(finite_values)]
     if None in (vmin, vmax):
-        vmin, vmax = da.quantile([0.1, 0.9], dim=None, skipna=True).values
-
-    text_color_bw = da.quantile(0.5, dim=None, skipna=True).item()
+        vmin, vmax = np.quantile(finite_values, [0.1, 0.9]) if finite_values.size else (0.0, 1.0)
+    if vmin == vmax:
+        vmax = vmin + 1.0
 
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
     cmap_obj = plt.get_cmap(cmap)
@@ -98,12 +117,19 @@ def spatial_metrics_map(da, model_name, *, years, shpfile_dir, polygon, dir_fig,
     # -----------------------------------------------------------------------------
     # create figure obj and ax
     if fig is None:
-        fig = plt.figure(figsize=(8, 6))
+        fig = plt.figure(figsize=figsize)
     if ax is None:
         ax = fig.add_subplot(111, projection=ccrs.PlateCarree())
 
     # set map extent, country boundary, gridline
-    ax, gl = set_basemap(ax, region, shpfile_dir, polygon, **kwargs)
+    extent = kwargs.pop("map_extent", None)
+    if extent is None:
+        region_bounds = None
+        if boundary_path:
+            west, south, east, north = boundary_geometry(boundary_path).bounds
+            region_bounds = (west, east, south, north)
+        extent = geographic_extent(lons, lats, da.transpose("lat", "lon").values, region_bounds=region_bounds)
+    ax, gl = set_basemap(ax, region, shpfile_dir, polygon, map_extent=extent, **kwargs)
 
 #    # this block doesn't work since set_basemap use gl
 #    ax.grid(False)
@@ -126,16 +152,14 @@ def spatial_metrics_map(da, model_name, *, years, shpfile_dir, polygon, dir_fig,
     else:
         cmz_onset_mean = np.nan
 
-    # mask data inside country boundary
-    if domain_mask:
-        da = shp_mask(da, region=region)
-
-    if polygon_only:
-        da = polygon_mask(da)
-
     # Plot discrete values at each grid point using pcolormesh with custom colormap
     im = ax.pcolormesh(da.lon, da.lat, da.values, 
                      cmap=cmap_jjas, norm=norm_jjas, transform=ccrs.PlateCarree(), shading='auto')
+    if boundary_path:
+        clip_map_artist(im, ax, boundary_path)
+    if not finite_values.size:
+        ax.text(0.5, 0.5, "No valid data", transform=ax.transAxes,
+                ha="center", va="center", color="dimgray")
     
 
     # Add colorbar with MMM DD labels for every other tick

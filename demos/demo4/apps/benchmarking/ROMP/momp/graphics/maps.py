@@ -3,11 +3,15 @@ momp/graphics/maps.py
 Spatial metric map plotting routines with dynamic region boundary support.
 """
 
+from ai_weather.spatial import climatology_boundary_path
+from ai_weather.spatial import apply_jjas_mask
 import os
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 import numpy as np
 import xarray as xr
+from ai_weather import config as weather_config
+from ai_weather.spatial import boundary_geometry, clip_map_artist, clip_to_boundary, load_boundary_frame
 
 from momp.params.region_def import domain, polygon_boundary
 from momp.utils.land_mask import get_region_outline, shp_outline
@@ -163,38 +167,38 @@ def plot_spatial_metrics(
 
     os.makedirs(dir_fig, exist_ok=True)
 
+    is_ethiopia = str(region).strip().casefold() == "ethiopia"
+    if is_ethiopia:
+        shpfile_dir = climatology_boundary_path(weather_config)
+    nc_mask = kwargs.get("nc_mask", getattr(weather_config, "nc_mask", None))
+    spatial_metrics = {
+        key: (clip_to_boundary(apply_jjas_mask(value, nc_mask), shpfile_dir)
+              if is_ethiopia else apply_jjas_mask(value, nc_mask))
+        if isinstance(value, xr.DataArray) else value
+        for key, value in spatial_metrics.items()
+    }
     mean_mae = spatial_metrics["mean_mae"]
     far = spatial_metrics["false_alarm_rate"] * 100
     miss_rate = spatial_metrics["miss_rate"] * 100
 
     lats = mean_mae.lat.values
     lons = mean_mae.lon.values
-    lat_spacing = _coordinate_spacing(lats)
-    lon_spacing = _coordinate_spacing(lons)
-    region_geometry = _region_geometry(shpfile_dir, region)
-    region_mask, domain_extent = _region_grid_mask(lats, lons, region, region_geometry)
-    mean_mae = mean_mae.where(region_mask)
-    far = far.where(region_mask)
-    miss_rate = miss_rate.where(region_mask)
-    data_extent = (
-        float(np.nanmin(lons)) - lon_spacing / 2,
-        float(np.nanmax(lons)) + lon_spacing / 2,
-        float(np.nanmin(lats)) - lat_spacing / 2,
-        float(np.nanmax(lats)) + lat_spacing / 2,
-    )
-    if domain_extent:
-        west, east, south, north = domain_extent
-        map_extent = (
-            west - lon_spacing / 2,
-            east + lon_spacing / 2,
-            south - lat_spacing / 2,
-            north + lat_spacing / 2,
-        )
-    elif region_geometry is not None:
-        west, south, east, north = region_geometry.bounds
-        map_extent = (west - lon_spacing / 2, east + lon_spacing / 2, south - lat_spacing / 2, north + lat_spacing / 2)
-    else:
-        map_extent = data_extent
+    region_geometry = boundary_geometry(shpfile_dir) if is_ethiopia else _region_geometry(shpfile_dir, region)
+    if not is_ethiopia:
+        region_mask, _ = _region_grid_mask(lats, lons, region, region_geometry)
+        mean_mae = mean_mae.where(region_mask)
+        far = far.where(region_mask)
+        miss_rate = miss_rate.where(region_mask)
+
+    from ai_weather.map_extent import geographic_extent
+    map_extent = kwargs.get("map_extent")
+    if map_extent is None:
+        support = np.isfinite(mean_mae.transpose("lat", "lon").values) | np.isfinite(far.transpose("lat", "lon").values) | np.isfinite(miss_rate.transpose("lat", "lon").values)
+        region_bounds = None
+        if region_geometry is not None:
+            west, south, east, north = region_geometry.bounds
+            region_bounds = (west, east, south, north)
+        map_extent = geographic_extent(lons, lats, np.where(support, 1.0, np.nan), region_bounds=region_bounds)
 
     lat_diff = abs(lats[1] - lats[0]) if len(lats) > 1 else 0.1
     print(f"Detected resolution: {lat_diff:.1f} degrees")
@@ -261,8 +265,10 @@ def plot_spatial_metrics(
         cmz_far = np.nan
         cmz_mr = np.nan
 
-    lon_edges = np.concatenate([lons - (lons[1] - lons[0]) / 2, [lons[-1] + (lons[1] - lons[0]) / 2]])
-    lat_edges = np.concatenate([lats - (lats[1] - lats[0]) / 2, [lats[-1] + (lats[1] - lats[0]) / 2]])
+    lon_step = _coordinate_spacing(lons) * (-1 if lons[-1] < lons[0] else 1)
+    lat_step = _coordinate_spacing(lats) * (-1 if lats[-1] < lats[0] else 1)
+    lon_edges = np.concatenate([lons - lon_step / 2, [lons[-1] + lon_step / 2]])
+    lat_edges = np.concatenate([lats - lat_step / 2, [lats[-1] + lat_step / 2]])
     LON_edges, LAT_edges = np.meshgrid(lon_edges, lat_edges)
 
     map_lw = 0.75
@@ -273,7 +279,11 @@ def plot_spatial_metrics(
     txt_fsize = 8 if abs(lat_diff) >= 0.99 else None
 
     # Load shapefile outlines dynamically for requested region
-    region_boundaries = _geometry_boundaries(region_geometry)
+    if is_ethiopia:
+        region_boundaries = [boundary for geometry in load_boundary_frame(shpfile_dir).geometry
+                             for boundary in _geometry_boundaries(geometry)]
+    else:
+        region_boundaries = _geometry_boundaries(region_geometry)
     if not region_boundaries:
         region_boundaries = get_region_outline(shpfile_dir, region=region) if shpfile_dir else []
 
@@ -283,7 +293,7 @@ def plot_spatial_metrics(
 
     if region_boundaries:
         for boundary in region_boundaries:
-            axes[0].plot(boundary[0], boundary[1], color="black", linewidth=map_lw)
+            axes[0].plot(boundary[0], boundary[1], color="black", linewidth=map_lw, zorder=10)
     else:
         shp_outline(axes[0], region=region)
 
@@ -313,7 +323,7 @@ def plot_spatial_metrics(
 
     if region_boundaries:
         for boundary in region_boundaries:
-            axes[1].plot(boundary[0], boundary[1], color="black", linewidth=map_lw)
+            axes[1].plot(boundary[0], boundary[1], color="black", linewidth=map_lw, zorder=10)
     else:
         shp_outline(axes[1], region=region)
 
@@ -338,10 +348,13 @@ def plot_spatial_metrics(
     # Panel 3: Miss Rate
     masked_mr = np.ma.masked_invalid(miss_rate.values)
     im3 = axes[2].pcolormesh(LON_edges, LAT_edges, masked_mr, cmap="Blues", vmin=0, vmax=100, shading="flat")
+    if is_ethiopia:
+        for target_ax, image in zip(axes, (im1, im2, im3)):
+            clip_map_artist(image, target_ax, shpfile_dir)
 
     if region_boundaries:
         for boundary in region_boundaries:
-            axes[2].plot(boundary[0], boundary[1], color="black", linewidth=map_lw)
+            axes[2].plot(boundary[0], boundary[1], color="black", linewidth=map_lw, zorder=10)
     else:
         shp_outline(axes[2], region=region)
 
@@ -381,14 +394,17 @@ def plot_spatial_metrics(
         ax.set_xlim(map_extent[0], map_extent[1])
         ax.set_ylim(map_extent[2], map_extent[3])
 
-        xticks = np.linspace(map_extent[0], map_extent[1], 5)
+        from matplotlib.ticker import MaxNLocator
+        xticks = MaxNLocator(nbins=4).tick_values(map_extent[0], map_extent[1])
+        xticks = xticks[(xticks >= map_extent[0]) & (xticks <= map_extent[1])]
         ax.set_xticks(xticks)
-        ax.set_xticklabels([f"{x:g}°E" for x in xticks])
+        ax.set_xticklabels([f"{abs(x):g}°{'E' if x >= 0 else 'W'}" for x in xticks])
 
         if i == 0:
-            yticks = np.linspace(map_extent[2], map_extent[3], 5)
+            yticks = MaxNLocator(nbins=4).tick_values(map_extent[2], map_extent[3])
+            yticks = yticks[(yticks >= map_extent[2]) & (yticks <= map_extent[3])]
             ax.set_yticks(yticks)
-            ax.set_yticklabels([f"{y:g}°N" for y in yticks])
+            ax.set_yticklabels([f"{abs(y):g}°{'N' if y >= 0 else 'S'}" for y in yticks])
         else:
             ax.set_yticks([])
             ax.set_yticklabels([])

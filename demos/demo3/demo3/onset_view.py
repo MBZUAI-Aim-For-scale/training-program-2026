@@ -74,13 +74,19 @@ def compute(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead_days
     fc = onset.forecast_daily(sub, init)
     fc_end = pd.Timestamp(fc.time.values[-1])
     obs_last = obs.last_day()
+    if pd.isna(obs_last):
+        obs_last = None
     # observations: the season so far, the forecast days, and enough after them to confirm onset
     want_end = fc_end + pd.Timedelta(days=defn.needs_after)
     end = min(want_end, obs_last) if obs_last is not None else want_end
     try:
         o = obs.daily(box, min(search_from, end), end)
     except FileNotFoundError:
+        if obs_last is None:
+            raise
         o = obs.daily(box, obs_last, obs_last)
+    if obs_last is None:
+        obs_last = pd.Timestamp(o.time.values[-1]).normalize()
     template = o.isel(time=-1, drop=True)
     fc_g = onset.to_grid(fc, template)
     thresh = onset.threshold_for(defn, o)

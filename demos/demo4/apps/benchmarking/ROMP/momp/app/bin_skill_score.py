@@ -53,6 +53,25 @@ def skill_score_in_bins(cfg=cfg, setting=setting):
         case.day_bins = day_bins_filtered
 
         case_cfg = {**asdict(setting), **asdict(case)}
+        print("DEBUG case_cfg:", case_cfg.get("model"), "| unit_cvt", repr(case_cfg.get("unit_cvt")),
+              "| members", repr(case_cfg.get("members")), "| model_var", case_cfg.get("model_var"),
+              "| max_forecast_day", case_cfg.get("max_forecast_day"), "| dry_extent", case_cfg.get("dry_extent"))
+        print(
+            "DEBUG case_cfg:", case_cfg.get("model"),
+            "| unit_cvt", repr(case_cfg.get("unit_cvt")),
+            "| members", repr(case_cfg.get("members")),
+            "| model_var", case_cfg.get("model_var"),
+            "| max_forecast_day", case_cfg.get("max_forecast_day"),
+            "| dry_extent", case_cfg.get("dry_extent"),
+        )
+        print(
+            "DEBUG case_cfg:", case_cfg.get("model"),
+            "| unit_cvt", repr(case_cfg.get("unit_cvt")),
+            "| members", repr(case_cfg.get("members")),
+            "| model_var", case_cfg.get("model_var"),
+            "| max_forecast_day", case_cfg.get("max_forecast_day"),
+            "| dry_extent", case_cfg.get("dry_extent"),
+        )
 #        print("\n\n\n members = ", case_cfg['members'])
 #        print("\n\n\n max_forecast_day = ", case_cfg['max_forecast_day'])
 #        print("\n\n\n cfg.max_forecast_day = ", cfg.max_forecast_day)
@@ -71,13 +90,12 @@ def skill_score_in_bins(cfg=cfg, setting=setting):
         print(f"\n\n\n skill score Execution time: {end - start:.4f} seconds\n\n\n")
         
         # save score results as csv file
-        if case_cfg['save_csv_score']:
+        if case_cfg['save_csv_score'] or case_cfg['plot_panel_heatmap_skill'] or case_cfg['plot_bar_bss_rpss_auc']:
             #save_score_results(score_results, **case_cfg)
             binned_data, overall_scores = save_score_results(score_results, **case_cfg)
-
-        window_str = tuple_to_str(case.verification_window)
-        result_binned[case.model][window_str] = binned_data
-        result_overall[case.model][window_str] = overall_scores
+            window_str = tuple_to_str(case.verification_window)
+            result_binned[case.model][window_str] = binned_data
+            result_overall[case.model][window_str] = overall_scores
         
 
         # heatmap plot
@@ -85,8 +103,10 @@ def skill_score_in_bins(cfg=cfg, setting=setting):
             create_heatmap(score_results, **case_cfg)
 
         # reliability plot
-        if case_cfg['plot_reliability']:
-            plot_reliability_diagram(score_results["forecast_obs_df"], **case_cfg)
+        if case_cfg['plot_reliability'] and case_cfg.get('Reliability', True) and tuple(case.verification_window) in ((1, 15), (16, 30)):
+            plot_reliability_diagram(
+                score_results["reliability_forecast_obs_df"], extract_bins=False, **case_cfg
+            )
 
 #    print("\n score_results \n ", score_results['skill_results']['bin_fair_brier_skill_scores'])
 #    print("\n binned_data \n", binned_data['Fair_Brier_Skill_Score'])

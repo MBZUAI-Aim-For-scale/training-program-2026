@@ -11,6 +11,10 @@
 !ai_weather/config.py
 /ai_weather/anaconda_projects/db
 reports/slides/.quarto/
+message_api/
+onset_blending/
+verification/
+calibration/
 # macOS
 .DS_Store
 .omx/

@@ -12,7 +12,9 @@ from momp.utils.printing import tuple_to_str
 def panel_bar_bss_rpss_auc(result_overall, verification_window, *, dir_fig, 
                            legend=True, show_panel=True, **kwargs):
 
-    fig, ax = plt.subplots(figsize=(8, 5))
+    if not result_overall:
+        raise ValueError("No model scores are available for the skill bar plot.")
+    fig, ax = plt.subplots(figsize=(8, max(3.5, 0.75 * len(result_overall) + 2)))
 
     #window = kwargs.get("verification_window_list")[-1]
     #window = kwargs.get("verification_window")
@@ -29,13 +31,14 @@ def panel_bar_bss_rpss_auc(result_overall, verification_window, *, dir_fig,
     auc, _  = extract_overall_dict(result_overall, 'AUC')
     print("/n/n result_overall = ", result_overall)
     auc_ref, _  = extract_overall_dict(result_overall, 'AUC_ref')#[0]
-    auc_ref = auc_ref[0]
+    auc_ref = np.asarray(auc_ref, dtype=float)
 
 #    bss, model_list  = extract_overall_dict(result_overall, 'Fair Brier Skill Score')
 #    rps, _  = extract_overall_dict(result_overall, 'Fair RPS Skill Score')
 
-    bss *= 100
-    rps *= 100
+    bss = np.asarray(bss, dtype=float) * 100
+    rps = np.asarray(rps, dtype=float) * 100
+    auc = np.asarray(auc, dtype=float)
 
 #    print("\n model list = ", model_list)
 
@@ -58,18 +61,31 @@ def panel_bar_bss_rpss_auc(result_overall, verification_window, *, dir_fig,
     bss_col = np.array([146, 197, 222]) / 256
     
     # Plot AUC bars on top
-    bars3 = ax2.barh(y_pos + height, auc, height,
+    valid_auc = np.isfinite(auc) & (auc >= 0) & (auc <= 1)
+    bars3 = ax2.barh(y_pos[valid_auc] + height, auc[valid_auc], height,
                     label='AUC', alpha=0.8, color=auc_col)
     
     # Plot skill scores on bottom axis
-    bars1 = ax.barh(y_pos, bss, height,
+    valid_bss = np.isfinite(bss)
+    valid_rps = np.isfinite(rps)
+    bars1 = ax.barh(y_pos[valid_bss], bss[valid_bss], height,
                    label='BSS', alpha=0.8, color=bss_col)
-    bars2 = ax.barh(y_pos - height, rps, height,
+    bars2 = ax.barh(y_pos[valid_rps] - height, rps[valid_rps], height,
                    label='RPSS', alpha=0.8, color=rpss_col)
 
     # Plot Climatology AUC as vertical line
-    ax2.axvline(x=auc_ref, color=auc_col, linestyle='-', linewidth=1.25, alpha=0.8)
+    valid_ref = np.isfinite(auc_ref) & (auc_ref >= 0) & (auc_ref <= 1)
+    ax2.vlines(auc_ref[valid_ref], y_pos[valid_ref] + height / 2,
+               y_pos[valid_ref] + 1.5 * height, color=auc_col, linewidth=1.25, alpha=0.8)
     ax.axvline(x=0, color='black', linestyle='-', linewidth=1.25, alpha=0.8)
+
+    # Undefined skill is missing information, not a zero score.
+    for target, valid, positions, label in ((ax, valid_bss, y_pos, "BSS"),
+                                             (ax, valid_rps, y_pos - height, "RPSS"),
+                                             (ax2, valid_auc, y_pos + height, "AUC")):
+        for position in positions[~valid]:
+            target.text(0.02, position, f"{label}: N/A", transform=target.get_yaxis_transform(),
+                        ha="left", va="center", fontsize=9, color="dimgray")
 
 
     # Customize axes
@@ -78,16 +94,18 @@ def panel_bar_bss_rpss_auc(result_overall, verification_window, *, dir_fig,
     ax.set_yticks(y_pos)
     ax.set_yticklabels(model_list, rotation=0, ha='right', fontsize=15)
 
-    min_val = np.min(np.concatenate([rps, bss, auc])) *1.05 # * 1.1
-    max_val = np.max(np.concatenate([rps, bss, auc])) *1.3 #* 1.2
-    ax.set_xlim(min_val, 25) 
-    ax.set_ylim(-0.5, 1.5)
+    finite_skill = np.concatenate([rps[valid_rps], bss[valid_bss]])
+    low = min(0.0, float(finite_skill.min())) if finite_skill.size else -5.0
+    high = max(0.0, float(finite_skill.max())) if finite_skill.size else 5.0
+    padding = max(high - low, 10.0) * 0.1
+    ax.set_xlim(low - padding, high + padding)
+    ax.set_ylim(-0.6, len(model_list) - 0.4)
 
     ax2.set_xlabel('AUC', fontsize=12, color=auc_col)
     ax2.tick_params(axis='x', colors=auc_col)
     ax2.spines['top'].set_color(auc_col)
-    ax2.set_xlim(0.6, 1.0)
-    ax2.set_xticks(np.arange(0.6, 1.02, 0.05))
+    ax2.set_xlim(0, 1)
+    ax2.set_xticks(np.linspace(0, 1, 6))
 
     # Control tick label visibility
     if not isinstance(ax, np.ndarray): # single panel plot
@@ -107,8 +125,8 @@ def panel_bar_bss_rpss_auc(result_overall, verification_window, *, dir_fig,
     if legend:
         lines1, labels1 = ax.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        legend = ax.legend(lines1 + lines2 + [clim_line],
-                          labels1 + labels2 + ['climatology'],
+        legend = ax.legend(lines1 + lines2 + ([clim_line] if valid_ref.any() else []),
+                          labels1 + labels2 + (['climatology'] if valid_ref.any() else []),
                           loc='lower right', frameon=False)
     
     fig.tight_layout()
@@ -123,6 +141,8 @@ def panel_bar_bss_rpss_auc(result_overall, verification_window, *, dir_fig,
     figure_filename = os.path.join(dir_fig, figure_filename)
     fig.savefig(figure_filename, dpi=300, bbox_inches='tight')
     print(f"Figure saved as '{figure_filename}'")
+    if not show_panel:
+        plt.close(fig)
 
     return fig, (ax, ax2)
 

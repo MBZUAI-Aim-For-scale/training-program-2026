@@ -19,6 +19,7 @@ os.environ["GRPC_POLL_STRATEGY"] = "poll"
 from momp.stats.bins import (
     multi_year_climatological_forecast_obs_pairs,
     multi_year_forecast_obs_pairs,
+    NoClimatologyPairsError,
     NoForecastDataError,
 )
 from momp.stats.climatology import (
@@ -45,10 +46,14 @@ def func_wrapper(chunk_and_args, target_func=None):
     local_kwargs["years"] = chunk.tolist() if hasattr(chunk, "tolist") else chunk
 
     if target_func == "clim":
-        return multi_year_climatological_forecast_obs_pairs(
-            clim_onset,
-            **local_kwargs
-        )
+        try:
+            return multi_year_climatological_forecast_obs_pairs(
+                clim_onset,
+                **local_kwargs
+            )
+        except NoClimatologyPairsError as exc:
+            print(f"Skipping climatology year chunk {local_kwargs['years']}: {exc}")
+            return pd.DataFrame()
 
     if target_func == "forecast":
         try:
@@ -85,7 +90,12 @@ def parallel_climatological_forecast_obs_pairs(clim_onset, **kwargs):
         func_wrapper_clim = partial(func_wrapper, target_func="clim")
         list_of_results = list(executor.map(func_wrapper_clim, tasks))
 
-    combined_forecast_obs = pd.concat(list_of_results, ignore_index=True)
+    successful_results = [result for result in list_of_results if not result.empty]
+    if not successful_results:
+        raise NoClimatologyPairsError(
+            f"No climatology forecast-observation pairs were produced for years {list(all_years)}"
+        )
+    combined_forecast_obs = pd.concat(successful_results, ignore_index=True)
     return combined_forecast_obs
 
 

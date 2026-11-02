@@ -7,6 +7,11 @@ padded shapefile clipping & boundary overlay rendering for spatial maps, persist
 robust argument filtering for onset analysis, and error-proof tab routing.
 """
 from __future__ import annotations
+from ai_weather.benchmark_job import BenchmarkJob
+from ui.utils.parameter_help import PARAMETER_HELP
+from ui.utils.benchmark_messages import cancellation_warning, execution_status
+from ai_weather.spatial import climatology_boundary_path
+from ai_weather.spatial import apply_jjas_mask
 
 import os
 import sys
@@ -35,6 +40,11 @@ import streamlit as st
 import xarray as xr
 from PIL import Image, ImageDraw
 import config
+from ai_weather.map_extent import geographic_extent
+from ai_weather.precipitation import precipitation_to_mm
+from ai_weather.runtime import check_runtime_python, select_runtime_python
+from ai_weather.spatial import clip_map_artist, clip_to_boundary, load_boundary_frame
+from ui.utils.verification_settings import initialization_matches_schedule, parse_verification_settings, temporal_settings_errors
 
 # ======================================================================
 # Environment snapshot at startup.
@@ -186,8 +196,8 @@ MODEL_DISPLAY_OVERRIDES: Dict[str, str] = getattr(
     config,
     "MODEL_DISPLAY_OVERRIDES",
     {
-        "AIFS": "AIFS Single v2",
-        "AIFS_ENS": "AIFS Ensemble v2",
+        "AIFS": "AIFS Single",
+        "AIFS_ENS": "AIFS Ensemble",
         "FuXi": "FuXi",
         "GraphCast": "GraphCast",
         "GenCast": "GenCast",
@@ -448,7 +458,7 @@ def _find_var(ds: xr.Dataset, keywords: List[str]) -> Optional[str]:
                 return str(v)
     return None
 
-def normalize_aifs_precipitation_dataset(ds: xr.Dataset) -> xr.Dataset:
+def normalize_aifs_precipitation_dataset(ds: xr.Dataset, unit_cvt=None) -> xr.Dataset:
     var_aliases = ["tp", "tp06", "tp24", "pr", "precip", "total_precipitation"]
     target_var = "RAINFALL"
 
@@ -458,17 +468,10 @@ def normalize_aifs_precipitation_dataset(ds: xr.Dataset) -> xr.Dataset:
             ds = ds.rename({alias: target_var})
             break
 
-    # 2. Convert meters (m) to millimeters (mm)
+    # 2. Convert declared units; small rainfall values alone do not imply metres.
     if target_var in ds.data_vars:
-        da = ds[target_var]
-        units = str(da.attrs.get("units", "")).lower()
-        max_val = float(da.max().values) if da.size > 0 else 0.0
-
-
-        # If max precipitation value is < 1.0 (indicating meters) or units attribute is 'm'
-        if units in ["m", "meters", "meter"] or max_val < 1.0:
-            ds[target_var] = ds[target_var] * 1000.0
-            ds[target_var].attrs["units"] = "mm"
+        ds = ds.copy()
+        ds[target_var] = precipitation_to_mm(ds[target_var], unit_cvt)
 
     return ds
 
@@ -480,10 +483,9 @@ def preprocess_aifs_benchmark_file(file_path: str) -> str:
 
     try:
         ds = _safe_open_dataset(str(p))
-        if "tp" in ds.data_vars or "tp06" in ds.data_vars or (
-            "RAINFALL" in ds.data_vars and float(ds["RAINFALL"].max().values) < 1.0
-        ):
-            ds_corrected = normalize_aifs_precipitation_dataset(ds)
+        if any(name in ds.data_vars for name in ("tp", "tp06", "tp24", "pr", "precip", "total_precipitation", "RAINFALL")):
+            ds_corrected = normalize_aifs_precipitation_dataset(
+                ds, config.BENCHMARK_MODEL_CATALOG["AIFS"].get("unit_cvt"))
             # Save back scaled NetCDF file
             ds_corrected.to_netcdf(str(p))
             ds_corrected.close()
@@ -528,9 +530,24 @@ def _render_variable_plot(ds: xr.Dataset, var_name: str, title: str):
         if "time" in da.dims:
             da = da.isel(time=0)
         
+        is_map = {"lat", "lon"}.issubset(da.dims)
+        if is_map:
+            zones = load_boundary_frame(climatology_boundary_path(config))
+            da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
+            da = clip_to_boundary(da, climatology_boundary_path(config))
         fig, ax = plt.subplots(figsize=(8, 4))
-        da.plot(ax=ax, cmap="YlGnBu")
+        image = da.plot(ax=ax, cmap="YlGnBu")
+        if is_map:
+            west, south, east, north = zones.total_bounds
+            extent = geographic_extent(da.lon, da.lat, region_bounds=(west, east, south, north))
+            clip_map_artist(image, ax, climatology_boundary_path(config))
+            zones.boundary.plot(ax=ax, color="black", linewidth=1.0, zorder=10)
+            ax.set_xlim(extent[:2])
+            ax.set_ylim(extent[2:])
+            ax.set_aspect("equal", adjustable="box")
+            ax.set_anchor("C")
         ax.set_title(f"{title} - {var_name}")
+        fig.tight_layout()
         st.pyplot(fig)
     except Exception as e:
         st.warning(f"Could not render plot for {var_name}: {e}")
@@ -652,12 +669,11 @@ def _extract_time_range_from_nc(nc_path: str):
                 return None, None
             
             try:
-                ds_decoded = xr.open_dataset(nc_path, decode_cf=True, decode_times=True)
-                da = ds_decoded[time_name]
-                min_t = pd.Timestamp(da.values.min()).date()
-                max_t = pd.Timestamp(da.values.max()).date()
-                ds_decoded.close()
-                return min_t, max_t
+                with xr.open_dataset(nc_path, decode_cf=True, decode_times=True) as ds_decoded:
+                    da = ds_decoded[time_name]
+                    min_t = pd.Timestamp(da.values.min()).date()
+                    max_t = pd.Timestamp(da.values.max()).date()
+                    return min_t, max_t
             except Exception:
                 return None, None
     except Exception:
@@ -803,12 +819,30 @@ def detect_benchmark_models(force_refresh: bool = False) -> List[Dict[str, Any]]
     return detected
 
 
-def compute_common_model_window(active_rows: List[Dict[str, Any]]):
+def available_observation_years(ground_truth: str) -> List[int]:
+    meta = BENCHMARK_OBS_CATALOG.get(ground_truth) or getattr(config, "_OBS_SETS", {}).get(ground_truth, {})
+    folder = meta.get("dir")
+    if not folder:
+        return []
+    patterns = meta.get("pattern", "{}.nc")
+    if isinstance(patterns, str):
+        patterns = (patterns,)
+    names = {Path(p).name for p in config.glob(config.join(folder, "*.nc"))}
+    return [year for year in range(1900, date.today().year + 1)
+            if any(pattern.format(year) in names for pattern in patterns)]
+
+
+def compute_common_model_window(active_rows: List[Dict[str, Any]], observation_years=None):
     starts = [r["_start_date"] for r in active_rows if r.get("_start_date")]
     ends = [r["_end_date"] for r in active_rows if r.get("_end_date")]
     if not starts or not ends:
         return None, None
     cs, ce = max(starts), min(ends)
+    if observation_years is not None:
+        if not observation_years:
+            return None, None
+        cs = max(cs, date(min(observation_years), 1, 1))
+        ce = min(ce, date(max(observation_years), 12, 31))
     return (cs, ce) if cs <= ce else (None, None)
 
 
@@ -843,7 +877,7 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
     if "climatology" in fname or "traditional" in fname:
         return "Traditional Climatology"
     if "aifs_ens" in fname or "aifs_ensemble" in fname:
-        return "AIFS Ensemble v2"
+        return "AIFS Ensemble"
     if "gencast" in fname:
         return "GenCast"
     if "graphcast" in fname:
@@ -851,14 +885,14 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
     if "fuxi" in fname:
         return "FuXi"
     if "aifs" in fname:
-        return "AIFS Single v2"
+        return "AIFS Single"
 
     # 1. Check parent folder name first if stored in model subdirectories
     if nc_path.parent != ROMP_DEMO_OUT_DIR:
         if any(k in parent_name for k in ["aifs_ens", "aifs_ensemble"]):
-            return "AIFS Ensemble v2"
+            return "AIFS Ensemble"
         if "aifs" in parent_name:
-            return "AIFS Single v2"
+            return "AIFS Single"
         if "fuxi" in parent_name:
             return "FuXi"
         if "graphcast" in parent_name:
@@ -872,7 +906,7 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
     if "climatology" in fname or "traditional" in fname:
         return "Traditional Climatology"
     if "aifs_ens" in fname or "aifs_ensemble" in fname:
-        return "AIFS Ensemble v2"
+        return "AIFS Ensemble"
     if "gencast" in fname:
         return "GenCast"
     if "graphcast" in fname:
@@ -880,7 +914,7 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
     if "fuxi" in fname:
         return "FuXi"
     if "aifs" in fname:
-        return "AIFS Single v2"
+        return "AIFS Single"
 
     return None
 
@@ -896,6 +930,7 @@ def discover_map_outputs(force_refresh: bool = False) -> List[Dict[str, Any]]:
         try:
             mtime = nc_path.stat().st_mtime
             with xr.open_dataset(nc_path, decode_cf=False, decode_times=False) as ds:
+                contingency_definition = ds.attrs.get("contingency_definition")
                 for mm in MAP_METRICS.values():
                     var = _find_var(ds, mm["keywords"])
                     if var:
@@ -929,6 +964,7 @@ def discover_map_outputs(force_refresh: bool = False) -> List[Dict[str, Any]]:
                 "model_label": model_label,
                 "windows": windows,
                 "mtime": mtime,
+                "contingency_definition": contingency_definition,
             }
         )
     latest_by_model_window = {}
@@ -1122,6 +1158,8 @@ def load_map_da_cached(
                 return None
 
             da = _map_select_window(ds[var], wl)
+            da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
+            da = clip_to_boundary(da, climatology_boundary_path(config))
             while len(da.dims) > 2:
                 da = da.isel({da.dims[0]: 0})
 
@@ -1158,26 +1196,35 @@ def plot_map(
     diverging=False,
     cbar_kwargs=None,
     admin_gdf=None,
+    boundary_path=None,
 ):
-    arr = np.asarray(da.values, dtype=float)
-    if not np.isfinite(arr).any():
-        return None
-
     fig, ax = plt.subplots(figsize=(7, 4.5), dpi=140)
     try:
-        if diverging:
-            lim = float(np.nanmax(np.abs(arr))) or 1.0
-            vmin, vmax, cmap = -lim, lim, "RdBu_r"
-
         lon, lat = _map_lon_lat_names(da)
+        zones = None
+        if lon and lat:
+            boundary_path = boundary_path or climatology_boundary_path(config)
+            zones = load_boundary_frame(boundary_path)
+            da = clip_to_boundary(apply_jjas_mask(da, getattr(config, "nc_mask", None)), boundary_path)
+        arr = np.asarray(da.values, dtype=float)
+        has_data = np.isfinite(arr).any()
+        if diverging:
+            lim = (float(np.nanmax(np.abs(arr))) or 1.0) if has_data else 1.0
+            vmin, vmax, cmap = -lim, lim, "RdBu_r"
+        elif not has_data:
+            vmin = 0 if vmin is None else vmin
+            vmax = 1 if vmax is None else vmax
+
         kwargs = {}
         if cbar_kwargs is not None:
             kwargs["cbar_kwargs"] = cbar_kwargs
         elif unit or title:
             kwargs["cbar_kwargs"] = {"label": unit or title}
+        if not has_data:
+            kwargs = {"add_colorbar": False}
 
         if lon and lat:
-            da.plot.imshow(
+            image = da.plot.imshow(
                 ax=ax,
                 x=lon,
                 y=lat,
@@ -1186,20 +1233,24 @@ def plot_map(
                 vmax=vmax,
                 **kwargs,
             )
+            clip_map_artist(image, ax, boundary_path)
+            zones.boundary.plot(ax=ax, color="black", linewidth=1.0, zorder=10)
 
             # Overlay Admin Boundary Polygon Line
             if admin_gdf is not None and not admin_gdf.empty:
-                try:
-                    admin_gdf.boundary.plot(ax=ax, color="black", linewidth=1.2, zorder=5)
-                except Exception:
-                    pass
+                admin_gdf.boundary.plot(ax=ax, color="black", linewidth=1.4, zorder=11)
 
             # Explicit padding limits
             lons_v = da[lon].values
             lats_v = da[lat].values
-            if lons_v.size > 1 and lats_v.size > 1:
-                ax.set_xlim(float(np.min(lons_v)), float(np.max(lons_v)))
-                ax.set_ylim(float(np.min(lats_v)), float(np.max(lats_v)))
+            frame = admin_gdf if admin_gdf is not None and not admin_gdf.empty else zones
+            west, south, east, north = frame.total_bounds
+            region_bounds = (west, east, south, north)
+            west, east, south, north = geographic_extent(lons_v, lats_v, da.transpose(lat, lon).values, region_bounds=region_bounds)
+            ax.set_xlim(west, east)
+            ax.set_ylim(south, north)
+            ax.set_aspect("equal", adjustable="box")
+            ax.set_anchor("C")
         else:
             im = ax.imshow(
                 arr,
@@ -1212,10 +1263,14 @@ def plot_map(
             fig.colorbar(im, ax=ax, label=cb_label)
 
         ax.set_title(title, fontsize=10)
+        if not has_data:
+            ax.text(.5, .5, "No valid metric values", transform=ax.transAxes, ha="center", va="center",
+                    bbox={"facecolor": "white", "alpha": .9, "edgecolor": "none"}, zorder=12)
         plt.tight_layout()
         return fig
-    except Exception:
+    except Exception as exc:
         plt.close(fig)
+        st.warning(f"Could not render map {title}: {exc}")
         return None
 
 
@@ -1427,7 +1482,8 @@ def load_metric_values_by_window_cached(nc_path_str: str):
     return res
 
 
-def build_metrics_table_html(table, models, windows):
+def build_metrics_table_html(table, models, windows, baselines=None):
+    baselines = baselines or {}
     metric_order = [
         "Mean Absolute Error days",
         "Miss Rate fraction",
@@ -1441,12 +1497,15 @@ def build_metrics_table_html(table, models, windows):
     css = (
         "<style>"
         ".all-metrics-table{width:100%;border-collapse:collapse;"
-        "font-size:0.9rem;min-width:700px}"
+        f"font-size:0.9rem;min-width:{180 + 100 * len(models) * len(windows)}px}}"
         ".all-metrics-table th,.all-metrics-table td{border:1px solid #e5e7eb;"
-        "padding:6px 8px;text-align:right}"
+        "padding:6px 8px;text-align:right;min-width:100px}"
         ".all-metrics-table th{background:#f8fafc;color:#0f1b2a;font-weight:600}"
         ".all-metrics-table td:first-child,.all-metrics-table th:first-child{"
         "text-align:left}"
+        ".all-metrics-table tbody td:first-child,"
+        ".all-metrics-table thead tr:first-child th:first-child{"
+        "min-width:180px;position:sticky;left:0;z-index:2;background:#f8fafc}"
         "</style>"
     )
     parts = [
@@ -1468,36 +1527,43 @@ def build_metrics_table_html(table, models, windows):
         higher_better = is_metric_higher_better(metric)
         for w in windows:
             cv = table.get((metric, w, clim))
+            references = {m: baselines.get((metric, w, m), cv) for m in models}
+            values = [table.get((metric, w, m)) for m in models]
+            finite = [value for value in values if value is not None and np.isfinite(value)]
+            best = ((max(finite) if higher_better else min(finite))
+                    if finite and metric != "Reference AUC" else None)
             diffs = [
-                abs(table.get((metric, w, m)) - cv)
+                abs(table.get((metric, w, m)) - references[m])
                 for m in models
                 if m != clim
                 and table.get((metric, w, m)) is not None
-                and cv is not None
+                and np.isfinite(table[(metric, w, m)])
+                and references[m] is not None and np.isfinite(references[m])
             ]
             scale = max(diffs) if diffs else None
             for m in models:
                 val = table.get((metric, w, m))
-                if val is None:
+                if val is None or not np.isfinite(val):
                     parts.append("<td>-</td>")
                     continue
                 style = ""
-                if m == clim:
+                reference = references[m]
+                if m == clim or metric == "Reference AUC":
                     style = (
                         "background-color: rgba(148,163,184,0.12);"
-                        "font-weight:600;"
                     )
-                elif cv is not None and scale:
-                    diff = val - cv
+                elif reference is not None and np.isfinite(reference) and scale:
+                    diff = val - reference
                     if abs(diff) > 1e-6:
                         better = (diff > 0) if higher_better else (diff < 0)
-                        better = diff < 0
                         intensity = min(abs(diff) / scale, 1.0)
                         alpha = 0.08 + (0.35 * intensity)
                         color = "34,197,94" if better else "239,68,68"
                         style = (
                             f"background-color: rgba({color},{alpha:.2f});"
                         )
+                style += ("font-weight:700;" if best is not None and np.isclose(val, best, rtol=1e-10, atol=1e-8)
+                          else "font-weight:400;")
                 fmt = (
                     f"{val:.1f}"
                     if metric.startswith("Mean Absolute Error")
@@ -1632,10 +1698,10 @@ def build_grouped_distribution_cards_html(dist_df: pd.DataFrame) -> str:
     # Sort ordering
     metric_order = {"False Alarm Rate": 0, "Miss Rate": 1, "Mean Absolute Error": 2}
     model_order = {
-        "AIFS Single v2": 0,
+        "AIFS Single": 0,
         "FuXi": 1,
         "GraphCast": 2,
-        "AIFS Ensemble v2": 3,
+        "AIFS Ensemble": 3,
         "GenCast": 4,
         "Traditional Climatology": 5,
     }
@@ -2153,8 +2219,10 @@ def _analyze_onset_streamlit(year, lat, lon):
             from types import SimpleNamespace
 
             _worker_out: List[str] = []
+            worker_python = select_runtime_python(PROJECT_ROOT)
+            check_runtime_python(worker_python, env, PROJECT_ROOT, _spawn_no_fork)
             _rc, _timed_out = _spawn_no_fork(
-                [sys.executable, "-c", _ONSET_WORKER_SOURCE, str(payload_file), str(out_dir)],
+                [worker_python, "-c", _ONSET_WORKER_SOURCE, str(payload_file), str(out_dir)],
                 env,
                 str(PROJECT_ROOT.resolve()),
                 900,
@@ -2192,13 +2260,14 @@ def _locate_run_momp() -> Optional[Path]:
     return None
 
 
-def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
+def _spawn_no_fork(argv, env, cwd, timeout, on_line=None, cancel_event=None):
     """
     Run `argv` in `cwd` using posix_spawn on Unix to prevent memory fragmentation and fork-safety issues.
     """
     import select
     import signal
     import time
+    from ai_weather.benchmark_job import track_worker, untrack_worker
 
     started = time.time()
 
@@ -2212,6 +2281,9 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
             for line in proc.stdout:
                 if on_line:
                     on_line(line.rstrip("\n"))
+                if cancel_event is not None and cancel_event.is_set():
+                    proc.kill()
+                    break
                 if time.time() - started > timeout:
                     proc.kill()
                     timed_out = True
@@ -2219,7 +2291,7 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
         finally:
             proc.stdout.close()
             proc.wait()
-        return (124 if timed_out else proc.returncode), timed_out
+        return (130 if cancel_event is not None and cancel_event.is_set() else 124 if timed_out else proc.returncode), timed_out
 
     read_fd, write_fd = os.pipe()
     actions = [
@@ -2232,20 +2304,63 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
     shell_argv = ["/bin/sh", "-c", 'cd "$1" && shift && exec "$@"', "sh", str(cwd), *map(str, argv)]
 
     try:
-        pid = os.posix_spawn("/bin/sh", shell_argv, env, file_actions=actions)
+        pid = os.posix_spawn("/bin/sh", shell_argv, env, file_actions=actions, setpgroup=0)
     except BaseException:
         os.close(read_fd)
         os.close(write_fd)
         raise
     os.close(write_fd)
+    track_worker(pid)
+    status = None
+    termination_attempted = False
+
+    def poll_exit():
+        nonlocal status
+        if status is None:
+            exited, child_status = os.waitpid(pid, os.WNOHANG)
+            if exited:
+                status = child_status
+
+    def terminate_group():
+        nonlocal termination_attempted
+        termination_attempted = True
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            poll_exit()
+            return
+        except PermissionError:
+            poll_exit()
+            if status is None:
+                raise
+        deadline = time.time() + 0.2
+        while status is None and time.time() < deadline:
+            poll_exit()
+            if status is None:
+                time.sleep(0.02)
+        try:
+            # The group may already be gone after graceful termination.
+            os.killpg(pid, 0)
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            poll_exit()
+            if status is None:
+                raise
+            if on_line:
+                on_line("[stop-warning] The main benchmark process exited, but the operating system blocked verification of remaining worker cleanup.")
 
     timed_out = False
     buf = b""
     try:
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                terminate_group()
+                break
             left = timeout - (time.time() - started)
             if left <= 0:
-                os.kill(pid, signal.SIGKILL)
+                terminate_group()
                 timed_out = True
                 break
 
@@ -2265,24 +2380,28 @@ def _spawn_no_fork(argv, env, cwd, timeout, on_line=None):
 
         if buf and on_line:
             on_line(buf.decode("utf-8", "replace").rstrip("\r"))
-    except BaseException:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    except BaseException as exc:
+        if isinstance(exc, PermissionError) and on_line:
+            on_line(f"[stop-warning] The operating system denied process management for PID {pid}. Worker shutdown is not confirmed.")
+        if not termination_attempted:
+            terminate_group()
         raise
     finally:
         os.close(read_fd)
-        _, status = os.waitpid(pid, 0)
+        if status is None:
+            _, status = os.waitpid(pid, 0)
+        untrack_worker(pid)
 
     rc = os.waitstatus_to_exitcode(status)
-    return (124 if timed_out else rc), timed_out
+    return (130 if cancel_event is not None and cancel_event.is_set() else 124 if timed_out else rc), timed_out
 
 
 def run_momp_benchmark(
     mode: str,
     model_key: Optional[str] = None,
     run_config: Optional[Dict[str, Any]] = None,
+    progress=None,
+    cancel_event=None,
 ) -> Dict[str, Any]:
     mode = mode.lower()
     if mode not in ("det", "deterministic", "prob", "probabilistic"):
@@ -2314,6 +2433,11 @@ def run_momp_benchmark(
     env["NUMEXPR_NUM_THREADS"] = "4"
 
     if run_config:
+        for key, env_name in (("area_mask_file", "ROMP_AREA_MASK_FILE"),
+                              ("onset_threshold_file", "ROMP_ONSET_THRESHOLD_FILE"),
+                              ("baseline_forecast", "ROMP_BASELINE_FORECAST")):
+            if key in run_config:
+                env[env_name] = str(run_config[key] or "")
         if run_config.get("eval_start"):
             env["ROMP_EVAL_START"] = str(run_config["eval_start"])
         if run_config.get("eval_end"):
@@ -2360,20 +2484,31 @@ def run_momp_benchmark(
 
     try:
         import time
-        live = st.empty()
-        lines: List[str] = []
+        cmd[0] = select_runtime_python(PROJECT_ROOT)
+        from collections import deque
+        def spawn(argv, child_env, cwd, timeout, on_line=None):
+            return _spawn_no_fork(argv, child_env, cwd, timeout, on_line, cancel_event=cancel_event)
+        runtime_info = check_runtime_python(cmd[0], env, PROJECT_ROOT, spawn)
+        live = st.empty() if progress is None else None
+        lines = deque([runtime_info], maxlen=2000)
+        stop_warnings = []
         started = time.time()
         last_draw = 0.0
 
         def _on_line(line: str) -> None:
             nonlocal last_draw
             lines.append(line)
+            if line.startswith("[stop-warning]"):
+                stop_warnings.append(line.removeprefix("[stop-warning]").strip())
+            if progress is not None:
+                progress(line)
+                return
             now = time.time()
             if now - last_draw > 1.0:
-                live.code(f"[{int(now - started)}s elapsed] {' '.join(cmd[-4:])}\n" + "\n".join(lines[-15:]))
+                live.code(f"[{int(now - started)}s elapsed] {' '.join(cmd[-4:])}\n" + "\n".join(list(lines)[-15:]))
                 last_draw = now
 
-        returncode, timed_out = _spawn_no_fork(cmd, env, str(PROJECT_ROOT.resolve()), 1800, _on_line)
+        returncode, timed_out = spawn(cmd, env, str(PROJECT_ROOT.resolve()), 1800, _on_line)
 
         text = "\n".join(lines)
         if timed_out:
@@ -2385,13 +2520,17 @@ def run_momp_benchmark(
             "runtime_dir": str(ROMP_DEMO_OUT_DIR),
             "stdout": text,
             "stderr": "",
-            "ok": (not timed_out) and returncode == 0,
+            "ok": (not timed_out) and returncode == 0 and not (cancel_event is not None and cancel_event.is_set()),
+            "cancelled": cancel_event is not None and cancel_event.is_set(),
+            "stop_warning": " ".join(stop_warnings),
             "command": " ".join(cmd),
         }
     except Exception as e:
         import traceback
+        cancelled = cancel_event is not None and cancel_event.is_set()
         return {
-            "mode": mode, "returncode": 1, "ok": False,
+            "mode": mode, "returncode": 130 if cancelled else 1, "ok": False, "cancelled": cancelled,
+            "stop_warning": "The operating system denied worker shutdown. Some processes may still be running." if cancelled and isinstance(e, PermissionError) else "",
             "runtime_dir": str(ROMP_DEMO_OUT_DIR),
             "stdout": "",
             "stderr": f"Could not run benchmark process: {type(e).__name__}: {e!r}\n" + traceback.format_exc(),
@@ -2422,7 +2561,7 @@ def section_header(text: str, accent: str = "sky") -> None:
 BENCHMARK_COVERAGE_COUNTRIES = (
     ("🇸🇳", "Senegal"), ("🇷🇼", "Rwanda"), ("🇨🇴", "Colombia"), ("🇵🇪", "Peru"),
     ("🇧🇴", "Bolivia"), ("🇵🇭", "Philippines"), ("🇮🇩", "Indonesia"), ("🇵🇰", "Pakistan"),
-    ("🇳🇬", "Nigeria"), ("🇪ET", "Ethiopia"), ("🇰🇪", "Kenya"), ("🇸🇱", "Sierra Leone"),
+    ("🇳🇬", "Nigeria"), ("🇪🇹", "Ethiopia"), ("🇰🇪", "Kenya"), ("🇸🇱", "Sierra Leone"),
     ("🇨🇱", "Chile"), ("🇧🇩", "Bangladesh"),
 )
 DEFAULT_BENCHMARK_COVERAGE = "Ethiopia"
@@ -2461,50 +2600,61 @@ def render_kpi_row(models: int, presets: int, status: str, runtime: str) -> None
     )
 
 
-def render_shared_settings(ground_truth: str = "CHIRPS") -> Dict[str, Any]:
+def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None, run_windows_renderer=None) -> Dict[str, Any]:
     section_header("Shared settings", "sky")
     st.markdown("Optional settings applied to every selected model in this benchmark.")
 
     st.markdown("**EVENT DETECTION**")
     c1, c2, c3 = st.columns(3)
-    wet_day_threshold = c1.number_input("Wet-day threshold", min_value=0.0, value=20.0, step=0.5, format="%.1f", key="shared_wet_day_threshold")
-    minimum_wet_day_rainfall = c2.number_input("Minimum wet-day rainfall", min_value=0.0, value=1.0, step=0.1, format="%.1f", key="shared_min_wet_day")
+    wet_day_threshold = c1.number_input("Wet-day threshold", min_value=0.0, value=float(getattr(config, "wet_threshold", 20)), step=0.5, format="%.1f", key="shared_wet_day_threshold")
+    minimum_wet_day_rainfall = c2.number_input("Minimum wet-day rainfall", min_value=0.0, value=float(getattr(config, "wet_init", 1)), step=0.1, format="%.1f", key="shared_min_wet_day")
     wet_spell_length = c3.number_input("Wet spell length", min_value=1, value=3, format="%d", key="shared_wet_spell")
 
     c4, c5, _ = st.columns(3)
     dry_spell_limit = c4.number_input("Dry spell limit", min_value=0, value=7, format="%d", key="shared_dry_spell")
-    dry_spell_search_extension = c5.number_input("Dry spell search extension", min_value=0, value=0, format="%d", key="shared_dry_ext")
+    dry_spell_search_extension = c5.number_input("Dry spell search extension", min_value=0, value=int(getattr(config, "dry_extent", 21)), format="%d", key="shared_dry_ext")
 
-    st.markdown("**MASKS AND BASELINE**")
-    m1, m2 = st.columns(2)
-    default_mask = EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc"
-    seasonal_mask = EXTERNAL_DATA_DIR / "jjas_seasonal_mask_0p25.nc"
-    mask_options = {
-        "No mask": "",
-        "JJAS 100mm rainfall mask": str(default_mask),
-        "JJAS seasonal 0.25 mask": str(seasonal_mask),
-        "Custom path": "__custom__",
-    }
-    area_mask_choice = m1.selectbox("Area mask file", list(mask_options.keys()), index=0, key="shared_area_mask")
-    area_mask_file = mask_options[area_mask_choice]
-    if area_mask_choice == "Custom path":
-        area_mask_file = m2.text_input("Area mask file path", value="", key="shared_area_mask_custom")
+    masks_column, advanced_column = st.columns(2, gap="large")
+    with masks_column:
+        st.markdown("**MASKS AND BASELINE**")
+        default_mask = EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc"
+        seasonal_mask = EXTERNAL_DATA_DIR / "jjas_seasonal_mask_0p25.nc"
+        mask_options = {
+            "No mask": "",
+            "JJAS 100mm rainfall mask": str(default_mask),
+            "JJAS seasonal 0.25 mask": str(seasonal_mask),
+            "Custom path": "__custom__",
+        }
+        configured_mask = str(getattr(config, "nc_mask", None) or "")
+        default_mask_choice = next((label for label, value in mask_options.items() if value == configured_mask), "Custom path")
+        area_mask_choice = st.selectbox("Area mask file", list(mask_options.keys()),
+                                       index=list(mask_options).index(default_mask_choice), key="shared_area_mask_from_config")
+        area_mask_file = mask_options[area_mask_choice]
+        if area_mask_choice == "Custom path":
+            area_mask_file = st.text_input("Area mask file path", value=configured_mask, key="shared_area_mask_custom")
 
-    t1, t2 = st.columns(2)
-    default_threshold = ONSET_REFERENCE_DIR / "thresholds_df.csv"
-    threshold_options = {
-        "Dataset default": "",
-        "Reference thresholds CSV": str(default_threshold),
-        "Custom path": "__custom__",
-    }
-    onset_threshold_choice = t1.selectbox("Onset threshold file", list(threshold_options.keys()), index=0, key="shared_onset_thresh")
-    onset_threshold_file = threshold_options[onset_threshold_choice]
-    if onset_threshold_choice == "Custom path":
-        onset_threshold_file = t2.text_input("Onset threshold file path", value="", key="shared_onset_custom")
+        default_threshold = ONSET_REFERENCE_DIR / "thresholds_df.csv"
+        threshold_options = {
+            "Dataset default": "",
+            "Reference thresholds CSV": str(default_threshold),
+            "Custom path": "__custom__",
+        }
+        onset_threshold_choice = st.selectbox("Onset threshold file", list(threshold_options.keys()), index=0, key="shared_onset_thresh")
+        onset_threshold_file = threshold_options[onset_threshold_choice]
+        if onset_threshold_choice == "Custom path":
+            onset_threshold_file = st.text_input("Onset threshold file path", value="", key="shared_onset_custom")
 
-    b1, b2 = st.columns(2)
-    baseline_forecast_choice = b1.selectbox("Baseline forecast", ["climatology", "custom"], index=0, key="shared_baseline_fc")
-    baseline_forecast = b2.text_input("Baseline forecast name", value="climatology", key="shared_baseline_custom") if baseline_forecast_choice == "custom" else "climatology"
+        baseline_forecast_choice = st.selectbox("Baseline forecast", ["climatology", "custom"], index=0, key="shared_baseline_fc")
+        baseline_forecast = st.text_input("Baseline forecast name", value="climatology", key="shared_baseline_custom") if baseline_forecast_choice == "custom" else "climatology"
+        if run_windows_renderer is not None:
+            run_windows_renderer()
+
+    with advanced_column:
+        st.markdown("**ADVANCED TEMPORAL & VERIFICATION SETTINGS**")
+        if advanced_renderer is None:
+            st.info("Select models above to configure initialization schedules and verification windows.")
+        else:
+            advanced_renderer()
 
     return {
         "wet_day_threshold": float(wet_day_threshold),
@@ -2865,6 +3015,16 @@ def _open_figure_modal(path_str: str) -> None:
         )
 
 
+@st.cache_data(show_spinner=False, max_entries=24)
+def _benchmark_figure_preview(path_str: str, mtime_ns: int, size: int) -> bytes:
+    """Cache display-sized PNGs; file metadata invalidates regenerated figures."""
+    with Image.open(path_str) as source:
+        source.thumbnail((1600, 1200), Image.Resampling.LANCZOS)
+        buffer = io.BytesIO()
+        source.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def render_benchmark_figure_with_download(
     path_str: str, 
     key_suffix: str = "", 
@@ -2881,11 +3041,9 @@ def render_benchmark_figure_with_download(
         return
 
     try:
-        st.image(str(path), width='stretch')
+        stat = path.stat()
+        st.image(_benchmark_figure_preview(str(path), stat.st_mtime_ns, stat.st_size), width='stretch')
         st.caption(format_figure_label(str(path)))
-
-        with open(path, "rb") as f:
-            img_bytes = f.read()
 
         # Action bar: Download and Zoom controls side-by-side
         btn_col1, btn_col2 = st.columns([1, 1])
@@ -2893,11 +3051,12 @@ def render_benchmark_figure_with_download(
         with btn_col1:
             st.download_button(
                 label="📥 Download",
-                data=img_bytes,
+                data=path.read_bytes,
                 file_name=path.name,
                 mime="image/png",
                 key=f"dl_btn_{path.stem}_{key_suffix}",
                 width='stretch',
+                on_click="ignore",
             )
 
         with btn_col2:
@@ -2910,24 +3069,196 @@ def render_benchmark_figure_with_download(
                     _open_figure_modal(str(path))
     except Exception as e:
         st.warning(f"Could not display figure {path.name}: {type(e).__name__} - {e}")
+
+
+def render_reference_figure_gallery(paths, view_mode, filter_key):
+    """Render one bounded page instead of decoding every benchmark figure."""
+    if not paths:
+        info_box("No figures match the selected dropdown filters.", "amber")
+        return
+    page_size = 6
+    page_count = (len(paths) + page_size - 1) // page_size
+    page = st.selectbox("Figure page", range(1, page_count + 1),
+                        format_func=lambda value: f"{value} of {page_count}",
+                        key=f"figure_page_{filter_key}_{view_mode}")
+    start = (page - 1) * page_size
+    page_paths = paths[start:start + page_size]
+    st.caption(f"Showing figures {start + 1}–{start + len(page_paths)} of {len(paths)}")
+    if view_mode == "Full Width":
+        for index, path in enumerate(page_paths, start):
+            render_benchmark_figure_with_download(path, key_suffix=f"full_{index}")
+            st.divider()
+    else:
+        for offset in range(0, len(page_paths), 2):
+            columns = st.columns(2)
+            for column_index, (column, path) in enumerate(zip(columns, page_paths[offset:offset + 2])):
+                with column:
+                    render_benchmark_figure_with_download(path, key_suffix=f"grid_{start + offset + column_index}")
 # ======================================================================
 # Main Page
 # ======================================================================
+@st.cache_data(show_spinner=False, ttl=300, max_entries=32)
+def inspect_model_temporal_coverage(model_key, first_year, last_year):
+    """Read only initialization/lead coordinates, never load forecast fields."""
+    meta = CONFIG_BENCHMARK_MODEL_CATALOG.get(model_key, {})
+    folder, pattern = meta.get("dir"), meta.get("file_pattern", "{}.nc")
+    dates, horizons, failures = [], {}, []
+    for year in range(first_year, last_year + 1):
+        path = config.join(folder, pattern.format(year))
+        if not config.exists(path):
+            continue
+        try:
+            with config.open_dataset(path) as ds:
+                time_name = next((name for name in ds.coords if str(name).casefold()
+                                  in {"time", "init_time", "initialization_time", "forecast_reference_time"}), None)
+                if time_name:
+                    times = pd.to_datetime(ds[time_name].values, errors="coerce")
+                    dates.extend((int(t.year), int(t.month), int(t.day)) for t in times if not pd.isna(t))
+                lead_name = next((name for name in ds.coords if str(name).casefold() in {"day", "step", "lead", "lead_time"}), None)
+                if lead_name:
+                    values = np.asarray(ds[lead_name].values)
+                    if np.issubdtype(values.dtype, np.timedelta64):
+                        values = values / np.timedelta64(1, "D")
+                    else:
+                        values = values.astype(float)
+                        units = str(ds[lead_name].attrs.get("units", "")).casefold()
+                        for unit, divisor in (("hour", 24), ("minute", 1440), ("second", 86400)):
+                            if unit in units:
+                                values = values / divisor
+                                break
+                    finite = values[np.isfinite(values)]
+                    if finite.size:
+                        horizons[year] = int(np.floor(finite.max()))
+        except Exception as exc:
+            failures.append(f"{year}: {type(exc).__name__}: {exc}")
+    return {"dates": dates, "horizons": horizons, "failures": failures}
+
+
+def render_verification_window_settings(row_key, forecast_window):
+    options = ["Days 1–15", "Days 16–30", "Both windows"]
+    selected = 0 if forecast_window == "1-15 days" else 1
+    choice = st.selectbox("Verification windows", options, index=selected,
+                          key=f"verification_windows_{row_key}_{selected}")
+    windows = (((1, 15),), ((16, 30),), ((1, 15), (16, 30)))[options.index(choice)]
+    defaults = dict(zip(getattr(config, "verification_window_list", ((1, 15), (16, 30))),
+                        getattr(config, "tolerance_days_list", (3, 5))))
+    columns = st.columns(len(windows))
+    tolerances = []
+    errors = []
+    for column, window in zip(columns, windows):
+        default = int(defaults.get(window, 3 if window[1] <= 15 else 5))
+        tolerance = column.number_input(f"Tolerance: days {window[0]}–{window[1]}",
+            min_value=0, max_value=window[1] - window[0] + 1,
+            value=max(0, min(default, window[1] - window[0] + 1)), step=1,
+            key=f"verification_tolerance_{row_key}_{window[0]}_{window[1]}")
+        if tolerance is None:
+            errors.append(f"Enter a tolerance for days {window[0]}–{window[1]}.")
+            tolerance = default
+        tolerances.append(int(tolerance))
+    required_horizon = max(end for _, end in windows)
+    st.number_input("Max Forecast Day (automatic)", min_value=required_horizon,
+                    max_value=required_horizon, value=required_horizon, disabled=True,
+                    key=f"verification_horizon_{row_key}_{required_horizon}")
+    try:
+        parse_verification_settings(repr(windows), repr(tuple(tolerances)), day_bins=config.day_bins)
+    except ValueError as exc:
+        errors.append(str(exc))
+    return {"verification_window_list": repr(windows), "tolerance_days_list": repr(tuple(tolerances)),
+            "max_forecast_day": required_horizon}, errors
+
+
+def render_initialization_settings(row_key):
+    modes = ["weekly", "daily", "monthly"]
+    default_mode = getattr(config, "init_type", "weekly")
+    default_mode = default_mode if default_mode in modes else "weekly"
+    mode = st.selectbox("Initialization schedule", modes, index=modes.index(default_mode),
+                        format_func=str.title, key=f"initialization_schedule_{row_key}")
+    if mode == "weekly":
+        defaults = [int(day) for day in getattr(config, "init_days", (0, 3)) if 0 <= int(day) <= 6] if default_mode == mode else [0, 3]
+        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        days = st.multiselect("Initialization weekdays", list(range(7)), default=defaults or [0, 3],
+                             format_func=lambda day: weekdays[day], key=f"initialization_weekdays_{row_key}")
+    elif mode == "monthly":
+        defaults = [int(day) for day in getattr(config, "init_days", (1, 15)) if 1 <= int(day) <= 31] if default_mode == mode else [1, 15]
+        days = st.multiselect("Initialization days of month", list(range(1, 32)), default=defaults or [1, 15],
+                             key=f"initialization_monthdays_{row_key}")
+        st.caption("Days that do not exist in a month are skipped.")
+    else:
+        days = list(range(7))
+        st.caption("Daily scheduling uses every available date within the evaluation season.")
+    reference_year = int(getattr(config, "date_filter_year", 2024))
+    reference_year = st.number_input("Reference calendar year", min_value=1900, max_value=2100,
+        value=max(1900, min(reference_year, 2100)), disabled=mode != "weekly",
+        help="Weekly scheduling uses this year to align weekdays across historical forecast years. It does not change evaluation years.",
+        key=f"initialization_reference_year_{row_key}")
+    return {"init_type": mode, "initialization_days": sorted(days),
+            "date_filter_year": int(reference_year) if reference_year is not None else None}
+
+
+def _record_finished_benchmark(job):
+    snapshot = job.snapshot()
+    runs = snapshot["runs"]
+    completed = snapshot["status"] == "completed"
+    cancelled = snapshot["status"] == "cancelled"
+    if completed:
+        st.session_state["benchmark_settings_signature"] = job.signature
+    st.session_state["benchmark_last_run"] = {
+        "ok": completed, "cancelled": cancelled,
+        "returncode": 130 if cancelled else max((int(r.get("returncode", 1)) for r in runs), default=1),
+        "mode": runs[-1].get("mode", "") if runs else "",
+        "runtime_dir": runs[-1].get("runtime_dir", str(ROMP_DEMO_OUT_DIR)) if runs else str(ROMP_DEMO_OUT_DIR),
+        "command": "\n".join(r.get("command", "") for r in runs), "runs": runs,
+    }
+    st.session_state.pop("benchmark_active_job", None)
+    st.cache_data.clear()
+
+
+@st.fragment(run_every=1)
+def render_benchmark_job():
+    job = st.session_state.get("benchmark_active_job")
+    if job is None:
+        return
+    snapshot = job.snapshot()
+    if snapshot["done"]:
+        _record_finished_benchmark(job)
+        st.rerun()
+        return
+    st.info("Stopping benchmark…" if snapshot["stopping"] else "Benchmark running. You can stop it below.")
+    if st.button("Stop Benchmark", key="btn_stop_benchmark", disabled=snapshot["stopping"]):
+        job.cancel()
+        st.info("Stop requested; terminating benchmark workers.")
+    if snapshot["logs"]:
+        for line in snapshot["logs"]:
+            if line.startswith("[stop-warning]"):
+                st.warning(line.removeprefix("[stop-warning]").strip())
+        st.code("\n".join(snapshot["logs"][-20:]), language="text")
+
+
 def page() -> None:
     _inject_theme_css()
 
     presets = get_benchmark_presets()
-    st.markdown('<div class="page-title">Forecast Benchmarking</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="page-subtitle">'
-        "Evaluate AI weather model skill against observational references "
-        "across the Ethiopian highlands."
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    title_column, guide_column = st.columns([3, 1])
+    with title_column:
+        st.markdown('<div class="page-title">Forecast Benchmarking</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="page-subtitle">'
+            "Evaluate AI weather model skill against observational references "
+            "across the Ethiopian highlands."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+    with guide_column:
+        with st.popover("Parameter guide", width="stretch"):
+            st.caption("Expand a parameter for its meaning and usage.")
+            for parameter, instruction in PARAMETER_HELP.items():
+                with st.expander(parameter):
+                    st.markdown(instruction)
 
     last_run = st.session_state.get("benchmark_last_run")
-    status_text = "Completed" if last_run and last_run.get("ok") else ("Failed" if last_run else "Idle")
+    status_text = ("Stop requested" if cancellation_warning(last_run) else "Cancelled") if last_run and last_run.get("cancelled") else (
+        "Completed" if last_run and last_run.get("ok") else "Failed" if last_run else "Idle")
     render_kpi_row(
         len(CONFIG_BENCHMARK_MODEL_CATALOG or {}),
         len(presets),
@@ -3002,54 +3333,91 @@ def page() -> None:
                     unsafe_allow_html=True,
                 )
 
-    # Model run windows
-    section_header("Model run windows", "amber")
     model_run_windows: Dict[str, Dict[str, Any]] = {}
-    if active_rows:
-        cs, ce = compute_common_model_window(active_rows)
-        if cs and ce:
-            st.info(f"Fair-comparison window automatically set to {cs:%Y-%m-%d} to {ce:%Y-%m-%d}.")
-        for row in active_rows:
-            rk = row["_row_key"]
-            avs, ave = row["_start_date"], row["_end_date"]
-            des, dee = (max(cs, avs), min(ce, ave)) if cs and ce else (avs, ave)
-            if des > dee:
-                des, dee = avs, ave
-            with st.expander(f"{row['Model']} - available {row['Date Range']}"):
-                c1, c2 = st.columns(2)
-                eval_start = c1.date_input("Evaluation Start", value=des, min_value=avs, max_value=ave, key=f"es_{rk}")
-                eval_end = c2.date_input("Evaluation End", value=dee, min_value=avs, max_value=ave, key=f"ee_{rk}")
-                c3, c4 = st.columns(2)
-                bsy = c3.number_input("Baseline Start Year", min_value=avs.year, max_value=ave.year, value=des.year, key=f"bsy_{rk}")
-                bey = c4.number_input("Baseline End Year", min_value=avs.year, max_value=ave.year, value=dee.year, key=f"bey_{rk}")
-                init_days = st.multiselect("Initialization Days", list(range(16)), default=[0, 3], key=f"id_{rk}")
+    verification_problems = []
+    observation_years = available_observation_years(ground_truth)
+
+    def render_model_run_windows():
+        section_header("Model run windows", "amber")
+        if not active_rows:
+            st.caption("Select models above to set evaluation dates and baseline years.")
+        if active_rows:
+            cs, ce = compute_common_model_window(active_rows, observation_years)
+            if cs and ce:
+                st.info(f"Shared model/observation window: {cs:%Y-%m-%d} to {ce:%Y-%m-%d}.")
+            for row in active_rows:
+                rk = row["_row_key"]
+                avs, ave = row["_start_date"], row["_end_date"]
+                if observation_years:
+                    shared_start = max(avs, date(min(observation_years), 1, 1))
+                    shared_end = min(ave, date(max(observation_years), 12, 31))
+                    if shared_start < shared_end:
+                        avs, ave = shared_start, shared_end
+                    else:
+                        verification_problems.append(f"{row['Model']}: no shared model/observation evaluation period.")
+                des, dee = (max(cs, avs), min(ce, ave)) if cs and ce else (avs, ave)
+                if des > dee:
+                    des, dee = avs, ave
+                with st.expander(f"{row['Model']} - available {row['Date Range']}"):
+                    st.caption("The month/day range defines the season repeated in each evaluation year. Dates use shared model/observation coverage; baseline years use observation coverage.")
+                    c1, c2 = st.columns(2)
+                    if st.session_state.get(f"es_{rk}") is not None and not avs <= st.session_state[f"es_{rk}"] <= ave:
+                        st.session_state[f"es_{rk}"] = min(max(st.session_state[f"es_{rk}"], avs), ave)
+                    eval_start = c1.date_input("Evaluation Start", value=des, min_value=avs, max_value=ave, key=f"es_{rk}")
+                    if eval_start is None:
+                        verification_problems.append(f"{row['Model']}: select Evaluation Start.")
+                        eval_start = des
+                    if st.session_state.get(f"ee_{rk}") is not None and not eval_start <= st.session_state[f"ee_{rk}"] <= ave:
+                        st.session_state[f"ee_{rk}"] = min(max(st.session_state[f"ee_{rk}"], eval_start), ave)
+                    eval_end = c2.date_input("Evaluation End", value=max(dee, eval_start), min_value=eval_start, max_value=ave, key=f"ee_{rk}")
+                    if eval_end is None:
+                        verification_problems.append(f"{row['Model']}: select Evaluation End.")
+                        eval_end = max(dee, eval_start)
+                    first_year = min(observation_years) if observation_years else avs.year
+                    last_year = max(observation_years) if observation_years else ave.year
+                    default_start = max(first_year, min(int(getattr(config, "start_year_clim", des.year)), last_year))
+                    if st.session_state.get(f"bsy_{rk}") is not None and not first_year <= st.session_state[f"bsy_{rk}"] <= last_year:
+                        st.session_state[f"bsy_{rk}"] = min(max(int(st.session_state[f"bsy_{rk}"]), first_year), last_year)
+                    c3, c4 = st.columns(2)
+                    bsy = c3.number_input("Baseline Start Year", min_value=first_year, max_value=last_year, value=default_start, key=f"bsy_{rk}")
+                    if bsy is None:
+                        verification_problems.append(f"{row['Model']}: enter Baseline Start Year.")
+                        bsy = default_start
+                    if st.session_state.get(f"bey_{rk}") is not None and not int(bsy) <= st.session_state[f"bey_{rk}"] <= last_year:
+                        st.session_state[f"bey_{rk}"] = min(max(int(st.session_state[f"bey_{rk}"]), int(bsy)), last_year)
+                    default_end = max(int(bsy), min(int(getattr(config, "end_year_clim", dee.year)), last_year))
+                    bey = c4.number_input("Baseline End Year", min_value=int(bsy), max_value=last_year, value=default_end, key=f"bey_{rk}")
+                    if bey is None:
+                        verification_problems.append(f"{row['Model']}: enter Baseline End Year.")
+                        bey = default_end
                 
-                with st.expander("Advanced Temporal & Verification Settings"):
-                    c5, c6 = st.columns(2)
-                    init_type = c5.selectbox("Init Type", ["weekly", "daily", "monthly"], index=0, key=f"init_type_{rk}")
-                    date_filter_year = c6.number_input("Date Filter Year", min_value=2000, max_value=2030, value=2024, key=f"date_filter_year_{rk}")
-                    
-                    c7, c8 = st.columns(2)
-                    verification_window_list = c7.text_input("Verification Window List", value="((1, 15), (16, 30))", key=f"vwl_{rk}")
-                    tolerance_days_list = c8.text_input("Tolerance Days List", value="(3, 5)", key=f"tdl_{rk}")
-                    
-                    c9, _ = st.columns(2)
-                    max_forecast_day = c9.number_input("Max Forecast Day", min_value=1, max_value=60, value=30, key=f"max_forecast_day_{rk}")
+                    model_run_windows[rk] = {
+                        "eval_start": eval_start,
+                        "eval_end": eval_end,
+                        "baseline_start_year": int(bsy),
+                        "baseline_end_year": int(bey),
+                    }
 
-                model_run_windows[rk] = {
-                    "eval_start": eval_start,
-                    "eval_end": eval_end,
-                    "baseline_start_year": int(bsy),
-                    "baseline_end_year": int(bey),
-                    "initialization_days": sorted(init_days),
-                    "init_type": init_type,
-                    "date_filter_year": int(date_filter_year),
-                    "verification_window_list": verification_window_list,
-                    "tolerance_days_list": tolerance_days_list,
-                    "max_forecast_day": int(max_forecast_day),
-                }
+    def render_advanced_settings():
+        if not active_rows:
+            st.info("Select models above to configure their schedules and verification windows.")
+            return
+        st.caption("Per-model controls apply to the next benchmark run. The summary updates as you edit.")
+        for index, row in enumerate(active_rows):
+            rk = row["_row_key"]
+            with st.expander(row["Model"], expanded=index == 0):
+                initialization = render_initialization_settings(rk)
+                verification, errors = render_verification_window_settings(rk, forecast_window)
+                model_run_windows[rk].update({**initialization, **verification})
+                verification_problems.extend(f"{row['Model']}: {error}" for error in errors)
+                windows = parse_verification_settings(verification["verification_window_list"])[0]
+                window_label = ", ".join(f"{start}–{end}" for start, end in windows)
+                st.caption(f"Next run: {initialization['init_type'].title()} · Days {window_label} · Horizon {verification['max_forecast_day']} days")
 
-    shared_settings = render_shared_settings(ground_truth)
+    shared_settings = render_shared_settings(ground_truth, advanced_renderer=render_advanced_settings, run_windows_renderer=render_model_run_windows)
+    dry_extension = shared_settings["dry_spell_search_extension"]
+    if 0 < dry_extension < shared_settings["dry_spell_limit"]:
+        verification_problems.append("Dry spell search extension must be 0 (disabled) or at least the dry spell limit.")
 
     if PHASE_2_AVAILABLE or PHASE_3_AVAILABLE:
         section_header("Data Readiness & Fair Comparison", "green")
@@ -3069,42 +3437,92 @@ def page() -> None:
                     st.warning(f"Could not load inventory: {e}")
 
     # Run Benchmark Action
+    observation_problems = []
+    for row in active_rows:
+        window = model_run_windows[row["_row_key"]]
+        errors = temporal_settings_errors({**window, "probabilistic": row.get("_probabilistic", False)}, observation_years)
+        observation_problems.extend(f"{row['Model']}: {error}" for error in errors)
+        if not errors:
+            coverage = inspect_model_temporal_coverage(row["_exec_key"], window["eval_start"].year, window["eval_end"].year)
+            if coverage["failures"]:
+                observation_problems.append(f"{row['Model']}: cannot read forecast metadata: {'; '.join(coverage['failures'])}")
+            elif not coverage["dates"]:
+                observation_problems.append(f"{row['Model']}: no forecast initialization dates are available for these years. Adjust the evaluation period or model data configuration.")
+            elif not any(initialization_matches_schedule(parts, window) for parts in coverage["dates"]):
+                observation_problems.append(f"{row['Model']}: no forecast initialization dates match this schedule and evaluation season. Adjust the selected days or dates.")
+            required_days = window["max_forecast_day"] + max(0, int(shared_settings["wet_spell_length"]) - 1)
+            too_short = [year for year, end in coverage["horizons"].items() if end < required_days]
+            if too_short:
+                observation_problems.append(f"{row['Model']}: forecast files for {too_short} need at least {required_days} days to verify the selected window and wet spell.")
+    for problem in observation_problems + verification_problems:
+        st.error(problem)
     st.markdown('<div class="run-section">', unsafe_allow_html=True)
     c1, _ = st.columns([1, 2])
-    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready)
+    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready or bool(observation_problems or verification_problems) or st.session_state.get("benchmark_active_job") is not None)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    if run_clicked and active_rows:
-        runs: List[Dict[str, Any]] = []
-        with st.spinner("Running benchmark..."):
-            for row in active_rows:
-                rk, ek = row["_row_key"], row["_exec_key"]
-                rc = dict(model_run_windows.get(rk, {}))
-                rc.update(shared_settings)
-                rc.update({
-                    "ground_truth": ground_truth,
-                    "benchmark_coverage": benchmark_coverage,
-                    "forecast_window": forecast_window,
-                })
-                mode = "prob" if row.get("_probabilistic") else "det"
-                result = run_momp_benchmark(mode, ek, rc)
-                result["model"] = row.get("Model", ek)
-                runs.append(result)
+    import hashlib
+    settings_signature = hashlib.sha256(json.dumps({
+        "shared": shared_settings, "windows": model_run_windows,
+        "models": [r["_exec_key"] for r in active_rows],
+        "ground_truth": ground_truth, "coverage": benchmark_coverage,
+        "forecast_window": forecast_window,
+    }, sort_keys=True, default=str).encode()).hexdigest()
+    previous_signature = st.session_state.get("benchmark_settings_signature")
+    if previous_signature != settings_signature:
+        # Settings edits do not change files on disk. Keep cached results until
+        # a benchmark runs; clearing here reloads every results tab on each edit.
+        if not run_clicked and st.session_state.get("benchmark_last_run", {}).get("ok"):
+            st.warning("Benchmark settings changed. Run Benchmark to compute results for these settings; existing outputs belong to an earlier run.")
 
-        st.cache_data.clear()
-        st.session_state["benchmark_last_run"] = {
-            "ok": all(r.get("ok") for r in runs),
-            "returncode": max(int(r.get("returncode", 1)) for r in runs),
-            "mode": runs[-1].get("mode", ""),
-            "runtime_dir": runs[-1].get("runtime_dir", str(ROMP_DEMO_OUT_DIR)),
-            "command": "\n".join(r.get("command", "") for r in runs),
-            "runs": runs,
-        }
+    if run_clicked and not active_rows:
+        st.warning("Select at least one model in the Models table, then click Run Benchmark.")
+
+    if run_clicked and active_rows and st.session_state.get("benchmark_active_job") is None:
+        plans = []
+        for row in active_rows:
+            rc = dict(model_run_windows.get(row["_row_key"], {}))
+            rc.update(shared_settings)
+            rc.update({"ground_truth": ground_truth, "benchmark_coverage": benchmark_coverage,
+                       "forecast_window": forecast_window})
+            plans.append({"mode": "prob" if row.get("_probabilistic") else "det",
+                          "model_key": row["_exec_key"], "label": row.get("Model", row["_exec_key"]), "config": rc})
+        st.session_state["benchmark_active_job"] = BenchmarkJob(run_momp_benchmark, plans, settings_signature).start()
         st.rerun()
+
+    if st.session_state.get("benchmark_active_job") is not None:
+        render_benchmark_job()
+
+    last_run = st.session_state.get("benchmark_last_run")
+    if last_run:
+        if last_run.get("cancelled"):
+            cleanup_warning = cancellation_warning(last_run)
+            if cleanup_warning:
+                st.warning("Stop requested. Worker shutdown could not be fully verified.")
+                st.caption(cleanup_warning)
+            else:
+                st.info("Benchmark cancelled by you. Remaining queued models were skipped.")
+            st.caption("Results from the interrupted run may be incomplete. Use Run Benchmark to generate a complete set of results.")
+        elif last_run.get("ok"):
+            st.success("Latest benchmark run completed successfully.")
+        else:
+            st.error("Latest benchmark run failed. See the execution log below for the cause.")
+        with st.expander("Latest benchmark execution log", expanded=not last_run.get("ok") and not last_run.get("cancelled")):
+            results = last_run.get("runs", [])
+            for index, result in enumerate(results):
+                cancelled = last_run.get("cancelled") and index == len(results) - 1
+                st.write(f"{result.get('model', 'Benchmark')} — {execution_status(result, cancelled=cancelled)}")
+                if result.get("command"):
+                    st.code(result["command"], language="bash")
+                log = "\n".join(str(result.get(key) or "") for key in ("stdout", "stderr")).strip()
+                st.code(log or "The process produced no output.", language="text")
 
     # Results Section
     section_header("Results", "sky")
-    map_outputs = discover_map_outputs()
+    if st.button("Refresh saved results", key="benchmark_refresh_results",
+                 help="Reload saved metrics, maps and figures after a benchmark completes."):
+        st.cache_data.clear()
+        st.rerun()
     tab_labels = ["Metric Map", "All Metrics", "Benchmark Outputs"]
     if OTS_AVAILABLE:
         tab_labels.append("Onset Analysis")
@@ -3115,703 +3533,757 @@ def page() -> None:
     if PDF_AVAILABLE or PHASE_6_AVAILABLE:
         tab_labels.append("Benchmark Report & Export")
 
-    res_tabs = st.tabs(tab_labels)
+    res_tabs = st.tabs(tab_labels, key="benchmark_result_tabs", on_change="rerun")
+    map_outputs = discover_map_outputs() if any(
+        tab.open and label in {"Metric Map", "All Metrics", "Benchmark Report & Export"}
+        for tab, label in zip(res_tabs, tab_labels)) else []
 
     # Tab 1: Metric Map
-    with res_tabs[0]:
-        if not map_outputs:
-            info_box("No map outputs found.", "amber")
-        else:
-            c1, c2, c3, c4 = st.columns(4)
-            ml = c1.selectbox("Metric", list(MAP_METRICS.keys()), key="m_ml")
-            all_w: set = set()
-            for o in map_outputs:
-                all_w.update(o["windows"])
-            wl = c2.selectbox("Lead Time", sorted(list(all_w)), key="m_wl")
-            m_opts = sorted({o["model_label"] for o in map_outputs if wl in o["windows"]})
-            model_label = c3.selectbox("Model", m_opts, key="m_mod")
-            sf_avail = _map_load_admin_shapefile() is not None
-            al = c4.selectbox("Subregion level", ["All", "Admin1", "Admin2", "Admin3"] if sf_avail else ["All"], disabled=not sf_avail, key="m_al")
-            an = "All"
-            if al != "All":
-                ao = map_admin_options(al)
-                if ao:
-                    an = st.selectbox("Subregion", ["All"] + ao, key="m_an")
+    if res_tabs[0].open:
+        with res_tabs[0]:
+            if not map_outputs:
+                info_box("No map outputs found.", "amber")
+            else:
+                c1, c2, c3, c4 = st.columns(4)
+                ml = c1.selectbox("Metric", list(MAP_METRICS.keys()), key="m_ml")
+                all_w: set = set()
+                for o in map_outputs:
+                    all_w.update(o["windows"])
+                wl = c2.selectbox("Lead Time", sorted(list(all_w)), key="m_wl")
+                m_opts = sorted({o["model_label"] for o in map_outputs if wl in o["windows"]})
+                model_label = c3.selectbox("Model", m_opts, key="m_mod")
+                sf_avail = _map_load_admin_shapefile() is not None
+                al = c4.selectbox("Subregion level", ["All", "Admin1", "Admin2", "Admin3"] if sf_avail else ["All"], disabled=not sf_avail, key="m_al")
+                an = "All"
+                if al != "All":
+                    ao = map_admin_options(al)
+                    if ao:
+                        an = st.selectbox("Subregion", ["All"] + ao, key="m_an")
 
-            sel_out = next((o for o in map_outputs if o["model_label"] == model_label and wl in o["windows"]), None)
-            if sel_out:
-                ual = "" if al == "All" else al
-                uan = "" if an == "All" else an
-                base_da = load_map_da_cached(sel_out["path"], ml, wl, ual, uan, file_mtime=sel_out.get("mtime", 0.0))
-                admin_sub = _get_admin_subset(ual, uan)
+                sel_out = next((o for o in map_outputs if o["model_label"] == model_label and wl in o["windows"]), None)
+                if sel_out:
+                    ual = "" if al == "All" else al
+                    uan = "" if an == "All" else an
+                    base_da = load_map_da_cached(sel_out["path"], ml, wl, ual, uan, file_mtime=sel_out.get("mtime", 0.0))
+                    admin_sub = _get_admin_subset(ual, uan)
 
-                if base_da is not None:
-                    mm = MAP_METRICS[ml]
-                    sub_tabs = st.tabs(["Values", "Skill", "Difference", "Swipe Compare"])
-                    
+                    if base_da is not None:
+                        mm = MAP_METRICS[ml]
+                        sub_tabs = st.tabs(["Values", "Skill", "Difference", "Swipe Compare"], key="benchmark_map_tabs", on_change="rerun")
 
-                    # Sub-tab 1: Values
-                    with sub_tabs[0]:
-                        fig = plot_map(
-                            base_da, 
-                            f"{ml} - {model_label} - {wl}", 
-                            cmap=mm["cmap"], 
-                            unit=mm["unit"],
-                            admin_gdf=admin_sub
-                        )
-                        if fig:
-                            st.pyplot(fig)
-                            plt.close(fig)
-                        df = compute_model_comparison_cached(ml, wl, ual, uan)
-                        if not df.empty:
-                            df["Selected"] = np.where(df["Model"] == model_label, "Yes", "")
-                            st.dataframe(df, width='stretch', hide_index=True)
 
-                    with sub_tabs[1]:
-                        thr = mm["threshold"]
-                        skill_da = (base_da <= thr).astype(float).where(base_da.notnull())
-                        cbar_kw = {
-                            "label": f"Skill Status ({ml})",
-                            "ticks": [0, 1],
-                            "format": matplotlib.ticker.FixedFormatter(
-                                [f"Fail (>{thr}{mm['unit']})", f"Pass (\u2264{thr}{mm['unit']})"]
-                            ),
-                        }
-                        fig = plot_map(
-                            skill_da,
-                            f"Skill - {ml} (Threshold \u2264 {thr}{mm['unit']})",
-                            cmap="RdYlGn",
-                            vmin=0,
-                            vmax=1,
-                            cbar_kwargs=cbar_kw,
-                            admin_gdf=admin_sub
-                        )
-                        if fig:
-                            st.pyplot(fig)
-                            plt.close(fig)
-                        st.caption(
-                            f"**Skill Classification**: Green = Skillful ({ml} \u2264 {thr}{mm['unit']}), "
-                            f"Red = Unskillful ({ml} > {thr}{mm['unit']})."
-                        )
+                        # Sub-tab 1: Values
+                        if sub_tabs[0].open:
+                            with sub_tabs[0]:
+                                fig = plot_map(
+                                    base_da,
+                                    f"{ml} - {model_label} - {wl}",
+                                    cmap=mm["cmap"],
+                                    unit=mm["unit"],
+                                    admin_gdf=admin_sub
+                                )
+                                if fig:
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                df = compute_model_comparison_cached(ml, wl, ual, uan)
+                                if not df.empty:
+                                    df["Selected"] = np.where(df["Model"] == model_label, "Yes", "")
+                                    st.dataframe(df, width='stretch', hide_index=True)
 
-                    with sub_tabs[2]:
-                        dc1, dc2 = st.columns(2)
-                        default_cmp_idx = 0
-                        for i, m in enumerate(m_opts):
-                            if m != model_label:
-                                default_cmp_idx = i
-                                break
-                        cm = dc1.selectbox("Compare against model", m_opts, index=default_cmp_idx, key="d_cm")
-                        lead_opts_diff = [w for w in ["Days 1–15", "Days 16–30"] if w in all_w]
-                        default_lead_idx = 0
-                        for i, w in enumerate(lead_opts_diff):
-                            if w != wl:
-                                default_lead_idx = i
-                                break
-                        cw = dc2.selectbox("Compare against lead time", lead_opts_diff, index=default_lead_idx, key="d_cw")
-                        
-                        if cm == model_label and cw == wl:
-                            info_box("Cannot compare a map with itself.", "amber")
-                        else:
-                            cout = next((o for o in map_outputs if o["model_label"] == cm and cw in o["windows"]), None)
-                            if cout:
-                                cda = load_map_da_cached(cout["path"], ml, cw, ual, uan, file_mtime=cout.get("mtime", 0.0))
-                                if cda is not None:
-                                    dda = subtract_maps(base_da, cda)
-                                    if dda is not None:
-                                        fig = plot_map(
-                                            dda, 
-                                            f"Difference - {model_label} minus {cm}", 
-                                            diverging=True,
-                                            admin_gdf=admin_sub
-                                        )
-                                        if fig:
-                                            st.pyplot(fig)
-                                            plt.close(fig)
+                        if sub_tabs[1].open:
+                            with sub_tabs[1]:
+                                thr = mm["threshold"]
+                                skill_da = (base_da <= thr).astype(float).where(base_da.notnull())
+                                cbar_kw = {
+                                    "label": f"Skill Status ({ml})",
+                                    "ticks": [0, 1],
+                                    "format": matplotlib.ticker.FixedFormatter(
+                                        [f"Fail (>{thr}{mm['unit']})", f"Pass (\u2264{thr}{mm['unit']})"]
+                                    ),
+                                }
+                                fig = plot_map(
+                                    skill_da,
+                                    f"Skill - {ml} (Threshold \u2264 {thr}{mm['unit']})",
+                                    cmap="RdYlGn",
+                                    vmin=0,
+                                    vmax=1,
+                                    cbar_kwargs=cbar_kw,
+                                    admin_gdf=admin_sub,
+                                    boundary_path=climatology_boundary_path(config) if "climatology" in model_label.casefold() else None,
+                                )
+                                if fig:
+                                    st.pyplot(fig)
+                                    plt.close(fig)
+                                st.caption(
+                                    f"**Skill Classification**: Green = Skillful ({ml} \u2264 {thr}{mm['unit']}), "
+                                    f"Red = Unskillful ({ml} > {thr}{mm['unit']})."
+                                )
 
-                    with sub_tabs[3]:
-                        sc1, sc2, _ = st.columns(3)
-                        cb = sc1.radio("Compare by", ["Model", "Lead Time"], horizontal=True, key="s_cb")
-                        rm, rw = model_label, wl
-                        if cb == "Model":
-                            default_swipe_idx = 0
-                            for i, m in enumerate(m_opts):
-                                if m != model_label:
-                                    default_swipe_idx = i
-                                    break
-                            rm = sc2.selectbox("Right model", m_opts, index=default_swipe_idx, key="s_rm")
-                        else:
-                            swipe_lead_opts = [w for w in ["Days 1–15", "Days 16–30"] if w in all_w]
-                            default_swipe_lead_idx = 0
-                            for i, w in enumerate(swipe_lead_opts):
-                                if w != wl:
-                                    default_swipe_lead_idx = i
-                                    break
-                            rw = sc2.selectbox("Right lead time", swipe_lead_opts, index=default_swipe_lead_idx, key="s_rw")
+                        if sub_tabs[2].open:
+                            with sub_tabs[2]:
+                                dc1, dc2 = st.columns(2)
+                                default_cmp_idx = 0
+                                for i, m in enumerate(m_opts):
+                                    if m != model_label:
+                                        default_cmp_idx = i
+                                        break
+                                cm = dc1.selectbox("Compare against model", m_opts, index=default_cmp_idx, key="d_cm")
+                                lead_opts_diff = [w for w in ["Days 1–15", "Days 16–30"] if w in all_w]
+                                default_lead_idx = 0
+                                for i, w in enumerate(lead_opts_diff):
+                                    if w != wl:
+                                        default_lead_idx = i
+                                        break
+                                cw = dc2.selectbox("Compare against lead time", lead_opts_diff, index=default_lead_idx, key="d_cw")
 
-                        is_same = (cb == "Model" and rm == model_label) or (cb == "Lead Time" and rw == wl)
-                        if is_same:
-                            info_box("Cannot compare a map with itself.", "amber")
-                        else:
-                            rout = next((o for o in map_outputs if o["model_label"] == rm and rw in o["windows"]), None)
-                            if rout:
-                                rda = load_map_da_cached(rout["path"], ml, rw, ual, uan, file_mtime=rout.get("mtime", 0.0))
-                                if rda is not None:
-                                    sp = st.slider("Drag to swipe", 0, 100, 50, key="s_sp")
-                                    vmin, vmax = _shared_vmin_vmax(base_da.values, rda.values)
-                                    
-                                    lf = plot_map(
-                                        base_da, 
-                                        f"Left: {model_label} ({wl})", 
-                                        cmap=mm["cmap"], 
-                                        unit=mm["unit"], 
-                                        vmin=vmin, 
-                                        vmax=vmax,
-                                        admin_gdf=admin_sub
-                                    )
-                                    rf = plot_map(
-                                        rda, 
-                                        f"Right: {rm} ({rw})", 
-                                        cmap=mm["cmap"], 
-                                        unit=mm["unit"], 
-                                        vmin=vmin, 
-                                        vmax=vmax,
-                                        admin_gdf=admin_sub
-                                    )
-                                    lf = plot_map(base_da, f"Left: {model_label} ({wl})", cmap=mm["cmap"], unit=mm["unit"], vmin=vmin, vmax=vmax)
-                                    rf = plot_map(rda, f"Right: {rm} ({rw})", cmap=mm["cmap"], unit=mm["unit"], vmin=vmin, vmax=vmax)
-                                    
-                                    if lf and rf:
-                                        lb = fig_to_bytes(lf, False)
-                                        rb = fig_to_bytes(rf, False)
-                                        comp = create_swipe_comparison_image(lb, rb, sp)
-                                        if comp:
-                                            lc1, lc2 = st.columns(2)
-                                            lc1.markdown(f"**Left Map (0–{sp}%):** {model_label} - {wl}")
-                                            lc2.markdown(f"**Right Map ({sp}–100%):** {rm} - {rw}")
-                                            st.image(comp, width='stretch')
-                            else:
-                                info_box(f"Output for {rm} ({rw}) not available.", "amber")
+                                if cm == model_label and cw == wl:
+                                    info_box("Cannot compare a map with itself.", "amber")
+                                else:
+                                    cout = next((o for o in map_outputs if o["model_label"] == cm and cw in o["windows"]), None)
+                                    if cout:
+                                        cda = load_map_da_cached(cout["path"], ml, cw, ual, uan, file_mtime=cout.get("mtime", 0.0))
+                                        if cda is not None:
+                                            dda = subtract_maps(base_da, cda)
+                                            if dda is not None:
+                                                fig = plot_map(
+                                                    dda,
+                                                    f"Difference - {model_label} minus {cm}",
+                                                    diverging=True,
+                                                    admin_gdf=admin_sub
+                                                )
+                                                if fig:
+                                                    st.pyplot(fig)
+                                                    plt.close(fig)
+
+                        if sub_tabs[3].open:
+                            with sub_tabs[3]:
+                                sc1, sc2, _ = st.columns(3)
+                                cb = sc1.radio("Compare by", ["Model", "Lead Time"], horizontal=True, key="s_cb")
+                                rm, rw = model_label, wl
+                                if cb == "Model":
+                                    default_swipe_idx = 0
+                                    for i, m in enumerate(m_opts):
+                                        if m != model_label:
+                                            default_swipe_idx = i
+                                            break
+                                    rm = sc2.selectbox("Right model", m_opts, index=default_swipe_idx, key="s_rm")
+                                else:
+                                    swipe_lead_opts = [w for w in ["Days 1–15", "Days 16–30"] if w in all_w]
+                                    default_swipe_lead_idx = 0
+                                    for i, w in enumerate(swipe_lead_opts):
+                                        if w != wl:
+                                            default_swipe_lead_idx = i
+                                            break
+                                    rw = sc2.selectbox("Right lead time", swipe_lead_opts, index=default_swipe_lead_idx, key="s_rw")
+
+                                is_same = (cb == "Model" and rm == model_label) or (cb == "Lead Time" and rw == wl)
+                                if is_same:
+                                    info_box("Cannot compare a map with itself.", "amber")
+                                else:
+                                    rout = next((o for o in map_outputs if o["model_label"] == rm and rw in o["windows"]), None)
+                                    if rout:
+                                        rda = load_map_da_cached(rout["path"], ml, rw, ual, uan, file_mtime=rout.get("mtime", 0.0))
+                                        if rda is not None:
+                                            sp = st.slider("Drag to swipe", 0, 100, 50, key="s_sp")
+                                            vmin, vmax = _shared_vmin_vmax(base_da.values, rda.values)
+
+                                            lf = plot_map(
+                                                base_da,
+                                                f"Left: {model_label} ({wl})",
+                                                cmap=mm["cmap"],
+                                                unit=mm["unit"],
+                                                vmin=vmin,
+                                                vmax=vmax,
+                                                admin_gdf=admin_sub
+                                            )
+                                            rf = plot_map(
+                                                rda,
+                                                f"Right: {rm} ({rw})",
+                                                cmap=mm["cmap"],
+                                                unit=mm["unit"],
+                                                vmin=vmin,
+                                                vmax=vmax,
+                                                admin_gdf=admin_sub
+                                            )
+
+                                            if lf and rf:
+                                                lb = fig_to_bytes(lf, False)
+                                                rb = fig_to_bytes(rf, False)
+                                                comp = create_swipe_comparison_image(lb, rb, sp)
+                                                if comp:
+                                                    lc1, lc2 = st.columns(2)
+                                                    lc1.markdown(f"**Left Map (0–{sp}%):** {model_label} - {wl}")
+                                                    lc2.markdown(f"**Right Map ({sp}–100%):** {rm} - {rw}")
+                                                    st.image(comp, width='stretch')
+                                    else:
+                                        info_box(f"Output for {rm} ({rw}) not available.", "amber")
 
     # Tab 2: All Metrics
-    with res_tabs[1]:
-        st.markdown("### ALL METRICS")
-        tbl: Dict[tuple, float] = {}
-        mods: set = set()
-        wins: set = set()
-        for o in map_outputs:
-            vals = load_metric_values_by_window_cached(o["path"])
-            for w, metrics in vals.items():
-                for mn, val in metrics.items():
-                    tbl[(mn, w, o["model_label"])] = val
-                    mods.add(o["model_label"])
-                    wins.add(w)
-        if tbl:
-            pref_m = ["GraphCast", "FuXi", "AIFS Single v2", "AIFS Ensemble v2", "GenCast", "Traditional Climatology"]
-            om = [m for m in pref_m if m in mods] + sorted(mods - set(pref_m))
-            ow = [w for w in ["Days 1–15", "Days 16–30"] if w in wins] + sorted(wins - {"Days 1–15", "Days 16–30"})
-            st.markdown(build_metrics_table_html(tbl, om, ow), unsafe_allow_html=True)
-
-        st.divider()
-        section_header("Detailed Metric Distributions", "violet")
-        st.caption(
-            "Distribution statistics computed directly from gridded model outputs. "
-            "Green = better than baseline, Red = worse than baseline. Bold = best value."
-            "Green = better (lower than baseline), Red = worse (higher than baseline). Bold = best value."
-
-        )
-        stats_df = compute_metric_distribution_stats()
-        if stats_df.empty:
-            info_box("No distribution statistics could be computed from the available outputs.", "amber")
-        else:
-
-            def _norm(s):
-                return str(s).replace("–", "-").strip().lower()
-
-            stat_cols = ["Mean", "Min", "Median", "P75", "P90", "Max"]
-            best_vals = {}
-            baseline_vals = {}
-            comparison_scales = {}
-            
-            for (window, metric), g in stats_df.groupby(["Lead Window", "Metric"]):
-                win_k = _norm(window)
-                met_k = _norm(metric)
-                higher_better = is_metric_higher_better(metric)
-                
-                clim_mask = g["Model"].apply(lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))
-                clim_row = g[clim_mask]
-                
-                for stat in stat_cols:
-                    stat_k = _norm(stat)
-                    vals = pd.to_numeric(g[stat], errors="coerce").dropna()
-                    
-                    if not vals.empty:
-                        best_vals[(win_k, met_k, stat_k)] = float(vals.max()) if higher_better else float(vals.min())
-                        
-                    if not clim_row.empty:
-                        clim_v = pd.to_numeric(clim_row[stat], errors="coerce").dropna()
-                        if not clim_v.empty:
-                            comparison_key = (win_k, met_k, stat_k)
-                            baseline_value = float(clim_v.iloc[0])
-                            baseline_vals[comparison_key] = baseline_value
-                            model_vals = pd.to_numeric(g.loc[~clim_mask, stat], errors="coerce").dropna()
-                            differences = (model_vals - baseline_value).abs()
-                            if not differences.empty:
-                                comparison_scales[comparison_key] = float(differences.max())
-
-            metric_order = {"false alarm rate": 0, "miss rate": 1, "mean absolute error": 2}
-            model_order = {"aifs single v2": 0, "fuxi": 1, "graphcast": 2, "aifs ensemble v2": 3, "gencast": 4, "traditional climatology": 5, "climatology": 5}
-            window_order = {"days 1-15": 0, "days 16-30": 1}
-            
-            df_sorted = stats_df.copy()
-            df_sorted["metric_sort"] = df_sorted["Metric"].apply(lambda m: metric_order.get(_norm(m), 999))
-            df_sorted["model_sort"] = df_sorted["Model"].apply(lambda m: model_order.get(_norm(m), 999))
-            df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lambda w: window_order.get(_norm(w), 999))
-            df_sorted = df_sorted.sort_values(["model_sort", "window_sort", "metric_sort"])
-
-            html_blocks = []
-            for (model_label, window_label), group_df in df_sorted.groupby(["Model", "Lead Window"], sort=False):
-                win_k = _norm(window_label)
-                is_clim = any(k in _norm(model_label) for k in ["clim", "trad", "base", "ref"])
-                
-                display_model = "CLIMATOLOGY" if is_clim else str(model_label).replace(" ", "_").upper()
-                display_window = str(window_label).upper()
-                tolerance_days = 5 if "16" in win_k else 3
-                
-                rows_html = []
-                for _, row in group_df.iterrows():
-                    metric = str(row["Metric"])
-                    met_k = _norm(metric)
-                    higher_better = is_metric_higher_better(metric)
-                    is_fraction = bool(row.get("fraction", False)) or any(k in met_k for k in ["rate", "far", "mr"])
-
-                    cells_html = [f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; font-weight:600; background-color:#ffffff; color:#0f172a;">{metric}</td>']
-                    
-                    for stat in stat_cols:
-                        stat_k = _norm(stat)
-                        val = row.get(stat, np.nan)
-                        
-                        if pd.isna(val) or not np.isfinite(val):
-                            cells_html.append('<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:#ffffff; color:#94a3b8;">-</td>')
-                            continue
-
-                        val_float = float(val)
-                        formatted = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
-
-                        best_v = best_vals.get((win_k, met_k, stat_k))
-                        if best_v is not None and abs(val_float - best_v) <= 1e-5:
-                            formatted = f"<b>{formatted}</b>"
-
-                        base_v = baseline_vals.get((win_k, met_k, stat_k))
-                        scale = comparison_scales.get((win_k, met_k, stat_k))
-                        
-                        comparison_style = _distribution_cell_style(
-                            val_float,
-                            base_v,
-                            scale,
-                            higher_better,
-                            is_baseline=is_clim,
-                        )
-                        cell_style = f"border:1px solid #cbd5e1; padding:8px 12px; text-align:right; {comparison_style}"
-                        cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
-                        
-                    unit_str = "fraction" if is_fraction else "days"
-                    cells_html.append(f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; color:#64748b; background-color:#ffffff;">{unit_str}</td>')
-                    rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
-                    
-                card_html = (
-                    f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
-                    f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">{display_model} - {display_window}</div>'
-                    f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">+/-{tolerance_days} day tolerance</div>'
-                    f'<table style="width:100%; border-collapse:collapse; font-size:0.88rem;">'
-                    f'<thead><tr style="background-color:#f1f5f9; color:#0f172a; text-transform:uppercase; font-size:0.8rem;">'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left;">METRIC</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEAN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MIN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEDIAN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P75</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P90</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MAX</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center;">UNIT</th>'
-                    f'</tr></thead><tbody>'
-                    f'{"".join(rows_html)}'
-                    f'</tbody></table></div>'
-                )
-                html_blocks.append(card_html)
-                
-            st.markdown("".join(html_blocks), unsafe_allow_html=True)
-            # Normalize string helper to prevent Unicode en-dash / hyphen key lookup misses
-            def _norm(s):
-                return str(s).replace("–", "-").strip().lower()
-
-            stat_cols = ["Mean", "Min", "Median", "P75", "P90", "Max"]
-            
-            # Pre-calculate Climatology baseline & Minimum (Best) values
-            best_vals = {}
-            baseline_vals = {}
-            
-            for (window, metric), g in stats_df.groupby(["Lead Window", "Metric"]):
-                win_k = _norm(window)
-                met_k = _norm(metric)
-                
-                # Check for Climatology / Baseline model
-                clim_mask = g["Model"].apply(lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))
-                clim_row = g[clim_mask]
-                
-                for stat in stat_cols:
-                    stat_k = _norm(stat)
-                    vals = pd.to_numeric(g[stat], errors="coerce").dropna()
-                    
-                    if not vals.empty:
-                        best_vals[(win_k, met_k, stat_k)] = float(vals.min())
-                        
-                    if not clim_row.empty:
-                        clim_v = pd.to_numeric(clim_row[stat], errors="coerce").dropna()
-                        if not clim_v.empty:
-                            baseline_vals[(win_k, met_k, stat_k)] = float(clim_v.iloc[0])
-                    elif not vals.empty:
-                        # Fallback baseline if no explicit Climatology row exists
-                        baseline_vals[(win_k, met_k, stat_k)] = float(vals.mean())
-
-            # Sort ordering
-            metric_order = {"false alarm rate": 0, "miss rate": 1, "mean absolute error": 2}
-            model_order = {"aifs single v2": 0, "fuxi": 1, "graphcast": 2, "aifs ensemble v2": 3, "gencast": 4, "traditional climatology": 5, "climatology": 5}
-            window_order = {"days 1-15": 0, "days 16-30": 1}
-            
-            df_sorted = stats_df.copy()
-            df_sorted["metric_sort"] = df_sorted["Metric"].apply(lambda m: metric_order.get(_norm(m), 999))
-            df_sorted["model_sort"] = df_sorted["Model"].apply(lambda m: model_order.get(_norm(m), 999))
-            df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lambda w: window_order.get(_norm(w), 999))
-            df_sorted = df_sorted.sort_values(["model_sort", "window_sort", "metric_sort"])
-
-            html_blocks = []
-            for (model_label, window_label), group_df in df_sorted.groupby(["Model", "Lead Window"], sort=False):
-                win_k = _norm(window_label)
-                is_clim = any(k in _norm(model_label) for k in ["clim", "trad", "base", "ref"])
-                
-                display_model = "CLIMATOLOGY" if is_clim else str(model_label).replace(" ", "_").upper()
-                display_window = str(window_label).upper()
-                tolerance_days = 5 if "16" in win_k else 3
-                
-                rows_html = []
-                for _, row in group_df.iterrows():
-                    metric = str(row["Metric"])
-                    met_k = _norm(metric)
-                    is_fraction = bool(row.get("fraction", False)) or any(k in met_k for k in ["rate", "far", "mr"])
-
-                    cells_html = [f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; font-weight:600; background-color:#ffffff; color:#0f172a;">{metric}</td>']
-                    
-                    for stat in stat_cols:
-                        stat_k = _norm(stat)
-                        val = row.get(stat, np.nan)
-                        
-                        if pd.isna(val) or not np.isfinite(val):
-                            cells_html.append('<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:#ffffff; color:#94a3b8;">-</td>')
-                            continue
-
-                        val_float = float(val)
-                        formatted = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
-
-                        # Apply bolding if minimum value across models
-                        best_v = best_vals.get((win_k, met_k, stat_k))
-                        if best_v is not None and abs(val_float - best_v) <= 1e-5:
-                            formatted = f"<b>{formatted}</b>"
-
-                        # Explicit color coding vs baseline
-                        base_v = baseline_vals.get((win_k, met_k, stat_k))
-                        
-                        if is_clim or base_v is None:
-                            bg_color = "#f1f5f9"
-                            text_color = "#334155"
-                            font_weight = "normal"
-                        else:
-                            diff = val_float - base_v
-                            if abs(diff) <= 1e-5:
-                                bg_color = "#f1f5f9"
-                                text_color = "#334155"
-                                font_weight = "normal"
-                            elif diff < 0:
-                                # LOWER than baseline = BETTER (Green)
-                                bg_color = "#dcfce7"
-                                text_color = "#15803d"
-                                font_weight = "600"
-                            else:
-                                # HIGHER than baseline = WORSE (Red)
-                                bg_color = "#fee2e2"
-                                text_color = "#b91c1c"
-                                font_weight = "normal"
-
-                        cell_style = f"border:1px solid #cbd5e1; padding:8px 12px; text-align:right; background-color:{bg_color} !important; color:{text_color} !important; font-weight:{font_weight};"
-                        cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
-                        
-                    unit_str = "fraction" if is_fraction else "days"
-                    cells_html.append(f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; color:#64748b; background-color:#ffffff;">{unit_str}</td>')
-                    rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
-                    
-                card_html = (
-                    f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
-                    f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">{display_model} - {display_window}</div>'
-                    f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">+/-{tolerance_days} day tolerance</div>'
-                    f'<table style="width:100%; border-collapse:collapse; font-size:0.88rem;">'
-                    f'<thead><tr style="background-color:#f1f5f9; color:#0f172a; text-transform:uppercase; font-size:0.8rem;">'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left;">METRIC</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEAN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MIN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEDIAN</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P75</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P90</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MAX</th>'
-                    f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center;">UNIT</th>'
-                    f'</tr></thead><tbody>'
-                    f'{"".join(rows_html)}'
-                    f'</tbody></table></div>'
-                )
-                html_blocks.append(card_html)
-                
-            st.markdown("".join(html_blocks), unsafe_allow_html=True)
-    # Tab 3: Benchmark Outputs
-    with res_tabs[2]:
-        st.markdown("MOMP benchmark output figures and datasets.")
-        momp_figures = collect_reference_figures()
-
-        if not momp_figures:
-            info_box("No MOMP output figures found. Run a benchmark first.", "amber")
-        else:
-            # Gather non-empty categories
-            avail_cats = [cat for cat in REFERENCE_CATEGORY_ORDER if momp_figures.get(cat)]
-            if not avail_cats:
-                avail_cats = [cat for cat, paths in momp_figures.items() if paths]
-
-            # Dropdown & Layout Controls Row
-            fc1, fc2, fc3, fc4 = st.columns([1.2, 1.2, 1.5, 1.0])
-
-            selected_cat = fc1.selectbox(
-                "Category", 
-                ["All Categories"] + avail_cats, 
-                key="fig_sel_cat"
+    if res_tabs[1].open:
+        with res_tabs[1]:
+            from ui.utils.metric_filters import (
+                lead_window_sort_key, load_probabilistic_metric_table,
+                metric_comparison_groups, metric_model_label, metric_model_options,
             )
 
-            # Filter paths by category
-            if selected_cat == "All Categories":
-                cat_paths = [p for paths in momp_figures.values() for p in paths]
+            st.markdown("### ALL METRICS")
+            tbl: Dict[tuple, float] = {}
+            for output in map_outputs:
+                values = load_metric_values_by_window_cached(output["path"])
+                for window, metrics in values.items():
+                    for metric, value in metrics.items():
+                        tbl[(metric, window, metric_model_label(output["model_label"]))] = value
+            probability_table, probability_baselines, summary_errors = load_probabilistic_metric_table(ROMP_DEMO_OUT_DIR)
+            tbl.update(probability_table)
+            models, categories = metric_model_options(
+                CONFIG_BENCHMARK_MODEL_CATALOG, {key[2] for key in tbl} |
+                {output["model_label"] for output in map_outputs} |
+                {getattr(config, "ref_model", "climatology")})
+            lead_options = sorted({key[1] for key in tbl} | {"Days 1–15", "Days 16–30"}, key=lead_window_sort_key)
+            category_options = ["All"] + [category for category in ("Deterministic", "Probabilistic", "Climatology", "Other")
+                                          if category in categories.values()]
+            category = st.radio("Metric model category", category_options, horizontal=True, key="metrics_model_category")
+            eligible = [model for model in models if category == "All" or categories[model] == category]
+            all_models = st.checkbox("All models", value=True, key=f"metrics_all_models_{category}")
+            chosen_models = st.multiselect("Models to compare", eligible, default=eligible, disabled=all_models,
+                                          key=f"metrics_models_{category}")
+            om = eligible if all_models else chosen_models
+            ow = st.multiselect("Lead times", lead_options, default=lead_options,
+                                key=f"metrics_leads_{tuple(lead_options)}")
+            ow = sorted(ow, key=lead_window_sort_key)
+            st.caption("Scroll the table horizontally to view all models and lead times on smaller screens.")
+            if summary_errors:
+                st.warning("Some probabilistic summaries could not be read: " + "; ".join(summary_errors))
+            if om and ow:
+                for heading, group_models in metric_comparison_groups(om, categories):
+                    st.markdown(f"#### {heading}")
+                    selected = {key: value for key, value in tbl.items() if key[2] in group_models and key[1] in ow}
+                    present_metrics = {key[0] for key in selected}
+                    if not present_metrics:
+                        present_metrics = ({"Fair Brier Score", "Fair Brier Skill Score (%)", "Fair RPS", "Fair RPS Skill Score (%)", "AUC", "Reference AUC"}
+                                           if categories[group_models[0]] == "Probabilistic"
+                                           else {"Mean Absolute Error days", "Miss Rate fraction", "False Alarm Rate fraction"})
+                    # Keep configured models visible before they have generated outputs.
+                    for metric in present_metrics:
+                        for window in ow:
+                            for model in group_models:
+                                selected.setdefault((metric, window, model), None)
+                    st.markdown(build_metrics_table_html(selected, group_models, ow, baselines=probability_baselines).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
+                legacy_outputs = [output for output in map_outputs if
+                                  metric_model_label(output["model_label"]) in om and
+                                  set(output["windows"]) & set(ow) and
+                                  output.get("contingency_definition") != "timing_matched_v2"]
+                if legacy_outputs:
+                    st.warning("Saved onset error results predate the timing-miss correction. Rerun these models for the selected lead times to regenerate miss rates; historical grids do not retain the event counts needed to repair them.")
+                missing = [model for model in om if not any(
+                    key[2] == model and key[1] in ow and value is not None and np.isfinite(value)
+                    for key, value in tbl.items())]
+                if missing:
+                    st.info("No saved results for the selected lead times: " + ", ".join(missing))
             else:
-                cat_paths = momp_figures.get(selected_cat, [])
-
-            # Group paths by figure type for second dropdown
-            type_groups: Dict[str, List[str]] = {}
-            for path_str in cat_paths:
-                ftype = classify_figure_type(Path(path_str).name)
-                type_groups.setdefault(ftype, []).append(path_str)
-
-            avail_types = sorted(type_groups.keys())
-            selected_type = fc2.selectbox(
-                "Figure Type", 
-                ["All Figure Types"] + avail_types, 
-                key="fig_sel_type"
-            )
-
-            # Filter paths by figure type
-            if selected_type == "All Figure Types":
-                filtered_paths = cat_paths
-            else:
-                filtered_paths = type_groups.get(selected_type, [])
-
-            # Map formatted human labels back to file paths
-            label_to_path: Dict[str, str] = {}
-            fig_options = ["Show All Figures in Selection"]
-            for p in filtered_paths:
-                lbl = format_figure_label(p)
-                if lbl in label_to_path:
-                    lbl = f"{lbl} ({Path(p).name})"
-                label_to_path[lbl] = p
-                fig_options.append(lbl)
-
-            selected_fig_label = fc3.selectbox(
-                "Select Figure", 
-                fig_options, 
-                key="fig_sel_item"
-            )
-
-            view_mode = fc4.radio(
-                "Layout View",
-                ["Grid", "Full Width"],
-                horizontal=True,
-                key="fig_view_mode",
-            )
+                st.info("Select at least one model and one lead time to compare results.")
 
             st.divider()
-
-            # Render single selected figure or batch selection according to view mode
-            if selected_fig_label != "Show All Figures in Selection":
-                target_path = label_to_path.get(selected_fig_label)
-                if target_path:
-                    render_benchmark_figure_with_download(target_path, key_suffix="single")
+            section_header("Detailed Metric Distributions", "violet")
+            st.caption(
+                "Distribution statistics computed directly from gridded model outputs. "
+                "Green = better (lower than baseline), Red = worse (higher than baseline). Bold = best value."
+            )
+            spatial_models = {metric_model_label(output["model_label"]) for output in map_outputs}
+            stats_df = compute_metric_distribution_stats() if om and ow and set(om) & spatial_models else pd.DataFrame()
+            if not stats_df.empty:
+                stats_df = stats_df.copy()
+                stats_df["Model"] = stats_df["Model"].map(metric_model_label)
+                stats_df = stats_df[stats_df["Model"].isin(om) & stats_df["Lead Window"].isin(ow)]
+            if stats_df.empty:
+                info_box("No gridded distributions are available for these selections. Scalar probabilistic results, when available, are shown above.", "amber")
             else:
-                if not filtered_paths:
-                    info_box("No figures match the selected dropdown filters.", "amber")
-                else:
-                    st.caption(f"Displaying {len(filtered_paths)} figure(s)")
-                    
-                    if view_mode == "Full Width":
-                        for idx, p in enumerate(filtered_paths):
-                            render_benchmark_figure_with_download(p, key_suffix=f"full_{idx}")
-                            st.divider()
-                    else:  # Grid View (2 Columns)
-                        for i in range(0, len(filtered_paths), 2):
-                            cols = st.columns(2)
-                            for j, col in enumerate(cols):
-                                idx = i + j
-                                if idx < len(filtered_paths):
-                                    with col:
-                                        render_benchmark_figure_with_download(
-                                            filtered_paths[idx], key_suffix=f"grid_{idx}"
-                                        )
+                # Normalize string helper to prevent Unicode en-dash / hyphen key lookup misses
+                def _norm(s):
+                    return str(s).replace("–", "-").strip().lower()
 
-        st.divider()
-        section_header("NetCDF Data Explorer", "sky")
-        nc_files = sorted(str(p.resolve()) for p in ROMP_DEMO_OUT_DIR.rglob("*.nc"))
-        
-        if nc_files:
-            sel = st.selectbox("Dataset", nc_files, format_func=format_nc_label, key="nc_explorer_sel")
-            try:
-                ds = _safe_open_dataset(sel)
-                # Filter out coordinate variables or time-only bounds
-                vars_list = [v for v in ds.data_vars if "time" not in v.lower() and "bounds" not in v.lower()]
-                if vars_list:
-                    vn = st.selectbox("Variable", vars_list, key="nc_explorer_var")
-                    _render_variable_plot(ds, vn, format_nc_label(sel))
+                stat_cols = ["Mean", "Min", "Median", "P75", "P90", "Max"]
+
+                # Pre-calculate Climatology baseline & Best values
+                best_vals = {}
+                baseline_vals = {}
+                comparison_scales = {}
+
+                for (window, metric), g in stats_df.groupby(["Lead Window", "Metric"]):
+                    win_k = _norm(window)
+                    met_k = _norm(metric)
+                    higher_better = is_metric_higher_better(metric)
+
+                    # Check for Climatology / Baseline model
+                    clim_mask = g["Model"].apply(lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))
+                    clim_row = g[clim_mask]
+
+                    for stat in stat_cols:
+                        stat_k = _norm(stat)
+                        vals = pd.to_numeric(g[stat], errors="coerce").dropna()
+                        if not vals.empty:
+                            # Best value: minimum for error metrics, maximum for skill metrics
+                            best_vals[(win_k, met_k, stat_k)] = float(vals.max()) if higher_better else float(vals.min())
+
+                        if not clim_row.empty:
+                            clim_v = pd.to_numeric(clim_row[stat], errors="coerce").dropna()
+                            if not clim_v.empty:
+                                baseline_value = float(clim_v.iloc[0])
+                                baseline_vals[(win_k, met_k, stat_k)] = baseline_value
+
+                                # Calculate scale for intensity
+                                model_vals = pd.to_numeric(g.loc[~clim_mask, stat], errors="coerce").dropna()
+                                differences = (model_vals - baseline_value).abs()
+                                if not differences.empty:
+                                    comparison_scales[(win_k, met_k, stat_k)] = float(differences.max())
+
+                # Sort ordering
+                metric_order = {"false alarm rate": 0, "miss rate": 1, "mean absolute error": 2}
+                model_order = {
+                    "aifs single": 0, "fuxi": 1, "graphcast": 2,
+                    "aifs ensemble": 3, "gencast": 4,
+                    "traditional climatology": 5, "climatology": 5
+                }
+
+                df_sorted = stats_df.copy()
+                df_sorted["metric_sort"] = df_sorted["Metric"].apply(lambda m: metric_order.get(_norm(m), 999))
+                df_sorted["model_sort"] = df_sorted["Model"].apply(lambda m: model_order.get(_norm(m), 999))
+                df_sorted["window_sort"] = df_sorted["Lead Window"].apply(lead_window_sort_key)
+                df_sorted = df_sorted.sort_values(["window_sort", "model_sort", "metric_sort"])
+
+                html_blocks = []
+                for (model_label, window_label), group_df in df_sorted.groupby(["Model", "Lead Window"], sort=False):
+                    win_k = _norm(window_label)
+                    is_clim = any(k in _norm(model_label) for k in ["clim", "trad", "base", "ref"])
+                    display_model = "CLIMATOLOGY" if is_clim else str(model_label).replace(" ", "_").upper()
+                    display_window = str(window_label).upper()
+                    tolerance_days = 5 if "16" in win_k else 3
+
+                    rows_html = []
+                    for _, row in group_df.iterrows():
+                        metric = str(row["Metric"])
+                        met_k = _norm(metric)
+                        higher_better = is_metric_higher_better(metric)
+                        is_fraction = bool(row.get("fraction", False)) or any(k in met_k for k in ["rate", "far", "mr"])
+
+                        cells_html = [
+                            f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; '
+                            f'font-weight:600; background-color:#ffffff; color:#0f172a;">{metric}</td>'
+                        ]
+
+                        for stat in stat_cols:
+                            stat_k = _norm(stat)
+                            val = row.get(stat, np.nan)
+
+                            if pd.isna(val) or not np.isfinite(val):
+                                cells_html.append(
+                                    '<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right; '
+                                    'background-color:#ffffff; color:#94a3b8;">-</td>'
+                                )
+                                continue
+
+                            val_float = float(val)
+                            formatted = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
+
+                            # Apply bolding if best value across models
+                            best_v = best_vals.get((win_k, met_k, stat_k))
+                            if best_v is not None and abs(val_float - best_v) <= 1e-5:
+                                formatted = f"<b>{formatted}</b>"
+
+                            # Color coding vs baseline using _distribution_cell_style
+                            base_v = baseline_vals.get((win_k, met_k, stat_k))
+                            scale = comparison_scales.get((win_k, met_k, stat_k))
+                            comparison_style = _distribution_cell_style(
+                                val_float,
+                                base_v,
+                                scale,
+                                higher_better,
+                                is_baseline=is_clim,
+                            )
+
+                            cell_style = (
+                                f"border:1px solid #cbd5e1; padding:8px 12px; text-align:right; {comparison_style}"
+                            )
+                            cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
+
+                        unit_str = "%" if is_fraction else "days"
+                        cells_html.append(
+                            f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; '
+                            f'color:#64748b; background-color:#ffffff;">{unit_str}</td>'
+                        )
+                        rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+
+                    card_html = (
+                        f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; '
+                        f'border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
+                        f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">'
+                        f'{display_model} - {display_window}</div>'
+                        f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">'
+                        f'+/-{tolerance_days} day tolerance</div>'
+                        f'<table style="width:100%; border-collapse:collapse; font-size:0.88rem;">'
+                        f'<thead><tr style="background-color:#f1f5f9; color:#0f172a; text-transform:uppercase; font-size:0.8rem;">'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left;">METRIC</th>'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEAN</th>'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MIN</th>'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MEDIAN</th>'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P75</th>'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">P90</th>'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:right;">MAX</th>'
+                        f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center;">UNIT</th>'
+                        f'</tr></thead><tbody>'
+                        f'{"".join(rows_html)}'
+                        f'</tbody></table></div>'
+                    )
+                    html_blocks.append(card_html)
+
+                st.markdown("".join(html_blocks), unsafe_allow_html=True)
+    # Tab 3: Benchmark Outputs
+    if res_tabs[2].open:
+        with res_tabs[2]:
+            st.markdown("MOMP benchmark output figures and datasets.")
+            momp_figures = collect_reference_figures()
+
+            if not momp_figures:
+                info_box("No MOMP output figures found. Run a benchmark first.", "amber")
+            else:
+                # Gather non-empty categories
+                avail_cats = [cat for cat in REFERENCE_CATEGORY_ORDER if momp_figures.get(cat)]
+                if not avail_cats:
+                    avail_cats = [cat for cat, paths in momp_figures.items() if paths]
+
+                # Dropdown & Layout Controls Row
+                fc1, fc2, fc3, fc4 = st.columns([1.2, 1.2, 1.5, 1.0])
+
+                selected_cat = fc1.selectbox(
+                    "Category",
+                    ["All Categories"] + avail_cats,
+                    key="fig_sel_cat"
+                )
+
+                # Filter paths by category
+                if selected_cat == "All Categories":
+                    cat_paths = [p for paths in momp_figures.values() for p in paths]
                 else:
-                    info_box("No plottable data variables found in dataset.", "amber")
-            except Exception as e:
-                info_box(f"Could not open dataset: {e}", "amber")
-        else:
-            info_box("No reference datasets available.", "amber")
+                    cat_paths = momp_figures.get(selected_cat, [])
+
+                # Group paths by figure type for second dropdown
+                type_groups: Dict[str, List[str]] = {}
+                for path_str in cat_paths:
+                    ftype = classify_figure_type(Path(path_str).name)
+                    type_groups.setdefault(ftype, []).append(path_str)
+
+                avail_types = sorted(type_groups.keys())
+                selected_type = fc2.selectbox(
+                    "Figure Type",
+                    ["All Figure Types"] + avail_types,
+                    key="fig_sel_type"
+                )
+
+                # Filter paths by figure type
+                if selected_type == "All Figure Types":
+                    filtered_paths = cat_paths
+                else:
+                    filtered_paths = type_groups.get(selected_type, [])
+
+                # Map formatted human labels back to file paths
+                label_to_path: Dict[str, str] = {}
+                fig_options = []
+                for p in filtered_paths:
+                    lbl = format_figure_label(p)
+                    if lbl in label_to_path:
+                        lbl = f"{lbl} ({Path(p).name})"
+                    label_to_path[lbl] = p
+                    fig_options.append(lbl)
+                fig_options.append("Show All Figures in Selection")
+
+                selected_fig_label = fc3.selectbox(
+                    "Select Figure",
+                    fig_options,
+                    key="fig_sel_item"
+                )
+
+                view_mode = fc4.radio(
+                    "Layout View",
+                    ["Grid", "Full Width"],
+                    horizontal=True,
+                    key="fig_view_mode",
+                )
+
+                st.divider()
+
+                # Render single selected figure or batch selection according to view mode
+                if selected_fig_label != "Show All Figures in Selection":
+                    target_path = label_to_path.get(selected_fig_label)
+                    if target_path:
+                        render_benchmark_figure_with_download(target_path, key_suffix="single")
+                else:
+                    render_reference_figure_gallery(filtered_paths, view_mode, f"{selected_cat}_{selected_type}")
+
+            st.divider()
+            section_header("NetCDF Data Explorer", "sky")
+            if st.checkbox("Load NetCDF Data Explorer", value=False, key="load_nc_explorer"):
+                nc_files = sorted(str(p.resolve()) for p in ROMP_DEMO_OUT_DIR.rglob("*.nc"))
+
+                if nc_files:
+                    sel = st.selectbox("Dataset", nc_files, format_func=format_nc_label, key="nc_explorer_sel")
+                    try:
+                        with _safe_open_dataset(sel) as ds:
+                            # Filter out coordinate variables or time-only bounds
+                            vars_list = [v for v in ds.data_vars if "time" not in v.lower() and "bounds" not in v.lower()]
+                            if vars_list:
+                                vn = st.selectbox("Variable", vars_list, key="nc_explorer_var")
+                                _render_variable_plot(ds, vn, format_nc_label(sel))
+                            else:
+                                info_box("No plottable data variables found in dataset.", "amber")
+                    except Exception as e:
+                        info_box(f"Could not open dataset: {e}", "amber")
+                else:
+                    info_box("No reference datasets available.", "amber")
+            else:
+                st.caption("Enable the data explorer to load and map a NetCDF dataset.")
     # Tab 4: Onset Analysis
     if OTS_AVAILABLE and "Onset Analysis" in tab_labels:
-        with res_tabs[tab_labels.index("Onset Analysis")]:
-            section_header("Onset Time Series Analysis", "teal")
-            mode = st.radio("Location Selection Mode", ["Coordinates", "Woreda"], horizontal=True, key="ots_mode")
-            years = _available_years()
-            default_yr_idx = years.index(2021) if 2021 in years else len(years) - 1
-            year = st.selectbox("Year", years, index=default_yr_idx, key="ots_year")
-            
-            lat, lon, label = None, None, None
-            if mode == "Coordinates":
-                c1, c2 = st.columns(2)
-                lat = c1.number_input("Latitude", value=8.5, step=0.25, format="%.4f", key="ots_lat")
-                lon = c2.number_input("Longitude", value=39.2, step=0.25, format="%.4f", key="ots_lon")
-                label = f"Lat {lat:.4f}, Lon {lon:.4f}"
-            else:
-                shp_path = _find_shapefile_path()
-                if shp_path:
-                    woredas = _load_woredas_cached(shp_path)
-                    if woredas:
-                        search_q = st.text_input("Filter Woreda", value=st.session_state.get("ots_search", ""), key="ots_search")
-                        woreda_list = list(woredas.keys())
-                        filtered_woredas = [w for w in woreda_list if search_q.lower() in w.lower()] if search_q.strip() else woreda_list
+        if res_tabs[tab_labels.index("Onset Analysis")].open:
+            with res_tabs[tab_labels.index("Onset Analysis")]:
+                section_header("Onset Time Series Analysis", "teal")
+                mode = st.radio("Location Selection Mode", ["Coordinates", "Woreda"], horizontal=True, key="ots_mode")
+                years = _available_years()
+                default_yr_idx = years.index(2021) if 2021 in years else len(years) - 1
+                year = st.selectbox("Year", years, index=default_yr_idx, key="ots_year")
 
-                        if not filtered_woredas:
-                            st.warning("No woredas match the filter query.")
-                        else:
-                            prev_woreda = st.session_state.get("ots_selected_woreda_name")
-                            default_idx = (
-                                filtered_woredas.index(prev_woreda)
-                                if prev_woreda and prev_woreda in filtered_woredas
-                                else 0
-                            )
-                            selected_woreda = st.selectbox(
-                                "Select Woreda",
-                                filtered_woredas,
-                                index=default_idx,
-                                key="ots_woreda_selectbox"
-                            )
-                            if selected_woreda:
-                                st.session_state["ots_selected_woreda_name"] = selected_woreda
-                                lat, lon = woredas[selected_woreda]
-                                label = selected_woreda
-                    else:
-                        st.warning("No woredas found in shapefile.")
+                lat, lon, label = None, None, None
+                if mode == "Coordinates":
+                    c1, c2 = st.columns(2)
+                    lat = c1.number_input("Latitude", value=8.5, step=0.25, format="%.4f", key="ots_lat")
+                    lon = c2.number_input("Longitude", value=39.2, step=0.25, format="%.4f", key="ots_lon")
+                    label = f"Lat {lat:.4f}, Lon {lon:.4f}"
                 else:
-                    st.warning("Shapefile not found.")
+                    shp_path = _find_shapefile_path()
+                    if shp_path:
+                        woredas = _load_woredas_cached(shp_path)
+                        if woredas:
+                            search_q = st.text_input("Filter Woreda", value=st.session_state.get("ots_search", ""), key="ots_search")
+                            woreda_list = list(woredas.keys())
+                            filtered_woredas = [w for w in woreda_list if search_q.lower() in w.lower()] if search_q.strip() else woreda_list
 
-            if st.button("Run Onset Analysis", type="primary", key="btn_run_ots") and lat is not None and lon is not None:
-                with st.spinner("Analyzing onset timeseries..."):
-                    pngs, grid_lat, grid_lon = _analyze_onset_streamlit(year, lat, lon)
-                    st.session_state["onset_pngs"] = pngs
-                    st.session_state["onset_meta"] = {
-                        "year": year,
-                        "lat": lat,
-                        "lon": lon,
-                        "label": label,
-                        "grid_lat": grid_lat,
-                        "grid_lon": grid_lon,
-                    }
+                            if not filtered_woredas:
+                                st.warning("No woredas match the filter query.")
+                            else:
+                                prev_woreda = st.session_state.get("ots_selected_woreda_name")
+                                default_idx = (
+                                    filtered_woredas.index(prev_woreda)
+                                    if prev_woreda and prev_woreda in filtered_woredas
+                                    else 0
+                                )
+                                selected_woreda = st.selectbox(
+                                    "Select Woreda",
+                                    filtered_woredas,
+                                    index=default_idx,
+                                    key="ots_woreda_selectbox"
+                                )
+                                if selected_woreda:
+                                    st.session_state["ots_selected_woreda_name"] = selected_woreda
+                                    lat, lon = woredas[selected_woreda]
+                                    label = selected_woreda
+                        else:
+                            st.warning("No woredas found in shapefile.")
+                    else:
+                        st.warning("Shapefile not found.")
 
-            if "onset_pngs" in st.session_state and st.session_state["onset_pngs"]:
-                meta = st.session_state["onset_meta"]
-                st.info(
-                    f"**Results for {meta.get('label') or 'Selected Location'}** | "
-                    f"Year: {meta['year']} | "
-                    f"Snapped to Grid: Lat {meta['grid_lat']:.4f}, Lon {meta['grid_lon']:.4f}"
-                )
-                for img_bytes in st.session_state["onset_pngs"]:
-                    st.image(img_bytes, width='stretch')
+                if st.button("Run Onset Analysis", type="primary", key="btn_run_ots") and lat is not None and lon is not None:
+                    with st.spinner("Analyzing onset timeseries..."):
+                        pngs, grid_lat, grid_lon = _analyze_onset_streamlit(year, lat, lon)
+                        st.session_state["onset_pngs"] = pngs
+                        st.session_state["onset_meta"] = {
+                            "year": year,
+                            "lat": lat,
+                            "lon": lon,
+                            "label": label,
+                            "grid_lat": grid_lat,
+                            "grid_lon": grid_lon,
+                        }
+
+                if "onset_pngs" in st.session_state and st.session_state["onset_pngs"]:
+                    meta = st.session_state["onset_meta"]
+                    st.info(
+                        f"**Results for {meta.get('label') or 'Selected Location'}** | "
+                        f"Year: {meta['year']} | "
+                        f"Snapped to Grid: Lat {meta['grid_lat']:.4f}, Lon {meta['grid_lon']:.4f}"
+                    )
+                    for img_bytes in st.session_state["onset_pngs"]:
+                        st.image(img_bytes, width='stretch')
 
     # Tab 5: Skill vs Baseline
     if PHASE_4_AVAILABLE and "Skill vs Baseline" in tab_labels:
-        with res_tabs[tab_labels.index("Skill vs Baseline")]:
-            section_header("Skill versus Climatology", "green")
-            try:
-                scores = collect_scores_from_momp_outputs(ROMP_DEMO_OUT_DIR)
-                if not scores.empty:
-                    skill_df = compute_skill_vs_baseline(scores, baseline_model="Climatology")
-                    if not skill_df.empty:
-                        st.dataframe(skill_df, hide_index=True, width='stretch')
+        if res_tabs[tab_labels.index("Skill vs Baseline")].open:
+            with res_tabs[tab_labels.index("Skill vs Baseline")]:
+                section_header("Skill versus Climatology", "green")
+                try:
+                    scores = collect_scores_from_momp_outputs(ROMP_DEMO_OUT_DIR)
+                    if not scores.empty:
+                        skill_df = compute_skill_vs_baseline(scores, baseline_model="Climatology")
+                        if not skill_df.empty:
+                            st.dataframe(skill_df, hide_index=True, width='stretch')
+                        else:
+                            info_box("No climatology baseline found for skill comparison.", "amber")
                     else:
-                        info_box("No climatology baseline found for skill comparison.", "amber")
-                else:
-                    info_box("Run a benchmark to generate verification scores.", "amber")
-            except Exception as e:
-                info_box(f"Verification engine error: {e}", "rose")
+                        info_box("Run a benchmark to generate verification scores.", "amber")
+                except Exception as e:
+                    info_box(f"Verification engine error: {e}", "rose")
 
     # Tab 6: Uncertainty
     if PHASE_5_AVAILABLE and "Uncertainty" in tab_labels:
-        with res_tabs[tab_labels.index("Uncertainty")]:
-            section_header("Uncertainty & Statistical Significance", "amber")
-            st.caption("Bootstrap confidence intervals and significance testing against Climatology.")
-            if st.button("Compute Uncertainty", key="btn_compute_uncertainty"):
-                with st.spinner("Computing bootstrap uncertainty..."):
-                    try:
-                        unc_df = compute_metric_uncertainty(ROMP_DEMO_OUT_DIR)
-                        sig_df = compute_significance_vs_baseline(ROMP_DEMO_OUT_DIR, baseline_model="Climatology")
-                        st.session_state["unc_df"] = unc_df
-                        st.session_state["sig_df"] = sig_df
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-            if "unc_df" in st.session_state:
-                st.markdown("**Metric Uncertainty**")
-                st.dataframe(st.session_state["unc_df"], hide_index=True, width='stretch')
-                st.markdown("**Significance vs Baseline**")
-                st.dataframe(st.session_state["sig_df"], hide_index=True, width='stretch')
+        if res_tabs[tab_labels.index("Uncertainty")].open:
+            with res_tabs[tab_labels.index("Uncertainty")]:
+                section_header("Uncertainty & Statistical Significance", "amber")
+                st.caption("Bootstrap confidence intervals and significance testing against Climatology.")
+                if st.button("Compute Uncertainty", key="btn_compute_uncertainty"):
+                    with st.spinner("Computing bootstrap uncertainty..."):
+                        try:
+                            unc_df = compute_metric_uncertainty(ROMP_DEMO_OUT_DIR)
+                            sig_df = compute_significance_vs_baseline(ROMP_DEMO_OUT_DIR, baseline_model="Climatology")
+                            st.session_state["unc_df"] = unc_df
+                            st.session_state["sig_df"] = sig_df
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                if "unc_df" in st.session_state:
+                    st.markdown("**Metric Uncertainty**")
+                    st.dataframe(st.session_state["unc_df"], hide_index=True, width='stretch')
+                    st.markdown("**Significance vs Baseline**")
+                    st.dataframe(st.session_state["sig_df"], hide_index=True, width='stretch')
 
     # Tab 7: Benchmark Report & Export
     if (PDF_AVAILABLE or PHASE_6_AVAILABLE) and "Benchmark Report & Export" in tab_labels:
-        with res_tabs[tab_labels.index("Benchmark Report & Export")]:
-            section_header("Benchmark Report & Export", "teal")
-            st.caption("Generate executive summary reports and inspect workflow provenance metadata.")
+        if res_tabs[tab_labels.index("Benchmark Report & Export")].open:
+            with res_tabs[tab_labels.index("Benchmark Report & Export")]:
+                section_header("Benchmark Report & Export", "teal")
+                st.caption("Generate executive summary reports and inspect workflow provenance metadata.")
 
-            if PHASE_6_AVAILABLE:
-                st.markdown("### Provenance Metadata")
-                try:
-                    prov = build_provenance()
-                    st.json(prov)
-                except Exception as e:
-                    info_box(f"Could not build provenance metadata: {e}", "amber")
+                # ======================================================================
+                # Provenance Metadata (if available)
+                # ======================================================================
+                if PHASE_6_AVAILABLE:
+                    st.markdown("### Provenance Metadata")
+                    try:
+                        prov = build_provenance()
+                        st.json(prov)
+                    except Exception as e:
+                        info_box(f"Could not build provenance metadata: {e}", "amber")
 
-            if PDF_AVAILABLE:
-                st.markdown("### Executive Summary Export")
-                st.info("PDF engine ready. You can export current benchmark graphics and metrics into a standardized report.")
+                # ======================================================================
+                # PDF Generation
+                # ======================================================================
+                if PDF_AVAILABLE:
+                    st.markdown("### Executive Summary Export")
+                    st.markdown(
+                        "Generate a complete scientific PDF report including benchmark inputs, "
+                        "model configuration, verification scores, metric distributions, and benchmark output figures."
+                    )
 
+                    # Executive Summary Metrics
+                    st.markdown("#### Report Summary")
+                    c1, c2, c3, c4 = st.columns(4)
+                    det_count = sum(1 for r in active_rows if r.get("Category") == "Deterministic")
+                    prob_count = sum(1 for r in active_rows if r.get("Category") == "Probabilistic")
+                    c1.metric("Models Evaluated", len(active_rows))
+                    c2.metric("Ground Truth", ground_truth)
+                    c3.metric("Forecast Window", forecast_window)
+                    c4.metric("Baseline", shared_settings.get("baseline_forecast", "climatology"))
 
+                    # Fair comparison window info
+                    fair_plan_dict = st.session_state.get("fair_comparison_plan")
+                    if fair_plan_dict:
+                        eval_years = fair_plan_dict.get("evaluation_years", [])
+                        if eval_years:
+                            st.info(
+                                f"**Fair Comparison Window:** {min(eval_years)} - {max(eval_years)} "
+                                f"({len(eval_years)} common years)"
+                            )
+                        else:
+                            st.warning("Fair comparison plan did not find common evaluation years.")
+
+                    st.divider()
+
+                    # Generate PDF Button
+                    st.markdown("#### Download Complete Report")
+                    generate_clicked = st.button(
+                        "Generate Complete PDF Report",
+                        type="primary",
+                        width="stretch",
+                        key="btn_generate_pdf_report",
+                    )
+
+                    if generate_clicked:
+                        with st.spinner("Generating complete PDF report..."):
+                            try:
+                                # Collect verification scores
+                                scores_df = pd.DataFrame()
+                                if PHASE_4_AVAILABLE:
+                                    try:
+                                        scores_df = collect_scores_from_momp_outputs(ROMP_DEMO_OUT_DIR)
+                                    except Exception:
+                                        scores_df = pd.DataFrame()
+
+                                # Collect distribution statistics
+                                try:
+                                    distribution_stats = compute_metric_distribution_stats()
+                                except Exception:
+                                    distribution_stats = pd.DataFrame()
+
+                                # Collect benchmark figures
+                                try:
+                                    report_figures = collect_reference_figures()
+                                except Exception:
+                                    report_figures = {}
+
+                                # Build report context
+                                report_context = {
+                                    "generated_at": datetime.utcnow().isoformat() + "Z",
+                                    "ground_truth": ground_truth,
+                                    "benchmark_coverage": benchmark_coverage,
+                                    "forecast_window": forecast_window,
+                                    "shared_settings": shared_settings,
+                                    "active_rows": active_rows,
+                                    "fair_plan": st.session_state.get("fair_comparison_plan"),
+                                    "map_outputs": map_outputs,
+                                    "scores_df": scores_df,
+                                    "distribution_stats": distribution_stats,
+                                    "uncertainty_df": st.session_state.get("unc_df"),
+                                    "significance_df": st.session_state.get("sig_df"),
+                                    "figures": report_figures,
+                                }
+
+                                # Generate PDF
+                                pdf_bytes = generate_benchmark_pdf_report(report_context)
+
+                                # Store in session state
+                                st.session_state["benchmark_pdf_bytes"] = pdf_bytes
+                                st.session_state["benchmark_pdf_file"] = (
+                                    f"benchmark_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                                )
+                                st.success("PDF report generated successfully.")
+                            except Exception as e:
+                                st.error(f"PDF generation failed: {e}")
+                                import traceback
+                                with st.expander("Technical details"):
+                                    st.code(traceback.format_exc())
+
+                    # Download Button (appears after generation)
+                    pdf_bytes = st.session_state.get("benchmark_pdf_bytes")
+                    pdf_file = st.session_state.get("benchmark_pdf_file")
+                    if pdf_bytes and pdf_file:
+                        st.download_button(
+                            "Download Complete PDF Report",
+                            data=pdf_bytes,
+                            file_name=pdf_file,
+                            mime="application/pdf",
+                            key="btn_download_pdf_report",
+                            type="primary",
+                            width="stretch",
+                        )
+                else:
+                    st.error(
+                        "PDF generation requires `fpdf2`. Install it with: `pip install fpdf2`"
+                    )
 if __name__ == "__main__":
     page()
