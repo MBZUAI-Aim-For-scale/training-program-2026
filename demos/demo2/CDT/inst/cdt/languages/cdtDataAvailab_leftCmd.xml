@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<panel_cmd>
+    <tab_title>
+        <tab id="1">
+            <text lang="en"> Input Data </text>
+        </tab>
+        <tab id="2">
+            <text lang="en"> Maps </text>
+        </tab>
+        <tab id="3">
+            <text lang="en"> Graphs </text>
+        </tab>
+        <tab id="4">
+            <text lang="en"> Layers </text>
+        </tab>
+    </tab_title>
+    <widget>
+        <button id="1">
+            <text lang="en"> Assess Data Availability </text>
+        </button>
+        <button id="2">
+            <text lang="en"> DISPLAY </text>
+        </button>
+        <button id="3-1">
+            <text lang="en"> Non-Missing Data Annual Average </text>
+        </button>
+        <button id="3-2">
+            <text lang="en"> Non-Missing Data Monthly Average </text>
+        </button>
+        <button id="4">
+            <text lang="en"> Non-Missing Data Summary </text>
+        </button>
+        <button id="5">
+            <text lang="en"> Distance - Correlation </text>
+        </button>
+        <button id="6">
+            <text lang="en"> Period to compute the percentage </text>
+        </button>
+        <checkbutton id="1">
+            <text lang="en"> Data already computed </text>
+        </checkbutton>
+        <label id="1">
+            <text lang="en"> Time step of input data </text>
+        </label>
+        <label id="2">
+            <text lang="en"> Input Data </text>
+        </label>
+        <label id="3">
+            <text lang="en"> File containing CDT stations data </text>
+        </label>
+        <label id="4">
+            <text lang="en"> Directory to save the outputs </text>
+        </label>
+        <label id="5">
+            <text lang="en"> Availability Data Results </text>
+        </label>
+        <label id="6">
+            <text lang="en"> Availability in Percentage </text>
+        </label>
+        <label id="7-1">
+            <text lang="en"> Yearly-Chart </text>
+        </label>
+        <label id="7-2">
+            <text lang="en"> Monthly-Chart </text>
+        </label>
+        <label id="8-1">
+            <text lang="en"> Monthly-Table </text>
+        </label>
+        <label id="8-2">
+            <text lang="en"> Daily-Table </text>
+        </label>
+        <label id="9">
+            <text lang="en"> Availability-Map </text>
+        </label>
+        <label id="10-1">
+            <text lang="en"> Yearly-Map </text>
+        </label>
+        <label id="10-2">
+            <text lang="en"> Monthly-Map </text>
+        </label>
+        <label id="11-1">
+            <text lang="en"> Yearly Maps </text>
+        </label>
+        <label id="11-2">
+            <text lang="en"> Monthly Maps </text>
+        </label>
+        <label id="12">
+            <text lang="en"> Plot Type </text>
+        </label>
+        <label id="13">
+            <text lang="en"> Non-Missing Data Summary </text>
+        </label>
+        <label id="14-1">
+            <text lang="en"> Annual-Average </text>
+        </label>
+        <label id="14-2">
+            <text lang="en"> Monthly-Average </text>
+        </label>
+        <label id="15">
+            <text lang="en"> Distance-Correlation </text>
+        </label>
+        <label id="16">
+            <text lang="en"> Stations </text>
+        </label>
+        <label id="17">
+            <text lang="en"> Station-Activities </text>
+        </label>
+    </widget>
+    <help>
+        <content id="1">
+            <status>
+                <text lang="en"> Select the time step of the data </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Select the time step of the data </text>
+            </tooltip>
+        </content>
+        <content id="2">
+            <status>
+                <text lang="en"> Select the file containing the input data </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Select the file containing the input data </text>
+            </tooltip>
+        </content>
+        <content id="3">
+            <status>
+                <text lang="en"> Browse file if not listed </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Browse file if not listed </text>
+            </tooltip>
+        </content>
+        <content id="4">
+            <status>
+                <text lang="en"> Enter the full path to directory to save outputs </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Enter the full path to directory to save outputs </text>
+            </tooltip>
+        </content>
+        <content id="5">
+            <status>
+                <text lang="en"> or browse here </text>
+            </status>
+            <tooltip>
+                <text lang="en"> or browse here </text>
+            </tooltip>
+        </content>
+    </help>
+    <message>
+        <content id="1">
+            <text lang="en"> Assess data availability ...... </text>
+        </content>
+        <content id="2">
+            <text lang="en"> Assessing data availability finished successfully </text>
+        </content>
+        <content id="3">
+            <text lang="en"> Assessing data availability failed </text>
+        </content>
+        <content id="4">
+            <text lang="en"> Unable to load data </text>
+        </content>
+        <content id="5">
+            <text lang="en"> Unable to read </text>
+        </content>
+        <content id="6">
+            <text lang="en"> did not find </text>
+            <text lang="fr"> est introuvable </text>
+        </content>
+        <content id="7">
+            <text lang="en"> Station not found </text>
+        </content>
+    </message>
+    <plottext>
+        <content id="1">
+            <text lang="en"> Data Availability </text>
+        </content>
+        <content id="2">
+            <text lang="en"> in </text>
+        </content>
+        <content id="3">
+            <text lang="en"> Period </text>
+        </content>
+        <content id="4">
+            <text lang="en"> Number of observations each </text>
+        </content>
+        <content id="5">
+            <text lang="en"> month </text>
+        </content>
+        <content id="6">
+            <text lang="en"> year </text>
+        </content>
+        <content id="7">
+            <text lang="en"> Data Availability </text>
+        </content>
+        <content id="8">
+            <text lang="en"> Station </text>
+        </content>
+        <content id="9">
+            <text lang="en"> Number of stations </text>
+        </content>
+        <content id="10">
+            <text lang="en"> Active Stations </text>
+        </content>
+        <content id="11">
+            <text lang="en"> Reported Data </text>
+        </content>
+        <content id="12">
+            <text lang="en"> Average number of stations reporting each </text>
+        </content>
+        <content id="13">
+            <text lang="en"> Number of stations </text>
+        </content>
+    </plottext>
+</panel_cmd>

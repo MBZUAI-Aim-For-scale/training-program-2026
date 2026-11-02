@@ -1,0 +1,48 @@
+
+useDynLib(CDT, .registration = TRUE)
+
+export(startCDT, cdtInterp, distance.Matrix)
+export(regression.Vector, regression.Matrix)
+
+export(download.oni.cpc.ncep.noaa, oni.cpc.ncep.noaa, oni.iridl.ldeo)
+
+export(cdtMergingClimDataCMD, cdtCrossValidationClimDataCMD)
+
+export(cdtBiasCorrectPrecipCMD, cdtBiasCorrectTempCMD)
+
+export(merging.options, merging.options.netcdf, biascoeff.options, blanking.options)
+
+export(readCDTStationData, writeCDTStationData, matchCDTStationsData, matchCDTStationsIDs)
+export(extractGeomPoints, extractGeomPolys, extractGeomRect)
+export(plotMultipleData)
+export(cdtComputeSeasonal_cdtstn, cdtComputeSeasonal_netcdf)
+export(cdtENSOAnalysis_netcdf)
+export(install_wgrib, install_wgrib2)
+export(convert2CPTFormat)
+export(cdtDataset_readData_multiDim)
+
+export(extraterrestrial_radiation_annual)
+export(extraterrestrial_radiation_daily)
+export(daylight_hours)
+
+export(saturation_vapour_pressure)
+export(relative_humidity)
+export(specific_humidity)
+export(dewpoint_temperature)
+export(potential_temperature)
+export(temperature_from_theta)
+
+export(extract_netcdf_file)
+
+export(pressure_conversion_station)
+export(pressure_conversion_netcdf)
+export(ET0_Penman_Monteith_FAO_station)
+export(ET0_Penman_Monteith_FAO_netcdf)
+
+export(connect_tidyverse_api)
+
+###
+importFrom(latticeExtra, xyplot.list)
+importFrom(doParallel, registerDoParallel)
+importFrom(doSNOW, registerDoSNOW)
+

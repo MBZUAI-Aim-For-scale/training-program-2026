@@ -1,0 +1,301 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dialog_box>
+    <title>
+        <text lang="en"> Configurations </text>
+        <text lang="fr"> Configurations </text>
+    </title>
+    <tab_title>
+        <tab id="1">
+            <text lang="en"> CDT Config </text>
+            <text lang="fr"> CDT Config </text>
+        </tab>
+        <tab id="2">
+            <text lang="en"> Spatial BBOX </text>
+            <text lang="fr"> Spatiale BBOX </text>
+        </tab>
+        <tab id="3">
+            <text lang="en"> TCL Config </text>
+            <text lang="fr"> TCL Config </text>
+        </tab>
+        <tab id="4">
+            <text lang="en"> CDT Dataset </text>
+            <text lang="fr"> CDT Dataset </text>
+        </tab>
+        <tab id="5">
+            <text lang="en"> Parallel </text>
+            <text lang="fr"> Parallèle </text>
+        </tab>
+    </tab_title>
+    <widget>
+        <button id="1">
+            <text lang="en"> Save </text>
+            <text lang="fr"> Enregistrer </text>
+        </button>
+        <button id="2">
+            <text lang="en"> Cancel </text>
+            <text lang="fr"> Annuler </text>
+        </button>
+        <label id="1">
+            <text lang="en"> Language </text>
+            <text lang="fr"> Langue </text>
+        </label>
+        <label id="2">
+            <text lang="en"> Missing values code </text>
+            <text lang="fr"> Code des valeurs manquantes </text>
+        </label>
+        <label id="3">
+            <text lang="en"> Anomaly missing values code </text>
+            <text lang="fr"> Valeurs manquantes (Anomalie) </text>
+        </label>
+        <label id="4">
+            <text lang="en"> Set working directory </text>
+            <text lang="fr"> Changer répertoire de travail </text>
+        </label>
+        <checkbutton id="1">
+            <text lang="en"> Use other Tcl/Tk </text>
+            <text lang="fr"> Utiliser d'autre Tcl/Tk </text>
+        </checkbutton>
+        <checkbutton id="2">
+            <text lang="en"> Tktable installed with Tcl/Tk </text>
+            <text lang="fr"> Tktable installé avec Tcl/Tk </text>
+        </checkbutton>
+        <checkbutton id="3">
+            <text lang="en"> Bwidget installed with Tcl/Tk </text>
+            <text lang="fr"> Bwidget installé avec Tcl/Tk </text>
+        </checkbutton>
+        <label id="5">
+            <text lang="en"> Tcl binaries path (bin) </text>
+            <text lang="fr"> Chemin des binaires Tcl (bin) </text>
+        </label>
+        <label id="6">
+            <text lang="en"> Tktable library path </text>
+            <text lang="fr"> Chemin du bibliothèque Tktable </text>
+        </label>
+        <label id="7">
+            <text lang="en"> BWidget library path </text>
+            <text lang="fr"> Chemin du bibliothèque BWidget </text>
+        </label>
+        <label id="8">
+            <text lang="en"> Area of interest </text>
+            <text lang="fr"> Zone d'interêt </text>
+        </label>
+        <label id="9">
+            <text lang="en"> Longitude </text>
+            <text lang="fr"> Longitude </text>
+        </label>
+        <label id="10">
+            <text lang="en"> Latitude </text>
+            <text lang="fr"> Latitude </text>
+        </label>
+        <label id="11">
+            <text lang="en"> Minimum </text>
+            <text lang="fr"> Minimum </text>
+        </label>
+        <label id="12">
+            <text lang="en"> Maximum </text>
+            <text lang="fr"> Maximum </text>
+        </label>
+        <label id="13">
+            <text lang="en"> Chunk Size </text>
+        </label>
+        <label id="14">
+            <text lang="en"> Chunk Factor </text>
+        </label>
+        <label id="14-a">
+            <text lang="en"> Chunk Function </text>
+        </label>
+        <label id="15">
+            <text lang="en"> Chunk properties to use to create the CDT Dataset Format </text>
+        </label>
+        <checkbutton id="4">
+            <text lang="en"> Use parallel processing </text>
+        </checkbutton>
+        <checkbutton id="5">
+            <text lang="en"> Number of cores should be detected automatically </text>
+        </checkbutton>
+        <label id="16">
+            <text lang="en"> Number of cores to be used </text>
+        </label>
+        <label id="17">
+            <text lang="en"> Default ASCII file extension </text>
+        </label>
+        <combobox id="1">
+            <option id="1">
+                <text lang="en"> CSV File </text>
+            </option>
+            <option id="2">
+                <text lang="en"> Text File </text>
+            </option>
+        </combobox>
+    </widget>
+    <help>
+        <content id="1">
+            <status>
+                <text lang="en"> Specify here the missing value code </text>
+                <text lang="fr"> Spécifiez ici le code des valeurs manquantes </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Specify here the missing value code </text>
+                <text lang="fr"> Spécifiez ici le code des valeurs manquantes </text>
+            </tooltip>
+        </content>
+        <content id="2">
+            <status>
+                <text lang="en"> Specify here the missing value code for anomalies data </text>
+                <text lang="fr"> Spécifiez ici le code des valeurs manquantes pour les données d'anomalies </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Specify here the missing value code for anomalies data </text>
+                <text lang="fr"> Spécifiez ici le code des valeurs manquantes pour les données d'anomalies </text>
+            </tooltip>
+        </content>
+        <content id="3">
+            <status>
+                <text lang="en"> Check this box if you want to use other Tcl/Tk installation </text>
+                <text lang="fr"> Cochez cette case si vous souhaitez utiliser une autre installation Tcl/Tk </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Check this box if you want to use other Tcl/Tk installation </text>
+                <text lang="fr"> Cochez cette case si vous souhaitez utiliser une autre installation Tcl/Tk </text>
+            </tooltip>
+        </content>
+        <content id="4">
+            <status>
+                <text lang="en"> Specify the full path to Tcl binaries installation (bin) </text>
+                <text lang="fr"> Indiquez le chemin complet de l'installation des binaires de Tcl (bin) </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Specify the full path to Tcl binaries installation (bin) </text>
+                <text lang="fr"> Indiquez le chemin complet de l'installation des binaires de Tcl (bin) </text>
+            </tooltip>
+        </content>
+        <content id="5">
+            <status>
+                <text lang="en"> Check this box if Tktable is located under auto_path, installed with the Tcl/Tk library </text>
+                <text lang="fr"> Cochez cette case si Tktable se trouve sous auto_path, installé avec la librairie Tcl/Tk </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Check this box if Tktable is located under auto_path, installed with the Tcl/Tk library </text>
+                <text lang="fr"> Cochez cette case si Tktable se trouve sous auto_path, installé avec la librairie Tcl/Tk </text>
+            </tooltip>
+        </content>
+        <content id="6">
+            <status>
+                <text lang="en"> Specify the full path to Tktable directory </text>
+                <text lang="fr"> Indiquez le chemin complet du répertoire Tktable </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Specify the full path to Tktable directory </text>
+                <text lang="fr"> Indiquez le chemin complet du répertoire Tktable </text>
+            </tooltip>
+        </content>
+        <content id="7">
+            <status>
+                <text lang="en"> Check this box if Bwidget located under auto_path, installed with the Tcl/Tk library </text>
+                <text lang="fr"> Cochez cette case si Bwidget se trouve sous auto_path, installé avec la librairie Tcl/Tk </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Check this box if Bwidget located under auto_path, installed with the Tcl/Tk library </text>
+                <text lang="fr"> Cochez cette case si Bwidget se trouve sous auto_path, installé avec la librairie Tcl/Tk </text>
+            </tooltip>
+        </content>
+        <content id="8">
+            <status>
+                <text lang="en"> Specify the full path to BWidget directory </text>
+                <text lang="fr"> Indiquez le chemin complet du répertoire BWidget </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Specify the full path to BWidget directory </text>
+                <text lang="fr"> Indiquez le chemin complet du répertoire BWidget </text>
+            </tooltip>
+        </content>
+        <content id="9">
+            <status>
+                <text lang="en"> Minimum longitude in decimal degree </text>
+                <text lang="fr"> Longitude minimum en degré décimal </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Minimum longitude in decimal degree </text>
+                <text lang="fr"> Longitude minimum en degré décimal </text>
+            </tooltip>
+        </content>
+        <content id="10">
+            <status>
+                <text lang="en"> Maximum longitude in decimal degree </text>
+                <text lang="fr"> Longitude maximum en degré décimal </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Maximum longitude in decimal degree </text>
+                <text lang="fr"> Longitude maximum en degré décimal </text>
+            </tooltip>
+        </content>
+        <content id="11">
+            <status>
+                <text lang="en"> Minimum latitude in decimal degree </text>
+                <text lang="fr"> Latitude minimum en degré décimal </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Minimum latitude in decimal degree </text>
+                <text lang="fr"> Latitude minimum en degré décimal </text>
+            </tooltip>
+        </content>
+        <content id="12">
+            <status>
+                <text lang="en"> Maximum latitude in decimal degree </text>
+                <text lang="fr"> Latitude maximum en degré décimal </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Maximum latitude in decimal degree </text>
+                <text lang="fr"> Latitude maximum en degré décimal </text>
+            </tooltip>
+        </content>
+        <content id="13">
+            <status>
+                <text lang="en"> Integer value indicating the number of pixels per chunk to create the CDT Dataset </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Number of pixels per chunk </text>
+            </tooltip>
+        </content>
+        <content id="14">
+            <status>
+                <text lang="en"> Integer value indicating the number of chunks to be loaded at the same time for the computation </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Number of chunk per computation</text>
+            </tooltip>
+        </content>
+        <content id="14-a">
+            <status>
+                <text lang="en"> Integer value indicating the function to use to create the dataset </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Function to use to create the dataset</text>
+            </tooltip>
+        </content>
+    </help>
+    <message>
+        <content id="1">
+            <text lang="en">
+                Changing "Tcl Configuration" needs a new R session to take effect. \nChanging "CDT Configuration - Language" needs to restart CDT to take effect </text>
+            <text lang="fr">
+                Le Changement "Configuration de Tcl" requiert une nouvelle session R pour prendre effet. \nLe Changement "Configuration de CDT - Langue" requiert un redemarrage de CDT pour prendre effet </text>
+        </content>
+        <content id="2">
+            <text lang="en"> No input path for Tcl/Tk binary directory </text>
+            <text lang="fr"> Pas de chemin d'entrée pour le répertoire binaire Tcl/Tk </text>
+        </content>
+        <content id="3">
+            <text lang="en"> does not exist </text>
+            <text lang="fr"> n'existe pas </text>
+        </content>
+        <content id="4">
+            <text lang="en"> No input path for Tktable </text>
+            <text lang="fr"> Pas de chemin d'entrée pour Tktable </text>
+        </content>
+        <content id="5">
+            <text lang="en"> No input path for Bwidget </text>
+            <text lang="fr"> Pas de chemin d'entrée pour Bwidget </text>
+        </content>
+    </message>
+</dialog_box>

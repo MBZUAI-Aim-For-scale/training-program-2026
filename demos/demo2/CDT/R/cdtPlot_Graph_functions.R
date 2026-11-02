@@ -1,0 +1,1735 @@
+
+graphs.plot.line <- function(x, y, xlim = NULL, ylim = NULL, origindate = NULL,
+                            xlab = '', ylab = '', ylab.sub = NULL,
+                            title = '', title.position = 'top', axis.font = 1,
+                            plotl = NULL, legends = NULL, location = NULL)
+{
+    if(is.null(plotl$type)) plotl$type <- 'both'
+    if(is.null(plotl$col$line)) plotl$col$line <- 'red'
+    if(is.null(plotl$col$points)) plotl$col$points <- 'blue'
+    if(is.null(plotl$lwd)) plotl$lwd <- 2
+    if(is.null(plotl$cex)) plotl$cex <- 1.4
+
+    if(is.null(legends$add$mean)) legends$add$mean <- FALSE
+    if(is.null(legends$add$tercile)) legends$add$tercile <- FALSE
+    if(is.null(legends$add$linear)) legends$add$linear <- FALSE
+    if(is.null(legends$col$mean)) legends$col$mean <- "black"
+    if(is.null(legends$col$tercile1)) legends$col$tercile1 <- "green"
+    if(is.null(legends$col$tercile2)) legends$col$tercile2 <- "blue"
+    if(is.null(legends$col$linear)) legends$col$linear <- "purple3"
+    if(is.null(legends$text$mean)) legends$text$mean <- "Average"
+    if(is.null(legends$text$tercile1)) legends$text$tercile1 <- "Tercile 0.33333"
+    if(is.null(legends$text$tercile2)) legends$text$tercile2 <- "Tercile 0.66666"
+    if(is.null(legends$text$linear)) legends$text$linear <- "Trend line"
+    if(is.null(legends$lwd$mean)) legends$lwd$mean <- 2
+    if(is.null(legends$lwd$tercile)) legends$lwd$tercile <- 2
+    if(is.null(legends$lwd$linear)) legends$lwd$linear <- 2
+
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim[1] + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    nylab <- max(nchar(as.character(pretty(y))), na.rm = TRUE)
+    line.ylab <- if(nylab < 2) 2.5 else nylab + 1.5
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    plt.h <- if(legends$add$mean | legends$add$tercile | legends$add$linear) 0.18 else 0.07
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 6.0,
+                    ifelse(nr.ylab == 0, 6.5,
+                    ifelse(nr.ylab == 1, 7.5, 8.8)))
+    par.mar.2 <- par.mar.2 + nylab / 6
+
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:3, ncol = 1)
+            plot.heights <- c(0.9, plt.h, ttl.h)
+            par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+            par.legend <- c(0, par.mar.2, 0, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(3, 1, 2), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9, plt.h)
+            par.plot <- c(3.5, par.mar.2, 1.5, 2.1)
+            par.legend <- c(1, par.mar.2, 0, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:3, ncol = 1)
+        plot.heights <- c(0.9, plt.h, 0.01)
+        par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+        par.legend <- c(0, par.mar.2, 0, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '', xlim = xlim, ylim = ylim)
+
+    minTck <- graphics::axTicks(2)
+    minTck <- minTck[-length(minTck)] + diff(minTck) / 2
+    minTck <- c(min(graphics::axTicks(2)) - diff(minTck)[1] / 2, minTck, max(graphics::axTicks(2)) + diff(minTck)[1] / 2)
+
+    if(methods::is(x, "Date")){
+        xTck <- axTicks.Date(x, 1)
+        axis.foo <- graphics::axis.Date
+        xminor <- axTicks.minor.Date(c(xTck[1], xlim[2]))
+        if(!is.null(xminor)) xminor <- xminor[!xminor %in% xTck]
+    }
+    else if(methods::is(x, "POSIXct")){
+        xTck <- axTicks.POSIXct(x, 1)
+        axis.foo <- graphics::axis.POSIXct
+        xminor <- axTicks.minor.POSIXct(c(xTck[1], xlim[2]))
+        if(!is.null(xminor)) xminor <- xminor[!xminor %in% xTck]
+    }else{
+        xTck <- graphics::axTicks(1)
+        xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+        axis.foo <- graphics::axis
+        if(as.numeric(diff(xlim)) > 5){
+            xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+            xminor <- xminor[!xminor %in% xTck]
+        }else xminor <- NULL
+    }
+
+    axis.foo(1, at = xTck, font = axis.font, cex.axis = 1.5)
+    if(length(xminor) > 0)
+        axis.foo(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    if(!is.null(origindate)){
+        yaxlab <- format(as.Date(graphics::axTicks(2), origin = origindate), '%d-%b')
+        graphics::axis(2, at = graphics::axTicks(2), labels = yaxlab, las = 2, font = axis.font, cex.axis = 1.5)
+    }
+    else graphics::axis(2, at = graphics::axTicks(2), font = axis.font, las = 1, cex.axis = 1.5)
+    graphics::axis(2, at = minTck, labels = NA, tcl = graphics::par("tcl") * 0.6)
+    graphics::box(lwd = 1.0)
+
+    graphics::mtext(xlab, side = 1, line = 2.5)
+    if(!is.null(ylab.sub)){
+        graphics::mtext(ylab, side = 2, line = line.ylab + 1)
+        graphics::mtext(ylab.sub, side = 2, line = line.ylab, font = 3, cex = 0.8)
+    }
+    else graphics::mtext(ylab, side = 2, line = line.ylab)
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 1)
+    graphics::abline(v = xTck, col = "lightgray", lty = "solid", lwd = 1)
+    graphics::abline(h = minTck, col = "lightgray", lty = "dotted", lwd = 1.3)
+    graphics::abline(v = xminor, col = "lightgray", lty = "dotted", lwd = 1.3)
+
+    if(plotl$type == 'both')
+        graphics::lines(x, y, type = 'o', col = plotl$col$line, lwd = plotl$lwd,
+                    pch = 21, bg = plotl$col$points, cex = plotl$cex)
+    if(plotl$type == 'line')
+        graphics::lines(x, y, type = 'l', col = plotl$col$line, lwd = plotl$lwd)
+
+    collegend <- NULL
+    txtlegend <- NULL
+    if(legends$add$mean){
+        moy <- mean(y, na.rm = TRUE)
+        graphics::abline(h = moy, col = legends$col$mean, lwd = legends$lwd$mean)
+        collegend <- c(collegend, legends$col$mean)
+        txtlegend <- c(txtlegend, paste(legends$text$mean, "[", round(moy, 4), "]"))
+    }
+    if(legends$add$linear){
+        reglm <- stats::lm(y~x)
+        graphics::abline(reglm, col = legends$col$linear, lwd = legends$lwd$linear)
+        collegend <- c(collegend, legends$col$linear)
+        txtlegend <- c(txtlegend, paste(legends$text$linear, "[",
+                                "Intercept:", round(reglm$coef[1], 4), ";",
+                                "Slope:", round(reglm$coef[2], 4), "]"))
+    }
+    if(legends$add$tercile){
+        terc <- quantile8(y, probs = c(0.33333, 0.66667))
+        graphics::abline(h = terc[1], col = legends$col$tercile1, lwd = legends$lwd$tercile)
+        graphics::abline(h = terc[2], col = legends$col$tercile2, lwd = legends$lwd$tercile)
+        collegend <- c(collegend, legends$col$tercile1, legends$col$tercile2)
+        txtlegend <- c(txtlegend, paste(legends$text$tercile1, "[", round(terc[1], 4), "]"),
+                                  paste(legends$text$tercile2, "[", round(terc[2], 4), "]"))
+    }
+
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.legend)
+    if(legends$add$mean | legends$add$tercile | legends$add$linear){
+        graphics::plot.new()
+        ncol <- if(length(txtlegend) > 1) 2 else 1
+        graphics::legend("center", "groups", legend = txtlegend, col = collegend, lwd = 3, ncol = ncol, cex = 1.2)
+    }
+    else graphics::plot.new()
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.8, font = 2)
+    }
+    else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.bar <- function(x, y, xlim = NULL, ylim = NULL, origindate = NULL,
+                            xlab = '', ylab = '', ylab.sub = NULL,
+                            title = '', title.position = 'top', axis.font = 1,
+                            barcol = "darkblue", location = NULL)
+{
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    nylab <- max(nchar(as.character(pretty(y))), na.rm = TRUE)
+    line.ylab <- if(nylab < 2) 2.5 else nylab + 1.5
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 4.5,
+                    ifelse(nr.ylab == 0, 5.1,
+                    ifelse(nr.ylab == 1, 5.5, 6.0)))
+    par.mar.2 <- par.mar.2 + nylab / 6
+
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:2, ncol = 1)
+            plot.heights <- c(0.9, ttl.h)
+            par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(2, 1), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9)
+            par.plot <- c(3.5, par.mar.2, 1.5, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:2, ncol = 1)
+        plot.heights <- c(0.9, 0.01)
+        par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xlab = '', ylab = '', axes = FALSE, xlim = xlim, ylim = ylim)
+    minTck <- graphics::axTicks(2)
+    minTck <- minTck[-length(minTck)] + diff(minTck) / 2
+    minTck <- c(min(graphics::axTicks(2)) - diff(minTck)[1] / 2, minTck, max(graphics::axTicks(2)) + diff(minTck)[1] / 2)
+
+    if(methods::is(x, "Date")){
+        xTck <- axTicks.Date(x, 1)
+        axis.foo <- graphics::axis.Date
+        xminor <- axTicks.minor.Date(c(xTck[1], xlim[2]))
+        if(!is.null(xminor)) xminor <- xminor[!xminor %in% xTck]
+        bar.width <- as.numeric(diff(range(xlim))) / min(as.numeric(diff(x)), na.rm = TRUE)
+    }
+    else if(methods::is(x, "POSIXct")){
+        xTck <- axTicks.POSIXct(x, 1)
+        axis.foo <- graphics::axis.POSIXct
+        xminor <- axTicks.minor.POSIXct(c(xTck[1], xlim[2]))
+        if(!is.null(xminor)) xminor <- xminor[!xminor %in% xTck]
+        bar.width <- as.numeric(diff(range(xlim))) / min(as.numeric(diff(x)), na.rm = TRUE)
+    }else{
+        xTck <- graphics::axTicks(1)
+        xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+        axis.foo <- graphics::axis
+        bar.width <- as.numeric(diff(range(xlim)))
+        if(as.numeric(diff(xlim)) > 5){
+            xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+            xminor <- xminor[!xminor %in% xTck]
+        }
+        else xminor <- NULL
+    }
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 1)
+    graphics::abline(h = minTck, col = "lightgray", lty = "dotted", lwd = 1.3)
+    graphics::abline(v = xTck, col = "lightgray", lty = "solid", lwd = 1)
+    graphics::abline(v = xminor, col = "lightgray", lty = "dotted", lwd = 1.3)
+
+    bar.width <- 80 * bar.width^(-0.508775)
+    if(bar.width < 1) bar.width <- 1
+    graphics::lines(x, y, type = "h", lwd = bar.width, lend = "butt", col = barcol)
+
+    axis.foo(1, at = xTck, font = axis.font)
+    if(length(xminor) > 0)
+        axis.foo(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    if(!is.null(origindate)){
+        yaxlab <- format(as.Date(graphics::axTicks(2), origin = origindate), '%d-%b')
+        graphics::axis(2, at = graphics::axTicks(2), labels = yaxlab, las = 2, font = axis.font)
+    }else graphics::axis(2, at = graphics::axTicks(2), font = axis.font, las = 1)
+    graphics::axis(2, at = minTck, labels = NA, tcl = graphics::par("tcl") * 0.5)
+
+    graphics::mtext(xlab, side = 1, line = 2)
+    if(!is.null(ylab.sub)){
+        graphics::mtext(ylab, side = 2, line = line.ylab + 1)
+        graphics::mtext(ylab.sub, side = 2, line = line.ylab, font = 3, cex = 0.8)
+    }else graphics::mtext(ylab, side = 2, line = line.ylab)
+
+    graphics::box(bty = 'l', col = 'black')
+    graphics::box(bty = '7', col = 'black')
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.3, font = 2)
+    }
+    else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.boxplot <- function(formula, data.df, xlim = NULL, ylim = NULL,
+                           xlab = '', ylab = '', title = '',
+                           col = list(col = 'lightblue', outbg = 'lightblue',
+                           medcol = 'red', whiskcol = 'blue', staplecol = 'blue',
+                           boxcol = 'blue', outcol = 'blue'),
+                           location = NULL)
+{
+    plot(1, xlim = xlim + c(-0.5, 0.5), ylim = ylim,
+         type = 'n', xaxt = 'n', las = 2,
+         xlab = xlab, ylab = ylab, main = title)
+
+    yax <- graphics::axTicks(2)
+    yminTck <- yax[-length(yax)] + diff(yax) / 2
+    yminTck <- c(min(yax) - diff(yminTck)[1] / 2, yminTck, max(yax) + diff(yminTck)[1] / 2)
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 1.0)
+    graphics::abline(h = yminTck, col = "lightgray", lty = "dotted")
+    graphics::abline(v = graphics::axTicks(1), col = "lightgray", lty = "solid", lwd = 1.0)
+
+    graphics::axis(2, at = yminTck, labels = NA, tcl = graphics::par("tcl") * 0.6)
+
+    formule <- stats::as.formula(formula)
+    graphics::boxplot(formule, data = data.df, add = TRUE, notch = FALSE,
+                      col = col$col, medcol = col$medcol, whiskcol = col$whiskcol,
+                      staplecol = col$staplecol, boxcol = col$boxcol,
+                      outcol = col$outcol, outbg = col$outbg,
+                      outcex = 0.7, outpch = 21,
+                      yaxt = 'n', range = round(ylim[2] * 0.25))
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.histogram <- function(x, xlab = '', ylab = '', title = '',
+                             bw.pars = list(add = FALSE, bw = 1.0, col = "red", lwd = 1.5),
+                             hist.pars = list(user.break = FALSE, breaks = NULL,
+                                              col = "lightblue", border = "blue"),
+                             location = NULL)
+{
+    if(is.null(bw.pars$add)) bw.pars$add <- FALSE
+    if(is.null(bw.pars$bw)) bw.pars$bw <- 1.0
+    if(is.null(bw.pars$col)) bw.pars$col <- "red"
+    if(is.null(bw.pars$lwd)) bw.pars$lwd <- 1.5
+    if(is.null(hist.pars$col)) hist.pars$col <- "lightblue"
+    if(is.null(hist.pars$border)) hist.pars$border <- "blue"
+    if(is.null(hist.pars$breaks)) hist.pars$breaks <- "Sturges"
+
+    breaks <- if(hist.pars$user.break) hist.pars$breaks else "Sturges"
+    hst <- graphics::hist(x, breaks = breaks, plot = FALSE)
+    xhst <- range(pretty(hst$breaks))
+    yhst <- range(pretty(hst$density))
+
+    ##########
+    if(bw.pars$add){
+        dst <- stats::density(x, bw = bw.pars$bw, na.rm = TRUE)
+        xdst <- range(dst$x)
+        ydst <- range(dst$y)
+        # xlim <- c(min(xhst[1], xdst[1]), max(xhst[2], xdst[2]))
+        xlim <- xhst
+        ylim <- c(min(yhst[1], ydst[1]), max(yhst[2], ydst[2]))
+    }else{
+        xlim <- xhst
+        ylim <- yhst
+    }
+    ylim[1] <- 0
+    ylim[2] <- ylim[2] * 1.04
+
+    ##########
+    op <- graphics::par(mar = c(4.5, 5.5, 3.0, 2.1))
+    plot(1, xlim = xlim, ylim = ylim, type = 'n', xaxt = 'n', yaxt = 'n',
+         yaxs = 'i', xlab = '', ylab = '')
+
+    yax <- graphics::axTicks(2)
+    yminTck <- yax[-length(yax)] + diff(yax) / 2
+    yminTck <- c(min(yax) - diff(yminTck)[1] / 2, yminTck, max(yax) + diff(yminTck)[1] / 2)
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 1.0)
+    graphics::abline(h = yminTck, col = "lightgray", lty = "dotted")
+    graphics::abline(v = hst$breaks, col = "lightgray", lty = "dotted", lwd = 1.3)
+
+    graphics::axis(1, at = hst$breaks, tcl = graphics::par("tcl") * 0.8, cex.axis = 1.0)
+    graphics::mtext(xlab, side = 1, line = 2.5, cex = 1.0)
+
+    graphics::axis(2, at = graphics::axTicks(2), las = 2, cex.axis = 1.0)
+    graphics::axis(2, at = yminTck, labels = NA, tcl = graphics::par("tcl") * 0.6)
+    graphics::mtext(ylab, side = 2, line = 4, cex = 1.0)
+
+    graphics::title(main = list(title, cex = 1.5))
+
+    graphics::hist(x, breaks = breaks, freq = FALSE, add = TRUE, xlab = '', ylab = '', main = '',
+                   axes = FALSE, col = hist.pars$col, border = hist.pars$border)
+    if(bw.pars$add) graphics::lines(dst, col = bw.pars$col, lwd = bw.pars$lwd)
+    graphics::box()
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.bar.Anomaly <- function(x, y, period = c(1981, 2010), percent = TRUE,
+                                    xlim = NULL, ylim = NULL, xlab = '', ylab = '', ylab.sub = NULL,
+                                    title = '', title.position = 'top', axis.font = 1,
+                                    barcol = c("blue", "red"), location = NULL)
+{
+    if((length(y[!is.na(y)]) < 1) |
+       (length(y[!is.na(y)]) < 5) & !is.null(period))
+    {
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        if(is.null(period))
+            Insert.Messages.Out("No data to plot", TRUE, "w")
+        else
+            Insert.Messages.Out("Not enough data to compute climatology", TRUE, "w")
+        return(0)
+    }
+
+    if(!is.null(period)){
+        moy <- mean(y[x >= period[1] & x <= period[2]], na.rm = TRUE)
+        y <- if(percent) 100 * (y - moy) / (moy + 0.01) else y - moy
+    }
+
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim[1] + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 4.5,
+                    ifelse(nr.ylab == 0, 5.1,
+                    ifelse(nr.ylab == 1, 5.5, 6.5)))
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:2, ncol = 1)
+            plot.heights <- c(0.9, ttl.h)
+            par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(2, 1), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9)
+            par.plot <- c(3.5, par.mar.2, 1.5, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:2, ncol = 1)
+        plot.heights <- c(0.9, 0.01)
+        par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xlab = '', ylab = '', axes = FALSE, xlim = xlim, ylim = ylim)
+    minTck <- graphics::axTicks(2)
+    minTck <- minTck[-length(minTck)] + diff(minTck) / 2
+    minTck <- c(min(graphics::axTicks(2)) - diff(minTck)[1] / 2, minTck, max(graphics::axTicks(2)) + diff(minTck)[1] / 2)
+
+    if(methods::is(x, "Date")){
+        xTck <- axTicks.Date(x, 1)
+        axis.foo <- graphics::axis.Date
+        xminor <- axTicks.minor.Date(c(xTck[1], xlim[2]))
+        if(!is.null(xminor)) xminor <- xminor[!xminor %in% xTck]
+        bar.width <- as.numeric(diff(range(xlim))) / min(as.numeric(diff(x)), na.rm = TRUE)
+    }else{
+        xTck <- graphics::axTicks(1)
+        xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+        axis.foo <- graphics::axis
+        bar.width <- as.numeric(diff(range(xlim)))
+        if(as.numeric(diff(xlim)) > 5){
+            xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+            xminor <- xminor[!xminor %in% xTck]
+        }
+        else xminor <- NULL
+    }
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 1)
+    graphics::abline(h = minTck, col = "lightgray", lty = "dotted", lwd = 1.3)
+    graphics::abline(v = xTck, col = "lightgray", lty = "solid", lwd = 1)
+    graphics::abline(v = xminor, col = "lightgray", lty = "dotted", lwd = 1.3)
+
+    bar.width <- 80 * bar.width^(-0.508775)
+    if(bar.width < 1) bar.width <- 1
+    kol <- ifelse(y > 0, 2, 1)
+    graphics::lines(x, y, type = "h", lwd = bar.width, lend = "butt", col = barcol[kol])
+
+    axis.foo(1, at = xTck, font = axis.font)
+    if(length(xminor) > 0)
+        axis.foo(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::axis(2, at = graphics::axTicks(2), las = 1, font = axis.font)
+    graphics::axis(2, at = minTck, labels = NA, tcl = graphics::par("tcl") * 0.5)
+
+    graphics::mtext(xlab, side = 1, line = 2.5)
+    line <- if(max(nchar(as.character(graphics::axTicks(2)))) > 2) 3 else 2
+    if(!is.null(ylab.sub)){
+        graphics::mtext(ylab, side = 2, line = line + 1)
+        graphics::mtext(ylab.sub, side = 2, line = line, font = 3, cex = 0.8)
+    }else graphics::mtext(ylab, side = 2, line = line)
+
+    graphics::box()
+    # graphics::box(bty = 'l')
+    # graphics::box(bty = '7', col = 'gray')
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.3, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.proba <- function(dat, xlim = NULL, ylim = NULL, origindate = NULL,
+                            xlab = '', xlab.sub = NULL, ylab = "Probability of Exceeding",
+                            title = '', title.position = 'bottom', axis.font = 1,
+                            proba = NULL, plotl = NULL, location = NULL)
+{
+    plotl0 <- list(type = 'both', lwd = 2, cex = 0.8,
+                   col = list(line = "blue", points = "lightblue"),
+                   smooth = list(smooth = FALSE, disp = TRUE, adj = 1,
+                                 col = 'gray', lwd = 2, fun = 1))
+    plotl <- init.default.list.args(plotl, plotl0)
+
+    ####
+    proba0 <- list(theoretical = TRUE, col = 'black', lwd = 2, gof.stat = 'ad', method = 'mle',
+                   distr = c("norm", "snorm", "lnorm", "gamma", "exp", "weibull", "gumbel"))
+    proba <- init.default.list.args(proba, proba0)
+
+    ####
+    dat <- dat[!is.na(dat)]
+    if(length(dat) < 7){
+        x <- y <- 1:100
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("Not enough data to fit a distribution", TRUE, "w")
+        return(0)
+    }
+
+    if(is.null(ylim)) xlim <- range(dat, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- c(0, 100)
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.xlab <- stringr::str_count(xlab, pattern = "\n")
+    line.xlab <- ifelse(xlab == '', 1,
+                    ifelse(nr.xlab == 0, 2,
+                    ifelse(nr.xlab == 1, 3, 4)))
+    par.mar.1 <- ifelse(xlab == '', 3.1,
+                    ifelse(nr.xlab == 0, 3.5,
+                    ifelse(nr.xlab == 1, 4.1, 5.4)))
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 4.5,
+                    ifelse(nr.ylab == 0, 4.5,
+                    ifelse(nr.ylab == 1, 5.5, 6.5)))
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:2, ncol = 1)
+            plot.heights <- c(0.9, ttl.h)
+            par.plot <- c(par.mar.1, par.mar.2, 2.1, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(2, 1), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9)
+            par.plot <- c(par.mar.1, par.mar.2, 1.5, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:2, ncol = 1)
+        plot.heights <- c(0.9, 0.01)
+        par.plot <- c(par.mar.1, par.mar.2, 2.1, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlim = xlim, ylim = ylim, xlab = '', ylab = '')
+    xminTck <- graphics::axTicks(1)
+    xminTck <- xminTck[-length(xminTck)] + diff(xminTck) / 2
+    xminTck <- c(min(graphics::axTicks(1)) - diff(xminTck)[1] / 2, xminTck, max(graphics::axTicks(1)) + diff(xminTck)[1] / 2)
+    yminTck <- graphics::axTicks(2)
+    yminTck <- yminTck[-length(yminTck)] + diff(yminTck) / 2
+    yminTck <- c(min(graphics::axTicks(2)) - diff(yminTck)[1] / 2, yminTck, max(graphics::axTicks(2)) + diff(yminTck)[1] / 2)
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 0.8)
+    graphics::abline(h = yminTck, col = "lightgray", lty = "dotted")
+    graphics::abline(v = graphics::axTicks(1), col = "lightgray", lty = "solid", lwd = 0.8)
+    graphics::abline(v = xminTck, col = "lightgray", lty = "dotted")
+
+    if(!is.null(origindate)){
+        xaxlab <- format(as.Date(graphics::axTicks(1), origin = origindate), '%d-%b')
+        graphics::axis(1, at = graphics::axTicks(1), labels = xaxlab, font = axis.font)
+    }else graphics::axis(1, at = graphics::axTicks(1), font = axis.font)
+    graphics::mtext(xlab, side = 1, line = line.xlab)
+    if(!is.null(xlab.sub)) graphics::mtext(xlab.sub, side = 1, line = line.xlab + 1, font = 3, cex = 0.8)
+
+    yaxlab <- paste0(graphics::axTicks(2), "%")
+    graphics::axis(2, at = graphics::axTicks(2), labels = yaxlab, las = 2, font = axis.font)
+    graphics::mtext(ylab, side = 2, line = 3, cex = 1.2)
+
+    ####
+
+    if(plotl$smooth$smooth){
+        smooth_fun <- get(paste0('ecdf_plot_smooth', plotl$smooth$fun), mode = "function")
+        secdf <- smooth_fun(dat, adj = plotl$smooth$adj)
+        graphics::lines(secdf$x, secdf$y, type = 'l', col = plotl$smooth$col, lwd = plotl$smooth$lwd)
+    }
+
+    pecdf <- ecdf_plot_ts(dat)
+    plot_proba0 <- !plotl$smooth$smooth
+    plot_proba1 <- plotl$smooth$disp && plotl$smooth$smooth
+    if(plot_proba0 || plot_proba1){
+        if(plotl$type == 'both') graphics::lines(pecdf$x, pecdf$y, type = 'o', col = plotl$col$line, lwd = plotl$lwd,
+                                                 pch = 21, bg = plotl$col$points, cex = plotl$cex)
+        if(plotl$type == 'line') graphics::lines(pecdf$x, pecdf$y, type = 'l', col = plotl$col$line, lwd = plotl$lwd)
+    }
+
+    ####
+    if(proba$theoretical){
+        fit.distrs <- fit.distributions(pecdf$x, proba$distr, proba$method)
+        if(!is.null(fit.distrs)){
+            gof <- try(fitdistrplus::gofstat(fit.distrs), silent = TRUE)
+            if(!inherits(gof, "try-error")){
+                imin <- which.min(gof[[proba$gof.stat]])
+                plotTheo <- TRUE
+            }else plotTheo <- FALSE
+        }else plotTheo <- FALSE
+
+        if(plotTheo){
+            selected.distr <- fit.distrs[[imin]]$distname
+            selected.pars <- as.list(fit.distrs[[imin]]$estimate)
+            pdists <- function(x){
+                foo <- get(paste0("p", selected.distr), mode = "function")
+                do.call(foo, c(list(q = x), selected.pars))
+            }
+            ex <- 0.05 * (xlim[2] - xlim[1])
+            xmin <- xlim[1] - ex
+            xmax <- xlim[2] + ex
+            graphics::curve(100 * (1 - pdists(x)), from = xmin, to = xmax,
+                            add = TRUE, lwd = proba$lwd, col = proba$col)
+            graphics::legend("topright", 
+                c(paste0("distr: ", selected.distr), sapply(seq_along(selected.pars),
+                        function(j) paste0(names(selected.pars)[j], ": ", round(selected.pars[[j]], 5)))),
+                box.lwd = 0, box.col = "gray97", bg = "gray98", cex = 1.2)
+        }else{
+            Insert.Messages.Out("Unable to fit a distribution", TRUE, "w")
+        }
+    }
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::box()
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 0.9, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.line.ENSO <- function(x, y, oni, xlim = NULL, ylim = NULL, origindate = NULL,
+                                xlab = '', ylab = '', ylab.sub = NULL,
+                                title = '', title.position = 'top', axis.font = 1,
+                                plotl = NULL, legends = NULL, location = NULL)
+{
+    if(is.null(plotl$col$line)) plotl$col$line <- 'black'
+    if(is.null(plotl$col$points)) plotl$col$points <- c("blue", "gray", "red")
+    if(is.null(plotl$lwd)) plotl$lwd <- 2
+    if(is.null(plotl$cex)) plotl$cex <- 2
+
+    if(is.null(legends$add$mean)) legends$add$mean <- FALSE
+    if(is.null(legends$add$tercile)) legends$add$tercile <- FALSE
+    if(is.null(legends$add$linear)) legends$add$linear <- FALSE
+    if(is.null(legends$col$mean)) legends$col$mean <- "darkblue"
+    if(is.null(legends$col$tercile1)) legends$col$tercile1 <- "chartreuse4"
+    if(is.null(legends$col$tercile2)) legends$col$tercile2 <- "darkgoldenrod4"
+    if(is.null(legends$col$linear)) legends$col$linear <- "purple3"
+    if(is.null(legends$text$mean)) legends$text$mean <- "Average"
+    if(is.null(legends$text$tercile1)) legends$text$tercile1 <- "Tercile 0.33333"
+    if(is.null(legends$text$tercile2)) legends$text$tercile2 <- "Tercile 0.66666"
+    if(is.null(legends$text$linear)) legends$text$linear <- "Trend line"
+    if(is.null(legends$lwd$mean)) legends$lwd$mean <- 2
+    if(is.null(legends$lwd$tercile)) legends$lwd$tercile <- 2
+    if(is.null(legends$lwd$linear)) legends$lwd$linear <- 2
+
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = '', ylab = '', main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 6.0,
+                    ifelse(nr.ylab == 0, 6.5,
+                    ifelse(nr.ylab == 1, 7.5, 8.8)))
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:3, ncol = 1)
+            plot.heights <- c(0.9, 0.2, ttl.h)
+            par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+            par.legend <- c(0, par.mar.2, 0, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(3, 1, 2), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9, 0.2)
+            par.plot <- c(3.5, par.mar.2, 1.5, 2.1)
+            par.legend <- c(1, par.mar.2, 0, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:3, ncol = 1)
+        plot.heights <- c(0.9, 0.2, 0.01)
+        par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+        par.legend <- c(0, par.mar.2, 0, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '', xlim = xlim, ylim = ylim)
+
+    xTck <- graphics::axTicks(1)
+    xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+    if(as.numeric(diff(xlim)) > 5){
+        xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+        xminor <- xminor[!xminor %in% xTck]
+    }else xminor <- NULL
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "dotted")
+    graphics::abline(v = xTck, col = "lightgray", lty = "dotted")
+
+    graphics::lines(x, y, col = plotl$col$line, lwd = plotl$lwd)
+    graphics::points(x, y, pch = 21, col = plotl$col$line, bg = plotl$col$points[oni], cex = plotl$cex)
+
+    collegend <- NULL
+    txtlegend <- NULL
+    if(legends$add$mean){
+        graphics::abline(h = mean(y, na.rm = TRUE), col = legends$col$mean, lwd = legends$lwd$mean)
+        collegend <- c(collegend, legends$col$mean)
+        txtlegend <- c(txtlegend, legends$text$mean)
+    }
+    if(legends$add$linear){
+        graphics::abline(stats::lm(y~x), col = legends$col$linear, lwd = legends$lwd$linear)
+        collegend <- c(collegend, legends$col$linear)
+        txtlegend <- c(txtlegend, legends$text$linear)
+    }
+    if(legends$add$tercile){
+        terc <- quantile8(y, probs = c(0.33333, 0.66667))
+        graphics::abline(h = terc[1], col = legends$col$tercile1, lwd = legends$lwd$tercile)
+        graphics::abline(h = terc[2], col = legends$col$tercile2, lwd = legends$lwd$tercile)
+        collegend <- c(collegend, legends$col$tercile1, legends$col$tercile2)
+        txtlegend <- c(txtlegend, legends$text$tercile1, legends$text$tercile2)
+    }
+
+    graphics::axis(1, at = xTck, font = axis.font, cex.axis = 1.5)
+    if(length(xminor) > 0) graphics::axis(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::mtext(xlab, side = 1, line = 2.5)
+    if(!is.null(origindate)){
+        yaxlab <- format(as.Date(graphics::axTicks(2), origin = origindate), '%d-%b')
+        graphics::axis(2, at = graphics::axTicks(2), labels = yaxlab, las = 2, font = axis.font, cex.axis = 1.5)
+    }else graphics::axis(2, at = graphics::axTicks(2), font = axis.font, las = 1, cex.axis = 1.5)
+
+    line <- if(max(nchar(as.character(graphics::axTicks(2)))) > 2) 4 else 3
+    if(!is.null(ylab.sub)){
+        graphics::mtext(ylab, side = 2, line = line + 1)
+        graphics::mtext(ylab.sub, side = 2, line = line, font = 3, cex = 0.8)
+    }else graphics::mtext(ylab, side = 2, line = line)
+
+    graphics::box()
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    nino <- c('La Nina', 'Neutral', 'El Nino')
+    txtlegend <- if(legends$add$mean | legends$add$linear | legends$add$tercile) c(nino, txtlegend) else nino
+    collegend <- if(legends$add$mean | legends$add$linear | legends$add$tercile) c(rep(plotl$col$line, 3), collegend) else rep(plotl$col$line, 3)
+
+    op <- graphics::par(mar = par.legend)
+    graphics::plot.new()
+    graphics::legend("center", "groups", legend = txtlegend, col = collegend, pch = c(rep(21, 3), rep(NA, 4)),
+            pt.bg = c(plotl$col$points, rep(NA, 4)), pt.cex = c(rep(2, 3), rep(NA, 4)),
+            pt.lwd = c(rep(1, 3), rep(NA, 4)), lwd = 3, ncol = 3, cex = 1.2)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.5, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.bar.ENSO <- function(x, y, oni, xlim = NULL, ylim = NULL, origindate = NULL,
+                                xlab = '', ylab = '', ylab.sub = NULL,
+                                title = '', title.position = 'top', axis.font = 1,
+                                barcol = c("blue", "gray", "red"), location = NULL)
+{
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 6.0,
+                    ifelse(nr.ylab == 0, 6.5,
+                    ifelse(nr.ylab == 1, 7.5, 8.8)))
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:3, ncol = 1)
+            plot.heights <- c(0.9, 0.13, ttl.h)
+            par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+            par.legend <- c(0, par.mar.2, 0, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(3, 1, 2), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9, 0.13)
+            par.plot <- c(3.5, par.mar.2, 1.5, 2.1)
+            par.legend <- c(1, par.mar.2, 0, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:3, ncol = 1)
+        plot.heights <- c(0.9, 0.1, 0.01)
+        par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+        par.legend <- c(0, par.mar.2, 0, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xlab = '', ylab = '', axes = FALSE, xlim = xlim, ylim = ylim)
+    minTck <- graphics::axTicks(2)
+    minTck <- minTck[-length(minTck)] + diff(minTck) / 2
+    minTck <- c(min(graphics::axTicks(2)) - diff(minTck)[1] / 2, minTck, max(graphics::axTicks(2)) + diff(minTck)[1] / 2)
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 0.8)
+    graphics::abline(h = minTck, col = "lightgray", lty = "dotted")
+
+    bar.width <- round(60 * diff(range(xlim))^(-0.508775))
+    graphics::lines(x, y, type = "h", lwd = bar.width, lend = "butt", col = barcol[oni])
+
+    xTck <- graphics::axTicks(1)
+    xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+    if(as.numeric(diff(xlim)) > 5){
+        xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+        xminor <- xminor[!xminor %in% xTck]
+    }else xminor <- NULL
+
+    graphics::axis(1, at = xTck, font = axis.font, cex.axis = 1.5)
+    if(length(xminor) > 0) graphics::axis(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::mtext(xlab, side = 1, line = 2.5)
+    # axis(2, at = axTicks(2), las = 1, font = axis.font, cex.axis = 1.5)
+    if(!is.null(origindate)){
+        yaxlab <- format(as.Date(graphics::axTicks(2), origin = origindate), '%d-%b')
+        graphics::axis(2, at = graphics::axTicks(2), labels = yaxlab, las = 2, font = axis.font, cex.axis = 1.5)
+    }else graphics::axis(2, at = graphics::axTicks(2), font = axis.font, las = 1, cex.axis = 1.5)
+
+
+    line <- if(max(nchar(as.character(graphics::axTicks(2)))) > 2) 4 else 3
+    if(!is.null(ylab.sub)){
+        graphics::mtext(ylab, side = 2, line = line + 1)
+        graphics::mtext(ylab.sub, side = 2, line = line, font = 3, cex = 0.8)
+    }else graphics::mtext(ylab, side = 2, line = line)
+
+    graphics::box()
+    # graphics::box(bty = 'l')
+    # graphics::box(bty = '7', col = 'black')
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.legend)
+    graphics::plot.new()
+    nino <- c('La Nina', 'Neutral', 'El Nino')
+    graphics::legend("center", "groups", legend = nino, fill = barcol, horiz = TRUE, cex = 1.2)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.5, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.proba.ENSO <- function(dat, oni, xlim = NULL, ylim = NULL, origindate = NULL,
+                                    xlab = '', xlab.sub = NULL, ylab = "Probability of Exceeding",
+                                    title = '', title.position = 'bottom', axis.font = 1,
+                                    plotl = NULL, location = NULL)
+{
+    if(is.null(plotl$type)) plotl$type <- 'both'
+    if(is.null(plotl$lwd)) plotl$lwd <- 2
+    if(is.null(plotl$cex)) plotl$cex <- 1.4
+    if(is.null(plotl$all$line)) plotl$all$line <- "black"
+    if(is.null(plotl$all$points)) plotl$all$points <- "lightgray"
+    if(is.null(plotl$nino$line)) plotl$nino$line <- "red"
+    if(is.null(plotl$nino$points)) plotl$nino$points <- "lightpink"
+    if(is.null(plotl$nina$line)) plotl$nina$line <- "blue"
+    if(is.null(plotl$nina$points)) plotl$nina$points <- "lightblue"
+    if(is.null(plotl$neutre$line)) plotl$neutre$line <- "gray"
+    if(is.null(plotl$neutre$points)) plotl$neutre$points <- "lightgray"
+
+    dat <- dat[!is.na(dat)]
+    if(length(dat) < 7){
+        x <- y <- 1:100
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("Not enough data to fit a distribution", TRUE, "w")
+        return(0)
+    }
+
+    if(is.null(ylim)) xlim <- range(dat, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- c(0, 100)
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.xlab <- stringr::str_count(xlab, pattern = "\n")
+    line.xlab <- ifelse(xlab == '', 1,
+                    ifelse(nr.xlab == 0, 2.5,
+                    ifelse(nr.xlab == 1, 4, 5.5)))
+    par.mar.1 <- ifelse(xlab == '', 3.0,
+                    ifelse(nr.xlab == 0, 4.0,
+                    ifelse(nr.xlab == 1, 5.0, 6.5)))
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 6.0,
+                    ifelse(nr.ylab == 0, 6.5,
+                    ifelse(nr.ylab == 1, 7.0, 8.5)))
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:3, ncol = 1)
+            plot.heights <- c(0.9, 0.13, ttl.h)
+            par.plot <- c(par.mar.1, par.mar.2, 2.1, 2.1)
+            par.legend <- c(0, par.mar.2, 0, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(3, 1, 2), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9, 0.13)
+            par.plot <- c(par.mar.1, par.mar.2, 2.1, 2.1)
+            par.legend <- c(1, par.mar.2, 0, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:3, ncol = 1)
+        plot.heights <- c(0.9, 0.15, 0.01)
+        par.plot <- c(par.mar.1, par.mar.2, 2.1, 2.1)
+        par.legend <- c(0, par.mar.2, 0, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlim = xlim, ylim = ylim, xlab = '', ylab = '')
+    xminTck <- graphics::axTicks(1)
+    xminTck <- xminTck[-length(xminTck)] + diff(xminTck) / 2
+    xminTck <- c(min(graphics::axTicks(1)) - diff(xminTck)[1] / 2, xminTck, max(graphics::axTicks(1)) + diff(xminTck)[1] / 2)
+    yminTck <- graphics::axTicks(2)
+    yminTck <- yminTck[-length(yminTck)] + diff(yminTck) / 2
+    yminTck <- c(min(graphics::axTicks(2)) - diff(yminTck)[1] / 2, yminTck, max(graphics::axTicks(2)) + diff(yminTck)[1] / 2)
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 0.8)
+    graphics::abline(h = yminTck, col = "lightgray", lty = "dotted")
+    graphics::abline(v = graphics::axTicks(1), col = "lightgray", lty = "solid", lwd = 0.8)
+    graphics::abline(v = xminTck, col = "lightgray", lty = "dotted")
+
+    if(!is.null(origindate)){
+        xaxlab <- format(as.Date(graphics::axTicks(1), origin = origindate), '%d-%b')
+        graphics::axis(1, at = graphics::axTicks(1), labels = xaxlab, font = axis.font, cex.axis = 1.5)
+    }else graphics::axis(1, at = graphics::axTicks(1), font = axis.font, cex.axis = 1.5)
+    graphics::mtext(xlab, side = 1, line = line.xlab)
+    if(!is.null(xlab.sub)) graphics::mtext(xlab.sub, side = 1, line = line.xlab + 1, font = 3, cex = 0.8)
+
+    yaxlab <- paste0(graphics::axTicks(2), "%")
+    graphics::axis(2, at = graphics::axTicks(2), labels = yaxlab, las = 2, font = axis.font, cex.axis = 1.5)
+    graphics::mtext(ylab, side = 2, line = 4)
+
+    ####
+    fn0 <- stats::ecdf(dat)
+    x0 <- sort(dat)
+    y0 <- 100 * (1 - fn0(x0))
+
+    x1 <- sort(dat[oni == 1])
+    fn1 <- stats::ecdf(x1)
+    y1 <- 100 * (1 - fn1(x1))
+
+    x2 <- sort(dat[oni == 2])
+    fn2 <- stats::ecdf(x2)
+    y2 <- 100 * (1 - fn2(x2))
+
+    x3 <- sort(dat[oni == 3])
+    fn3 <- stats::ecdf(x3)
+    y3 <- 100 * (1 - fn3(x3))
+
+    if(plotl$type == 'both'){
+        graphics::lines(x0, y0, type = 'o', col = plotl$all$line, lwd = plotl$lwd, pch = 21, bg = plotl$all$points, cex = plotl$cex)
+        graphics::lines(x1, y1, type = 'o', col = plotl$nina$line, lwd = plotl$lwd, pch = 21, bg = plotl$nina$points, cex = plotl$cex)
+        graphics::lines(x2, y2, type = 'o', col = plotl$neutre$line, lwd = plotl$lwd, pch = 21, bg = plotl$neutre$points, cex = plotl$cex)
+        graphics::lines(x3, y3, type = 'o', col = plotl$nino$line, lwd = plotl$lwd, pch = 21, bg = plotl$nino$points, cex = plotl$cex)
+    }
+    if(plotl$type == 'line'){
+        graphics::lines(x0, y0, type = 'l', col = plotl$all$line, lwd = plotl$lwd)
+        graphics::lines(x1, y1, type = 'l', col = plotl$nina$line, lwd = plotl$lwd)
+        graphics::lines(x2, y2, type = 'l', col = plotl$neutre$line, lwd = plotl$lwd)
+        graphics::lines(x3, y3, type = 'l', col = plotl$nino$line, lwd = plotl$lwd)
+    }
+
+    graphics::box()
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.legend)
+    graphics::plot.new()
+    if(plotl$type == 'both'){
+        graphics::legend("center", "groups", legend = c('All years', 'La Nina', 'Neutral', 'El Nino'),
+                col = c(plotl$all$line, plotl$nina$line, plotl$neutre$line, plotl$nino$line),
+                lwd = 2, lty = 1, pch = 21, horiz = TRUE, cex = 1.4,
+                pt.bg = c(plotl$all$points, plotl$nina$points, plotl$neutre$points, plotl$nino$points))
+    }
+
+    if(plotl$type == 'line'){
+        graphics::legend("center", "groups", legend = c('All years', 'La Nina', 'Neutral', 'El Nino'),
+                col = c(plotl$all$line, plotl$nina$line, plotl$neutre$line, plotl$nino$line),
+                lwd = 2, lty = 1, horiz = TRUE)
+    }
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.5, font = 2)
+    }
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.bar.line <- function(x, y, y0 = 0, yticks = NULL,
+                                xlim = NULL, ylim = NULL, xlab = '', ylab = '', ylab.sub = NULL,
+                                title = '', title.position = 'top', axis.font = 1,
+                                barcol = c("blue", "red"), plot.line = NULL,
+                                location = NULL)
+{
+    if(is.null(plot.line$plot)) plot.line$plot <- FALSE
+    if(is.null(plot.line$col)) plot.line$col <- "black"
+    if(is.null(plot.line$lwd)) plot.line$lwd <- 1.5
+
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(!is.null(yticks)){
+        yticks1 <- yticks
+        yticks <- yticks - y0
+    }
+    y <- y - y0
+    ylim <- if(is.null(ylim)) range(pretty(y)) else ylim - y0
+
+    if(xlim[1] == xlim[2]) xlim <- xlim[1] + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 4.5,
+                    ifelse(nr.ylab == 0, 5.1,
+                    ifelse(nr.ylab == 1, 5.5, 6.5)))
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:2, ncol = 1)
+            plot.heights <- c(0.9, ttl.h)
+            par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(2, 1), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9)
+            par.plot <- c(3.5, par.mar.2, 1.5, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:2, ncol = 1)
+        plot.heights <- c(0.9, 0.01)
+        par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xlab = '', ylab = '', axes = FALSE, xlim = xlim, ylim = ylim)
+
+    if(is.null(yticks)){
+        minTck <- graphics::axTicks(2)
+        minTck <- minTck[-length(minTck)] + diff(minTck) / 2
+        minTck <- c(min(graphics::axTicks(2)) - diff(minTck)[1] / 2, minTck, max(graphics::axTicks(2)) + diff(minTck)[1] / 2)
+        graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 0.8)
+        graphics::abline(h = minTck, col = "lightgray", lty = "dotted")
+        yTck <- graphics::axTicks(2)
+        ylabTck <- yTck
+        ylas <- 1
+    }else{
+        graphics::abline(h = yticks, col = "lightgray", lty = "solid", lwd = 0.8)
+        yTck <- yticks
+        ylabTck <- yticks1
+        ylas <- 2
+    }
+
+    if(methods::is(x, "Date")){
+        xTck <- axTicks.Date(x, 1)
+        axis.foo <- graphics::axis.Date
+        bar.width <- round(58 * (as.numeric(diff(range(xlim))) / min(as.numeric(diff(x)), na.rm = TRUE))^(-0.508775))
+        if(as.numeric(diff(xlim)) > 1095){
+            xminor <- seq(as.Date(paste0(format(xlim[1], "%Y"), "-01-01")),
+                        as.Date(paste0(as.numeric(format(xlim[2], "%Y")) + 1, "-01-01")), "year")
+            xminor <- xminor[!xminor %in% xTck]
+        }else xminor <- NULL
+    }else{
+        xTck <- graphics::axTicks(1)
+        xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+        axis.foo <- graphics::axis
+        bar.width <- round(60 * as.numeric(diff(range(xlim)))^(-0.508775))
+        if(as.numeric(diff(xlim)) > 5){
+            xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+            xminor <- xminor[!xminor %in% xTck]
+        }else xminor <- NULL
+    }
+    graphics::abline(v = xTck, col = "lightgray", lty = "dotted")
+
+    kol <- ifelse(y >= 0, 2, 1)
+    graphics::lines(x, y, type = "h", lwd = bar.width, lend = "butt", col = barcol[kol])
+    graphics::abline(h = 0, col = "lightgray", lty = "solid", lwd = 0.8)
+    if(plot.line$plot) graphics::lines(x, y, lwd = plot.line$lwd, col = plot.line$col)
+
+    axis.foo(1, at = xTck, font = axis.font)
+    if(length(xminor) > 0) axis.foo(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::axis(2, at = yTck, labels = ylabTck, las = ylas, font = axis.font)
+
+    graphics::mtext(xlab, side = 1, line = 2.1)
+    line <- if(max(nchar(as.character(ylabTck))) > 2) 3.8 else 2.5
+    if(!is.null(ylab.sub)){
+        graphics::mtext(ylab, side = 2, line = line + 1)
+        graphics::mtext(ylab.sub, side = 2, line = line, font = 3, cex = 0.8)
+    }else graphics::mtext(ylab, side = 2, line = line)
+
+    graphics::box(bty = 'l')
+    graphics::box(bty = '7', col = 'black')
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.5, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+graphs.plot.polygon <- function(x, y, y0 = 0, yticks = NULL,
+                                xlim = NULL, ylim = NULL, xlab = '', ylab = '', ylab.sub = NULL,
+                                title = '', title.position = 'top', axis.font = 1,
+                                fillcol = c("blue", "red"), plot.line = NULL,
+                                location = NULL)
+{
+    if(is.null(plot.line$plot)) plot.line$plot <- FALSE
+    if(is.null(plot.line$col)) plot.line$col <- "black"
+    if(is.null(plot.line$lwd)) plot.line$lwd <- 1.5
+
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim[1] + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 4.5,
+                    ifelse(nr.ylab == 0, 5.1,
+                    ifelse(nr.ylab == 1, 5.5, 6.5)))
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:2, ncol = 1)
+            plot.heights <- c(0.9, ttl.h)
+            par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(2, 1), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9)
+            par.plot <- c(3.5, par.mar.2, 1.5, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:2, ncol = 1)
+        plot.heights <- c(0.9, 0.01)
+        par.plot <- c(3.5, par.mar.2, 2.1, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xlab = '', ylab = '', axes = FALSE, xlim = xlim, ylim = ylim)
+
+    if(is.null(yticks)){
+        minTck <- graphics::axTicks(2)
+        minTck <- minTck[-length(minTck)] + diff(minTck) / 2
+        minTck <- c(min(graphics::axTicks(2)) - diff(minTck)[1] / 2, minTck, max(graphics::axTicks(2)) + diff(minTck)[1] / 2)
+        graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 0.8)
+        graphics::abline(h = minTck, col = "lightgray", lty = "dotted")
+        yTck <- graphics::axTicks(2)
+        ylas <- 1
+    }else{
+        graphics::abline(h = yticks, col = "lightgray", lty = "solid", lwd = 0.8)
+        yTck <- yticks
+        ylas <- 2
+    }
+
+    if(methods::is(x, "Date")){
+        xTck <- axTicks.Date(x, 1)
+        axis.foo <- graphics::axis.Date
+        bar.width <- round(58 * (as.numeric(diff(range(xlim))) / min(as.numeric(diff(x)), na.rm = TRUE))^(-0.508775))
+        if(as.numeric(diff(xlim)) > 1095){
+            xminor <- seq(as.Date(paste0(format(xlim[1], "%Y"), "-01-01")),
+                        as.Date(paste0(as.numeric(format(xlim[2], "%Y")) + 1, "-01-01")), "year")
+            xminor <- xminor[!xminor %in% xTck]
+        }else xminor <- NULL
+    }else{
+        xTck <- graphics::axTicks(1)
+        xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+        axis.foo <- graphics::axis
+        bar.width <- round(60 * as.numeric(diff(range(xlim)))^(-0.508775))
+        if(as.numeric(diff(xlim)) > 5){
+            xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+            xminor <- xminor[!xminor %in% xTck]
+        }else xminor <- NULL
+    }
+    graphics::abline(v = xTck, col = "lightgray", lty = "dotted")
+
+    polys <- split.polygons.with_missing(as.numeric(x), rep(y0, length(y)), y)
+
+    for(j in seq_along(polys)){
+        P <- polys[[j]]
+        graphics::polygon(P$x, P$y, col = fillcol[P$z], border = NA)
+    }
+    if(plot.line$plot) graphics::lines(x, y, lwd = plot.line$lwd, col = plot.line$col)
+    graphics::abline(h = y0, col = "lightgray", lty = "solid", lwd = 0.8)
+
+    axis.foo(1, at = xTck, font = axis.font)
+    if(length(xminor) > 0) axis.foo(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::axis(2, at = yTck, las = ylas, font = axis.font)
+
+    graphics::mtext(xlab, side = 1, line = 2.1)
+    line <- if(max(nchar(as.character(graphics::axTicks(2)))) > 2) 3.8 else 2.5
+    if(!is.null(ylab.sub)){
+        graphics::mtext(ylab, side = 2, line = line + 1)
+        graphics::mtext(ylab.sub, side = 2, line = line, font = 3, cex = 0.8)
+    }else graphics::mtext(ylab, side = 2, line = line)
+
+    graphics::box(bty = 'l')
+    graphics::box(bty = '7', col = 'black')
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.5, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+picsa.plot.daily <- function(dates, prec, location, thres.rain = 1, axis.font = 1)
+{
+    vtimes <- table.annuel()
+    vmmdd <- paste0(stringr::str_pad(vtimes[, 2], 2, pad = '0'), stringr::str_pad(vtimes[, 1], 2, pad = '0'))
+    years <- as.numeric(substr(dates, 1, 4))
+    mmdd <- substr(dates, 5, 8)
+    mmdd[mmdd == '0229'] <- '0228'
+    yday <- match(mmdd, vmmdd)
+    dfplot <- data.frame(yy = years, day = yday)
+    xlim <- range(dfplot$yy, na.rm = TRUE)
+    rnor <- prec > thres.rain
+
+    graphics::layout(matrix(1:2, ncol = 1), widths = 1, heights = c(0.9, 0.1), respect = FALSE)
+    op <- graphics::par(mar = c(3.1, 5.1, 2.1, 2.1))
+    plot(dfplot$yy, dfplot$day, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '', ylim = c(0, 380))
+
+    xTck <- graphics::axTicks(1)
+    yTck <- c(1, 91, 182, 274, 365) - 1
+    # yTck <- c(0, 100, 200, 300, 360)
+
+    if(as.numeric(diff(xlim)) > 5){
+        xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+        xminor <- xminor[!xminor %in% xTck]
+    }else xminor <- NULL
+    yminor <- c(32, 60, 121, 152, 213, 244, 305, 335) - 1
+    # yminor <- seq(0, 370, 10)
+
+    graphics::axis(1, at = xTck, font = axis.font)
+    if(length(xminor) > 0) graphics::axis(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::mtext('Year', side = 1, line = 2)
+
+    yaxlab <- format(as.Date(yTck, origin = "2017-1-1"), '%d-%b')
+    graphics::axis(2, at = yTck, labels = yaxlab, las = 2, font = axis.font, cex.axis = 1)
+    graphics::axis(2, at = yminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    # axis(2, at = yTck, font = axis.font, las = 2)
+    # axis(2, at = yminor, labels = NA, tcl = par("tcl") * 0.5)
+    # mtext('Day of Year', side = 2, line = 3.5)
+
+    graphics::abline(h = yTck, col = "lightgray", lty = "dotted")
+    graphics::abline(v = xTck, col = "lightgray", lty = "dotted")
+
+    graphics::points(dfplot$yy[!rnor], dfplot$day[!rnor], pch = 15, col = "khaki", cex = 0.7)
+    graphics::points(dfplot$yy[rnor], dfplot$day[rnor], pch = 20, col = "blue", cex = 0.6)
+
+    graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+
+    graphics::legend(x = 'topright', legend = c("Rain", "Dry", 'NA'), bty = "n",
+            fill = c("blue", "khaki", NA), horiz = TRUE, cex = 1.0, inset = -0.01)
+    graphics::par(op)
+
+    op <- graphics::par(mar = c(1, 5.1, 0, 2.1))
+    plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+    bbx <- graphics::par("usr")
+    graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+    graphics::text(1, 1, "Rain Present", cex = 1.3, font = 2)
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+picsa.plot.TxTn <- function(x, tmax, tmin, location, axis.font = 1)
+{
+    ylim <- range(c(pretty(tmin), pretty(tmax)))
+    ylab <- expression(paste("Temperature (" * degree, "C)"))
+
+    graphics::layout(matrix(1:2, ncol = 1), widths = 1, heights = c(0.9, 0.1), respect = FALSE)
+    op <- graphics::par(mar = c(3, 4, 2, 2))
+    plot(x, tmin, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = ylab, ylim = ylim)
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "dotted")
+    graphics::abline(v = graphics::axTicks(1), col = "lightgray", lty = "dotted")
+
+    graphics::mtext('Year', side = 1, line = 2)
+    graphics::axis(1, at = graphics::axTicks(1), font = axis.font)
+    graphics::axis(2, at = graphics::axTicks(2), las = 1, font = axis.font)
+
+    graphics::lines(x, tmin, col = 'blue', lwd = 2)
+    graphics::lines(x, tmax, col = 'red', lwd = 2)
+
+    graphics::abline(stats::lm(tmax~x), lwd = 2)
+    graphics::abline(stats::lm(tmin~x), lwd = 2)
+    graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = c(0, 4, 0, 2))
+    graphics::plot.new()
+    graphics::legend("top", "groups", legend = c('Tmax', 'Tmin', 'Trend line'),
+            col = c('red', 'blue', 'black'), lwd = 3, lty = 1, horiz = TRUE)
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+climdex.plot.bar <- function(x, y, trend, xlim = NULL, ylim = NULL,
+                            xlab = '', ylab = '', title = '',
+                            title.position = 'top', axis.font = 1,
+                            barcol = "darkblue", location = NULL)
+{
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    nylab <- max(nchar(as.character(pretty(y))), na.rm = TRUE)
+    line.ylab <- if(nylab < 2) 2 else nylab + 1
+
+    subtitre <- paste("R2=", round(100 * trend[9], 1), " p-value=", round(trend[4], 3),
+                " Slope estimate=", round(trend[1], 3), " Slope error=", round(trend[2], 3))
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 4.5,
+                    ifelse(nr.ylab == 0, 5.1,
+                    ifelse(nr.ylab == 1, 5.5, 6.0)))
+    par.mar.2 <- par.mar.2 + nylab / 6
+
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:2, ncol = 1)
+            plot.heights <- c(0.9, ttl.h)
+            par.plot <- c(5.5, par.mar.2, 2.1, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(2, 1), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9)
+            par.plot <- c(5.5, par.mar.2, 1.5, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:2, ncol = 1)
+        plot.heights <- c(0.9, 0.01)
+        par.plot <- c(5.5, par.mar.2, 2.1, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xlab = '', ylab = '', axes = FALSE, xlim = xlim, ylim = ylim)
+
+    minTck <- graphics::axTicks(2)
+    minTck <- minTck[-length(minTck)] + diff(minTck) / 2
+    minTck <- c(min(graphics::axTicks(2)) - diff(minTck)[1] / 2, minTck, max(graphics::axTicks(2)) + diff(minTck)[1] / 2)
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 1.0)
+    graphics::abline(h = minTck, col = "lightgray", lty = "dotted", lwd = 1.3)
+
+    xTck <- graphics::axTicks(1)
+    xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+    bar.width <- round(60 * as.numeric(diff(range(xlim)))^(-0.508775))
+    if(as.numeric(diff(xlim)) > 5){
+        xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+        xminor <- xminor[!xminor %in% xTck]
+    }else xminor <- NULL
+
+    graphics::lines(x, y, type = "h", lwd = bar.width, lend = "butt", col = barcol)
+    graphics::abline(a = trend[5], b = trend[1], col = 'black', lwd = 2)
+
+    graphics::axis(1, at = xTck, font = axis.font)
+    if(length(xminor) > 0) graphics::axis(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::axis(2, at = graphics::axTicks(2), font = axis.font, las = 1, cex.axis = 1.1)
+    graphics::axis(2, at = minTck, labels = NA, tcl = graphics::par("tcl") * 0.6)
+
+    graphics::mtext(xlab, side = 1, line = 2.5)
+    graphics::mtext(subtitre, side = 1, line = 3.8, cex = 1.0)
+    graphics::mtext(ylab, side = 2, line = line.ylab, cex = 1.3)
+
+    graphics::box()
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.6, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
+
+####################################################################################################
+
+climdex.plot.line <- function(x, y, trend, xlim = NULL, ylim = NULL,
+                            xlab = '', ylab = '', title = '',
+                            title.position = 'top', axis.font = 1,
+                            plotl = NULL, legends = NULL, location = NULL)
+{
+    if(is.null(plotl$type)) plotl$type <- 'both'
+    if(is.null(plotl$col$line)) plotl$col$line <- 'red'
+    if(is.null(plotl$col$points)) plotl$col$points <- 'blue'
+    if(is.null(plotl$lwd)) plotl$lwd <- 2
+    if(is.null(plotl$cex)) plotl$cex <- 1.4
+
+    if(is.null(legends$col$lowess)) legends$col$lowess <- "blue"
+    if(is.null(legends$col$linear)) legends$col$linear <- "black"
+    if(is.null(legends$lwd$lowess)) legends$lwd$lowess <- 2
+    if(is.null(legends$lwd$linear)) legends$lwd$linear <- 2
+    if(is.null(legends$lty$lowess)) legends$lty$lowess <- 2
+    if(is.null(legends$lty$linear)) legends$lty$linear <- 1
+
+    if(is.null(legends$text$lowess)) legends$text$lowess <- "Lowess smoother"
+    if(is.null(legends$text$linear)) legends$text$linear <- "Linear Trend"
+
+    if(length(y[!is.na(y)]) == 0){
+        x0 <- seq_along(x)
+        if(length(x0) == 0) x <- x0
+        y <- rep(0, length(x0))
+        plot(x, y, type = 'n', yaxt = 'n', xlab = xlab, ylab = ylab, main = title)
+        Insert.Messages.Out("No data to plot", TRUE, "w")
+        return(0)
+    }
+    if(is.null(xlim)) xlim <- range(x, na.rm = TRUE)
+    if(is.null(ylim)) ylim <- range(pretty(y))
+
+    if(xlim[1] == xlim[2]) xlim <- xlim[1] + c(-0.5, 0.5)
+    if(xlim[2] - xlim[1] == 1) xlim <- xlim + c(-0.5, 0.5)
+
+    nylab <- max(nchar(as.character(pretty(y))), na.rm = TRUE)
+    line.ylab <- if(nylab < 2) 2 else nylab + 1
+
+    subtitre <- paste("R2=", round(100 * trend[9], 1),
+                      " p-value=", round(trend[4], 3),
+                      " Slope estimate=", round(trend[1], 3),
+                      " Slope error=", round(trend[2], 3))
+    ina <- !is.na(x) & !is.na(y)
+    lowess.fun <- stats::lowess(x[ina], y[ina])
+
+
+    draw.title <- if(missing(title) | trimws(title) == "") FALSE else TRUE
+    nr.ylab <- stringr::str_count(ylab, pattern = "\n")
+    par.mar.2 <- ifelse(ylab == '', 6.0,
+                    ifelse(nr.ylab == 0, 6.5,
+                    ifelse(nr.ylab == 1, 7.5, 8.8)))
+    par.mar.2 <- par.mar.2 + nylab / 6
+
+    if(draw.title){
+        if(missing(title.position)) title.position <- 'top'
+        nr.title <- stringr::str_count(title, pattern = "\n")
+        ttl.h <- if(nr.title == 0) 0.1 else if(nr.title == 1) 0.13 else 0.19
+        if(title.position == 'bottom'){
+            plot.position <- matrix(1:3, ncol = 1)
+            plot.heights <- c(0.9, 0.12, ttl.h)
+            par.plot <- c(5.5, par.mar.2, 2.1, 2.1)
+            par.legend <- c(0, par.mar.2, 0, 2.1)
+            par.title <- c(1, par.mar.2, 0, 2.1)
+        }else{
+            plot.position <- matrix(c(3, 1, 2), ncol = 1)
+            plot.heights <- c(ttl.h, 0.9, 0.12)
+            par.plot <- c(5.5, par.mar.2, 1.5, 2.1)
+            par.legend <- c(1, par.mar.2, 0, 2.1)
+            par.title <- c(0, par.mar.2, 1, 2.1)
+        }
+    }else{
+        plot.position <- matrix(1:3, ncol = 1)
+        plot.heights <- c(0.9, 0.12, 0.01)
+        par.plot <- c(5.5, par.mar.2, 2.1, 2.1)
+        par.legend <- c(0, par.mar.2, 0, 2.1)
+        par.title <- c(0, par.mar.2, 0, 2.1)
+    }
+
+    graphics::layout(plot.position, widths = 1, heights = plot.heights, respect = FALSE)
+
+    op <- graphics::par(mar = par.plot)
+    plot(x, y, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '', xlim = xlim, ylim = ylim)
+
+    xTck <- graphics::axTicks(1)
+    xTck <- xTck[sapply(xTck, function(e) min(abs(c(e%%1, e%%1 - 1))) < 1e-10)]
+    if(as.numeric(diff(xlim)) > 5){
+        xminor <- seq(floor(xlim[1]), floor(xlim[2]), 1)
+        xminor <- xminor[!xminor %in% xTck]
+    }else xminor <- NULL
+
+    yminTck <- graphics::axTicks(2)
+    yminTck <- yminTck[-length(yminTck)] + diff(yminTck) / 2
+    yminTck <- c(min(graphics::axTicks(2)) - diff(yminTck)[1] / 2, yminTck, max(graphics::axTicks(2)) + diff(yminTck)[1] / 2)
+
+    graphics::abline(h = graphics::axTicks(2), col = "lightgray", lty = "solid", lwd = 0.8)
+    graphics::abline(h = yminTck, col = "lightgray", lty = "dotted")
+    graphics::abline(v = graphics::axTicks(1), col = "lightgray", lty = "solid", lwd = 0.8)
+    if(length(xminor) > 0)
+        graphics::abline(v = xminor, col = "lightgray", lty = "dotted")
+
+    graphics::axis(1, at = xTck, font = axis.font, cex.axis = 1.5)
+    if(length(xminor) > 0)
+        graphics::axis(1, at = xminor, labels = NA, tcl = graphics::par("tcl") * 0.5)
+    graphics::axis(2, at = graphics::axTicks(2), font = axis.font, las = 1, cex.axis = 1.5)
+    graphics::axis(2, at = yminTck, labels = NA, tcl = graphics::par("tcl") * 0.6)
+
+    graphics::mtext(xlab, side = 1, line = 2.8)
+    graphics::mtext(subtitre, side = 1, line = 4.7, cex = 1.0)
+    graphics::mtext(ylab, side = 2, line = line.ylab, cex = 1.3)
+    if(!is.null(location))
+        graphics::mtext(location, side = 3, outer = FALSE, adj = 1, line = 0, cex = 1)
+
+    if(plotl$type == 'both') graphics::lines(x, y, type = 'o', col = plotl$col$line, lwd = plotl$lwd,
+                                    pch = 21, bg = plotl$col$points, cex = plotl$cex)
+    if(plotl$type == 'line') graphics::lines(x, y, type = 'l', col = plotl$col$line, lwd = plotl$lwd)
+
+    graphics::abline(a = trend[5], b = trend[1], col = legends$col$linear, lwd = legends$lwd$linear, lty = legends$lty$linear)
+    graphics::lines(lowess.fun, col = legends$col$lowess, lwd = legends$lwd$lowess, lty = legends$lty$lowess)
+    graphics::box()
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.legend)
+
+    graphics::plot.new()
+    graphics::legend("center", "groups", legend = c(ylab, legends$text$linear, legends$text$lowess),
+            col = c(plotl$col$line, legends$col$linear, legends$col$lowess),
+            lty = c(1, legends$lty$linear, legends$lty$lowess),
+            lwd = 2, cex = 1.5, horiz = TRUE)
+    graphics::par(op)
+
+    op <- graphics::par(mar = par.title)
+    if(draw.title){
+        plot(1, type = 'n', xaxt = 'n', yaxt = 'n', xlab = '', ylab = '')
+        bbx <- graphics::par("usr")
+        graphics::rect(bbx[1], bbx[3], bbx[2], bbx[4], col = "ghostwhite")
+        graphics::text(1, 1, title, cex = 1.6, font = 2)
+    }else graphics::plot.new()
+    graphics::par(op)
+
+    return(0)
+}
