@@ -12,11 +12,21 @@
 #
 # Requires the `spark-intro` container (Lab 00) and internet (IFS initial conditions + ~1 GB of weights on first run).
 # Expected time: ~12 min for 8 members. Peak memory: ~36 GiB GPU, ~60 GiB system, so run it alone on a shared box.
+#
+# **In class:** if the instructor has already put a run in `outputs/lab04_africa_ensemble.zarr` (375 MB), set
+# `USE_CACHED = True` below. The lab then skips the model, uses that run's start date, and needs no internet or
+# GPU, even if IFS data is unavailable that day. All teams can then do Labs 04, 06 and 10 at once (post-processing
+# only). Labs 05 (LLM, ~38 GiB) and 08 (SFNO + solar model, ~33 GiB) still load models on the GPU: run them one
+# team at a time, or as an instructor demo.
 
 # %%
+USE_CACHED = False   # True: reuse an existing outputs/lab04_africa_ensemble.zarr instead of running the model
+
+import os
 import time
 from datetime import datetime, timedelta, timezone
 import numpy as np
+import pandas as pd
 import torch
 import xarray as xr
 
@@ -46,23 +56,30 @@ CITIES = {"Nairobi": (-1.29, 36.82), "Addis Ababa": (9.03, 38.74), "Kampala": (0
 # ## Load the model and run the ensemble
 
 # %%
-t0 = time.perf_counter()
-model = AIFSENS.load_model(AIFSENS.load_default_package())
-print(f"model loaded in {time.perf_counter()-t0:.0f}s")
-
 out_path = "outputs/lab04_africa_ensemble.zarr"
-io = ZarrBackend(file_name=out_path, backend_kwargs={"overwrite": True})
-output_coords = {"variable": np.array(VARS), "lat": LAT, "lon": LON}
+if USE_CACHED:
+    if not os.path.exists(out_path):
+        raise FileNotFoundError(f"USE_CACHED=True but {out_path} is missing: copy the instructor's run there, "
+                                "or set USE_CACHED=False to run the model")
+    print(f"using cached run in {out_path}, model not run")
+else:
+    t0 = time.perf_counter()
+    model = AIFSENS.load_model(AIFSENS.load_default_package())
+    print(f"model loaded in {time.perf_counter()-t0:.0f}s")
 
-torch.cuda.reset_peak_memory_stats()
-t0 = time.perf_counter()
-# IFS open data has several mirrors; the AWS one throttles heavy requests ("503 Slow Down"), so use Google's.
-# If this hangs, try source="ecmwf" or "azure".
-ifs = IFS(source="google")
-run.ensemble([start], NSTEPS, NENSEMBLE, model, ifs, io, Zero(), batch_size=1, output_coords=output_coords)
-torch.cuda.synchronize()
-print(f"ensemble wall time: {time.perf_counter()-t0:.0f}s | peak GPU alloc: "
-      f"{torch.cuda.max_memory_allocated()/2**30:.1f} GiB")
+    io = ZarrBackend(file_name=out_path, backend_kwargs={"overwrite": True})
+    output_coords = {"variable": np.array(VARS), "lat": LAT, "lon": LON}
+
+    torch.cuda.reset_peak_memory_stats()
+    t0 = time.perf_counter()
+    # IFS open data has several mirrors; the AWS one throttles heavy requests ("503 Slow Down"), so use Google's.
+    # If this hangs, try source="ecmwf" or "azure".
+    ifs = IFS(source="google")
+    run.ensemble([start], NSTEPS, NENSEMBLE, model, ifs, io, Zero(), batch_size=1, output_coords=output_coords)
+    torch.cuda.synchronize()
+    print(f"ensemble wall time: {time.perf_counter()-t0:.0f}s | peak GPU alloc: "
+          f"{torch.cuda.max_memory_allocated()/2**30:.1f} GiB")
+    del model; torch.cuda.empty_cache()
 
 # %% [markdown]
 # ## 5-day rainfall: ensemble mean and probability of a wet spell
@@ -71,6 +88,8 @@ print(f"ensemble wall time: {time.perf_counter()-t0:.0f}s | peak GPU alloc: "
 
 # %%
 ds = xr.open_zarr(out_path).isel(time=0)
+start, NENSEMBLE = pd.Timestamp(ds.time.values).to_pydatetime(), ds.sizes["ensemble"]   # match a cached run
+print(f"forecast start {start:%Y-%m-%d %H} UTC, {NENSEMBLE} members")
 ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon")
 rain = (ds["tp06"].isel(lead_time=slice(1, None)).clip(min=0) * 1000).load()   # mm per 6 h
 total = rain.sum("lead_time")                                                  # (ensemble, lat, lon)

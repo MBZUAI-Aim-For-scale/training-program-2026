@@ -1,6 +1,7 @@
 # One-pager: Spark vs cloud for AI weather models
 
-Curriculum item (Day 2): "hardware considerations (Spark vs cloud)".
+Curriculum item (Day 2): "hardware considerations (Spark vs cloud)". Spark figures below were measured on one
+unit; cloud figures are typical specs, not measured here.
 
 | Consideration | DGX Spark (on-prem desktop) | Cloud GPU (H100/B200-class) |
 |---|---|---|

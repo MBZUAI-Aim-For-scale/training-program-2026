@@ -1,8 +1,8 @@
 # Intro to DGX Spark: AI weather for Africa
 
-What a DGX Spark is, what it can do for weather, climate and agriculture, and twelve hands-on labs that take
+What a DGX Spark is, what it can do for weather, climate and agriculture, and thirteen hands-on labs that take
 AI forecasts all the way to farm advisories, crop stress, cyclone tracks, solar energy and verification
-against real stations. Every lab is about Africa. Thresholds in the labs are placeholders for country teams to set.
+against real stations, plus the data a forecast service depends on. Every lab is about Africa. Thresholds in the labs are placeholders for country teams to set.
 
 Complements [Demo 1](../demo1/) (machine setup) and [Demo 3](../demo3/) (the forecast lab).
 
@@ -15,6 +15,7 @@ Complements [Demo 1](../demo1/) (machine setup) and [Demo 3](../demo3/) (the for
 | [Best practices](docs/03-best-practices.md) | Environment, unified memory, sharing one Spark between teams |
 | [Use cases for Africa](docs/04-use-cases-weather-climate-ag.md) | Decisions in agriculture, disasters, energy and weather services, mapped to labs |
 | [Spark vs cloud one-pager](docs/05-hardware-one-pager-spark-vs-cloud.md) | Hardware considerations, with numbers measured on a Spark |
+| [Data one-pager](docs/06-data-guideline-one-pager.md) | The data side of running AI models: inputs, timeliness, storage, observations |
 
 ## Labs
 
@@ -32,6 +33,7 @@ Complements [Demo 1](../demo1/) (machine setup) and [Demo 3](../demo3/) (the for
 | [09](labs/lab09_africa_model_scorecard.ipynb) | Which model should Africa trust? 3 models x 4 dates scored over Africa | SFNO, AIFS, Aurora, ERA5 | Yes | 26 min |
 | [10](labs/lab10_rainfall_climate_onset.ipynb) | 42 years of rainfall: normals, onset of the rains and its trend (on the GPU), this week vs normal | ERA5 (WeatherBench 2), CuPy | First run (~6 min) | <1 min cached |
 | [11](labs/lab11_station_bias_correction.ipynb) | Make gridded data fit your stations: per-station and ML corrections | ERA5, GHCN-Daily, scikit-learn | First run | 3.5 min |
+| [12](labs/lab12_data_for_ai_weather.ipynb) | The data behind a forecast: model inputs vs data sources, data freshness, download and storage size, unit pitfalls, station coverage | SFNO, AIFS-ENS, Aurora inputs; GFS, IFS, ERA5, GHCN-Daily | Yes | 1.5 min |
 
 ## Quick start (on the Spark)
 
@@ -49,8 +51,11 @@ Details and troubleshooting: [Lab 00](labs/lab00_connect_to_spark.md).
 Labs 04, 07 and 09 each use 60–66 GiB of the Spark's 128 GB and run for 9–26 minutes. Two of them at once can
 exhaust memory, and Docker's `--memory` limit does not cap GPU memory on Spark (Lab 01). Plan for it:
 
-- **Pre-run Labs 04, 07 and 09** on each Spark before the session, and have teams work from the saved outputs.
-  Labs 05, 06, 08 and 10 read Lab 04's output, so they then run in minutes.
+- **Pre-run Labs 04, 07 and 09** on each Spark before the session. For Lab 04, copy the instructor's
+  `outputs/lab04_africa_ensemble.zarr` (375 MB) into each team's `labs/outputs/` and set `USE_CACHED = True`:
+  the lab then needs no GPU or internet, and still works on a day the IFS data is unavailable.
+- With that run in place, all teams can do Labs 04, 06 and 10 at once (post-processing only). Labs 05 (LLM,
+  ~38 GiB) and 08 (SFNO + solar model, ~33 GiB) still load models: one team at a time, or an instructor demo.
 - Let one team at a time run a heavy lab live, as a demonstration.
 
 ## Tested
@@ -72,6 +77,7 @@ All labs ran on one DGX Spark (GB10, driver 580.95, NGC PyTorch 26.06, Earth2Stu
 | 09 | 25.7 min | 66 | AIFS has the lowest day-5 error on t2m, msl, 10 m wind and z500 |
 | 10 | 6.2 min first run, 0.4 min cached | 8 | Onset of the rains: CPU 445 ms, GPU 37 ms |
 | 11 | 3.3 min | 7 | Daily max error: raw 2.16 °C, per-station correction 0.82, one ML model on unseen stations 1.86 |
+| 12 (2026-11-02) | 1.5 min | 21 | SFNO inputs from GFS: 73 fields, 62 MB in 11 s; GFS lacks 4 AIFS-ENS inputs; matching Zarr chunks 10–30x faster; 10 public stations per M km² in Africa vs 240 in Europe |
 
 Known after the run: Lab 03 saved a blank figure (the plot was finished in a later cell). That is fixed here but
 has not been rerun; its figure is not in `results/`.

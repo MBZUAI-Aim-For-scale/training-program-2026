@@ -11,7 +11,7 @@
 #    with a specialised "what does this weather mean for X" model.
 #
 # Requires `outputs/lab04_africa_ensemble.zarr` (Lab 04) and internet for GFS and weights on first run.
-# Expected time: ~8 min.
+# Expected time: ~2 min.
 
 # %%
 import time

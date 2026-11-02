@@ -5,10 +5,11 @@
 # correction, and this is where a national met service's station archive becomes valuable. On the Spark, those
 # records never leave the building.
 #
-# We use ERA5 at 1.5° (~165 km, like a coarse global model) and daily maximum temperature from ~30 stations in
+# We use ERA5 at 1.5° (~165 km, like a coarse global model) and daily maximum temperature from ~20 stations in
 # Kenya, Ethiopia, Tanzania and Uganda (NOAA GHCN-Daily). Train on 2010–2019, test on 2020–2022.
 #
-# Requires internet the first time (~1 GB of ERA5 read, cached as a small file). Expected time: ~5 min.
+# Requires internet the first time (~1 GB of ERA5 read, cached as a small file). Expected time: ~3.5 min first
+# run, under a minute after that.
 
 # %%
 import os
@@ -116,7 +117,7 @@ ax[0].scatter(per.elev_m, per.raw_bias, c="gray")
 for name, r in per.iterrows():
     ax[0].annotate(name, (r.elev_m, r.raw_bias), fontsize=6)
 ax[0].axhline(0, c="k", lw=.8); ax[0].set_xlabel("station elevation (m)"); ax[0].set_ylabel("grid minus station, daily max (°C)")
-ax[0].set_title("Raw 1.5° grid: high stations are colder than their grid box")
+ax[0].set_title("Raw 1.5° grid: offsets of several °C, not explained by height alone")
 x = np.arange(len(per))
 for k, (c, col) in enumerate([("raw", "gray"), ("linear", "#76B900"), ("ml_unseen", "tab:blue")]):
     ax[1].bar(x + (k - 1) * 0.27, per[c], 0.27, color=col, label=c)
