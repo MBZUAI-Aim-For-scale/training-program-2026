@@ -80,8 +80,6 @@ def compute(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead_days
     try:
         o = obs.daily(box, min(search_from, end), end, region)
     except FileNotFoundError:
-        if obs_last is None:
-            raise
         o = obs.daily(box, obs_last, obs_last, region)
     template = o.isel(time=-1, drop=True)
     fc_g = onset.to_grid(fc, template)

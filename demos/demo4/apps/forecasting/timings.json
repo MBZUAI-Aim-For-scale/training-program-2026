@@ -1,0 +1,66 @@
+{
+  "graphcast": {
+    "load_s": 34.4,
+    "run_s": 181.0,
+    "lead_days": 10,
+    "members": 1,
+    "output_mb": 275.8,
+    "measured": "2026-10-06",
+    "note": "run_s includes downloading ERA5 initial conditions from ARCO.",
+    "peak_gpu_gb": 16.0
+  },
+  "atlas_crps": {
+    "load_s": 40.7,
+    "run_s": 1095.2,
+    "lead_days": 10,
+    "members": 3,
+    "peak_gpu_gb": 32.9,
+    "measured": "2026-09-30",
+    "note": "First run also downloads the 12.5 GB weights once (~31 min extra). load_s measured 2026-10-06 with cached weights. run_s includes the ARCO download."
+  },
+  "aurora15": {
+    "load_s": 15.3,
+    "run_s": 1551.5,
+    "lead_days": 10,
+    "members": 1,
+    "peak_gpu_gb": 27.0,
+    "measured": "2026-10-05",
+    "note": "Deterministic (one member). Hourly internal steps; run_s includes the ARCO download. Re-run with the precipitation fix: rain is now physical but ~2-3x drier than ERA5 (Ethiopia, July 2025) and smoother than GraphCast."
+  },
+  "aifs2_single": {
+    "load_s": 4.0,
+    "run_s": 109.2,
+    "lead_days": 10,
+    "members": 1,
+    "peak_gpu_gb": 14.0,
+    "measured": "2026-10-01",
+    "note": "Start 2026-05-15 (open-data IFS lacks the wave inputs for July 2025). Weights and fixed fields cached; run_s includes IFS download from ECMWF's Azure mirror (AWS was throttling)."
+  },
+  "aifs2_ens": {
+    "load_s": 9.9,
+    "run_s": 324.2,
+    "lead_days": 10,
+    "members": 3,
+    "peak_gpu_gb": 24.8,
+    "measured": "2026-10-02",
+    "note": "Start 2026-05-15. First run also downloads the weights once (~5 min extra). load_s measured 2026-10-06 with cached weights. run_s includes IFS download from ECMWF's Azure mirror."
+  },
+  "neuralgcm": {
+    "load_s": 6.8,
+    "run_s": 137.4,
+    "lead_days": 10,
+    "members": 3,
+    "measured": "2026-10-06",
+    "note": "2.8 deg stochastic precipitation checkpoint (only NeuralGCM version with rain); no 2 m temperature. run_s includes the ARCO download.",
+    "peak_gpu_gb": 18.2
+  },
+  "fgn": {
+    "load_s": 0.5,
+    "run_s": 131.7,
+    "lead_days": 10,
+    "members": 3,
+    "peak_gpu_gb": 1.8,
+    "measured": "2026-10-06",
+    "note": "FGN Mini (1 deg, WeatherNextCyclones_Mini weights), started from ECMWF open data via fgn_convert.py. A new start date first builds its inputs (~95 s, then cached); not included in run_s."
+  }
+}
