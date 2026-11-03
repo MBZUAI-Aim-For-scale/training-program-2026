@@ -46,7 +46,7 @@ keypoints:
 
 The menu **Data Preparation** ‣ **Download Country boundary** allows you to download country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
 
-![CDT Download Interface](../fig/cdt1.png)
+![CDT Download Interface](../fig/cdt_1.png)
 
 1. Select the region where the country is located.
 2. Select the country from the drop-down list.
