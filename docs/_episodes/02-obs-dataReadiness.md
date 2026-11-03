@@ -35,3 +35,23 @@ keypoints:
 ### 3. Rain Gauge Analyses
 - Dedicate a focused segment to running and interpreting rain gauge analyses.
 - Discuss how these local analyses inform broader observational data readiness and model validation.
+
+
+
+# CDT Exercise
+
+## Download Data
+
+## Download Country Administrative Boundaries
+
+The menu **Data Preparation** ‣ **Download Country boundary** allows you to download country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
+
+![CDT Download Interface](../fig/cdt1.png)
+
+1. Select the region where the country is located.
+2. Select the country from the drop-down list.
+3. Select the administrative subdivisions to download.
+   **0** is the country boundaries,
+   **1** is the first subdivision (example: Region),
+   **2** is the second subdivision (example: District), …
+4. Specify the folder to save the downloaded ESRI shapefile by browsing to it using the ![browse button](cdt_dots.png){height=15px} button or typing the full path to the folder.
