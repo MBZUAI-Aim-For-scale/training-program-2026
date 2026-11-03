@@ -55,5 +55,5 @@ The menu **Data Preparation** ‣ **Download Country boundary** allows you to do
    
    **2** is the second subdivision (example: District),
    
-5. Specify the folder to save the downloaded ESRI shapefile by browsing to it using the browse button ![](cdt_dots.png =20x20) button or typing the full path to the folder.
+5. Specify the folder to save the downloaded ESRI shapefile by browsing to it using the browse button ![](../fig/cdt_dots.png =20x20) button or typing the full path to the folder.
 
