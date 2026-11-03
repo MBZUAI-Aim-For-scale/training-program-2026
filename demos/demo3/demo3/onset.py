@@ -91,10 +91,24 @@ SEASON_STARTS = {
     "Ethiopia": [(5, 1)], "Kenya": [(3, 1), (10, 1)], "Nigeria": [(3, 1)],
     "Rwanda": [(2, 15), (9, 1)], "Senegal": [(5, 1)], "Sierra Leone": [(4, 1)],
     "Bangladesh": [(4, 1)], "Indonesia": [(8, 1)], "Pakistan": [(6, 1)],
-    "Philippines": [(4, 15)], "Chile": [(4, 1)], "Colombia": [(3, 1), (9, 1)],
+    "Philippines": [(4, 15)], "Chile": [(4, 1)], "Colombia": [(2, 15), (8, 15)],
     "Peru": [(9, 1)], "India": [(4, 1)],
 }
-MR_REGIONS = ("India", "Bangladesh")  # inside ROMP's MWset thresholds
+MR_REGIONS = ("India", "Bangladesh", "Pakistan")  # inside ROMP's MWset thresholds
+# Checked against CHIRPS v3 1998-2025 (observed onset at every point, each year):
+#   Colombia: ICPAC's median onset matches the climatological season starts (Andes ~26 Mar
+#     and ~14 Sep, Caribbean ~21 Apr, Llanos ~19 Mar); searching from 1 Mar / 1 Sep put
+#     19-35% of points' onset in the first week, hence mid-Feb / mid-Aug.
+#   Pakistan: MWset covers 97% of the monsoon belt (>100 mm in Jul-Aug); median onset there
+#     29 Jun (Moron-Robertson) or 9 Jul (MOK filter, which finds an onset far more often).
+REGION_NOTES = {
+    "Colombia": "Colombia has no single onset definition, so this uses ICPAC's rule, which matches "
+                "Colombia's observed season starts (CHIRPS 1998–2025). The Andes have two rainy "
+                "seasons (search from mid-February and mid-August); about half the country (the "
+                "Pacific coast and the Amazon) is wet all year, so onset means little there.",
+    "Pakistan": "Pakistan uses Moron–Robertson. ROMP's local wet-spell amounts cover the monsoon "
+                "belt (the north-east and Sindh); the dry west gets no onset.",
+}
 
 
 def default_definition(region_name: str) -> str:
