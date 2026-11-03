@@ -24,7 +24,7 @@ keypoints:
 ## Download Data
 ## Download Country Administrative Boundaries
 
-The menu **Data Preparation** ‣ **Download Country boundary** allows you to download country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
+The menu [**Data Preparation** ‣ **Download Country boundary**]() allows you to download country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
 
 ![CDT Download Interface](../fig/cdt_1.png)
 
@@ -77,7 +77,7 @@ The tab Input Data allows to specify the input station data and the interpolatio
 5.	Click on the button   Interpolation Parameters   to set the parameters to be used to interpolate the station data. It opens a dialog box.
  > CDT has 7 spatial interpolation methods: Inverse Distance Weighted, Ordinary Kriging, Universal Kriging, Modified Shepard interpolation, Spheremap interpolation method, Nearest Neighbor and Nearest Neighbor with elevation - 3D.
 
-> By default CDT uses a local interpolation technique, therefore, you have to provide the minimum and maximum number of stations used to interpolate a grid point, and the maximum distance within which the stations are selected. See the spatial interpolation methods for further details, and the interpolation dialog to select the method to be used and set the interpolation parameters.
+ > By default CDT uses a local interpolation technique, therefore, you have to provide the minimum and maximum number of stations used to interpolate a grid point, and the maximum distance within which the stations are selected. See the spatial interpolation methods for further details, and the interpolation dialog to select the method to be used and set the interpolation parameters.
 
 6.	Click on the button   Create Grid for Interpolation   to provide the grid to be used to interpolate the data. It will display the grid creation dialog box.
 7.	In the case where the variable to be interpolated cannot be negative or below a certain value, check    Change negative values to    , enter the value you want to change the negative values in the activated input field.
@@ -96,3 +96,46 @@ This creates a folder named __INTEPORLATION__<file name of station data>__under 
 The tab Maps allows to display the maps of the interpolated data.
 
 ![CDT Download Interface](../fig/cdt4.png)
+
+
+1.	If you have already performed the interpolation before and you want to display the maps of the interpolated data,
+check   Data already computed , this will activated the button Load Data allowing you to load the index file of the interpolated data. Browse the file SpatialInterpolation.rds via the open dialog box.
+2.	Enter the date you want to plot in the input fields then click the button PLOT to display the map. You can use the button `<<` to display the map of the previous interpolated data and `>>` for the next date.
+4.	Select the type of map to display for the stations data, available options are Points and Pixels. See the type of plot for station data.
+5.	Select the type of map to display for the gridded data, available options are Pixels and FilledContour. See the type of plot for gridded data.
+6.	Click on the button Options to change the color bar, title and labels of the maps. For more details on how to change the options, see map options.
+
+
+## Merging Data
+
+### 1. Bias Adjustment  {-}
+
+
+All estimated gridded data (satellite rainfall estimates, models output, …) are subject to different types of errors, including errors from sensors, algorithms and random errors.
+There are two main sources errors for the estimated gridded data: random error and systematic bias. These discrepancies between the estimated gridded data and the station observations need to be corrected before further analysis. The systematic bias can be reduced or eliminated by applying statistical bias correction methods.
+
+__Computing Bias coefficients__
+
+CDT uses an approach based on historical data from the estimated gridded data and station observations to correct the systematic bias. A climatological bais coefficients are first computed for each month or at the temporal resolution of the data.
+The color light blue of the menu means that you only need to compute the bias coefficients once. Indeed, you will need a long series and quality controlled station data to compute the climatological bias coefficients. Once the coefficients are calculated you can use it to correct the systematic bias from the same source of the estimated gridded data.
+
+
+__Climate data__
+
+The menu Gridding ‣ Merging Climate Data ‣ <name of the climate variable > ‣ Compute Bias Coefficients   allows to compute the climatological bias coefficients for rainfall, temperature, relative humidity, radiation and pressure data.
+
+![CDT Download Interface](../fig/cdt5.png)
+
+
+1. Select the temporal resolution of the data. Available temporal resolution are: daily, pentad, dekadal and monthly data.
+2.	Click on the button     Set Bias Base Period     to specify the period and minimum number of year to be use to compute the bias coefficients. All the parameters can be set in the base period setting dialog.
+3.	Select the file containing the station data (in CDT station data format) to use from the drop down list if it is already loaded, or open it through  .
+4.	Type the full path to the folder containing the netCDF files or browse it from the button  on the right.
+5.	Provide a netCDF sample file and change the filename format of the netCDF file through the netCDF settings dialog by clicking on the button   Settings  .
+6.	Type the full path to the folder to save the computed bias coefficients, or use the browse button  .
+7.	Select the method to use to compute the bias coefficients. CDT has 4 methods to compute the bias coefficients: Multiplicative Bias Time Step Variable, Multiplicative Bias for Each Month, Quantile Mapping with Fitted Distribution, and Quantile Mapping with Empirical Distribution. See CDT bias adjustment methods section for more information.
+8.	Enter the minimum length of non missing values to be used to calculate the bias coefficients or to fit the distribution. Although you already specify the minimum number of year needed to compute the bias coefficients, it is possible that some dekads and months contain missing values, you need to specify here the minimum length of data to be used to perform the computation.
+9.	Click on the button     Bias Interpolation Parameters     to open the interpolation dialog to select the interpolation method to be used and set the all parameters for the interpolation.
+10.	Click on the button     Create Grid for Interpolation     to create the grid to be used to interpolate the data. It will display the grid creation dialog box.
+
+
