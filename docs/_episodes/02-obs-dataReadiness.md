@@ -38,7 +38,7 @@ The menu **Data Preparation** ‣ **Download Country boundary** allows you to do
    
    **2** is the second subdivision (example: District),
    
-4. Specify the folder to save the downloaded ESRI shapefile by browsing to it using the browse button ![](../fig/cdt_dots.png =20x20) or typing the full path to the folder.
+4. Specify the folder to save the downloaded ESRI shapefile by browsing to it using the browse button ![browse button]({{ site.baseurl }}/fig/cdt_dots.png) or typing the full path to the folder.
 
 
 ## Download Satellite Rainfall Estimates data 
@@ -59,4 +59,30 @@ The menu Data Preparation ‣ Download Data ‣ Download Satellite Rainfall Esti
 9.	Specify the folder to save the downloaded rainfall data by browsing it from the button  or typing the full path to the folder.
 
 A folder containing the downloaded data will be created under the directory you provided in (9). This folder is created from the name of the satellite rainfall estimate product and the time step of the data
+
+
+## Spatial Interpolation
+
+A spatial interpolation is the estimation of the unknown value of a point by using the measured points in the study area. To interpolate a spatial points data (stations observation) into gridded data, use the menu Gridding ‣ Spatial Interpolation. It displays a tabbed widget on the left panel, allows to enter the inputs data, set the interpolation parameters and display maps of the interpolated data.
+
+The tab Input Data allows to specify the input station data and the interpolation parameters.
+
+![CDT Download Interface](../fig/cdt3.png)
+
+
+1.	Select the temporal resolution of the input data in CDT stations data format. The available temporal resolution are: minutes, hourly, daily, pentad, dekadal, monthly data and others (seasonal, annual, …).
+2.	In case of minutes and hourly, select here the time step of the input data.
+3.	Select the CDT station data to interpolate with the drop down list if it is already loaded, or open it through   …  .
+4.	Set the start and end date of the period to interpolate. See setting date range for more details.
+5.	Click on the button   Interpolation Parameters   to set the parameters to be used to interpolate the station data. It opens a dialog box.
+ >> CDT has 7 spatial interpolation methods: Inverse Distance Weighted, Ordinary Kriging, Universal Kriging, Modified Shepard interpolation, Spheremap interpolation method, Nearest Neighbor and Nearest Neighbor with elevation - 3D.
+
+>> By default CDT uses a local interpolation technique, therefore, you have to provide the minimum and maximum number of stations used to interpolate a grid point, and the maximum distance within which the stations are selected. See the spatial interpolation methods for further details, and the interpolation dialog to select the method to be used and set the interpolation parameters.
+6.	Click on the button   Create Grid for Interpolation   to provide the grid to be used to interpolate the data. It will display the grid creation dialog box.
+7.	In the case where the variable to be interpolated cannot be negative or below a certain value, check    Change negative values to    , enter the value you want to change the negative values in the activated input field.
+8.	To mask the grid outside a given polygons, check    Blank grid outside the Shapefile    , this will activate the drop down list below allowing you to provide the Shapefile to be used. See the blanking options to control the buffer outside the polygons.
+9.	Specify the folder to save the output by browsing it from the button  or typing the full path to the folder.
+
+When you finish to set everything in this tab, click on the button Interpolate to start the interpolation process.
+
 
