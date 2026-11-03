@@ -262,6 +262,6 @@ Type into the R console the following command to get help on the available argum
 
 
 Click on the button  to start the merging.
-A folder named __MERGED_<name of climate variable>_Data_<start date>_<end date>__ will be created under the folder you provided to save the outputs. It contains the netCDF files of the merged data and a log file.
+A folder named **MERGED_<name of climate variable>_Data_<start date>_<end date>** will be created under the folder you provided to save the outputs. It contains the netCDF files of the merged data and a log file.
 
 
