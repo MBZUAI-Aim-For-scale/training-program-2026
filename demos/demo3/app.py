@@ -317,10 +317,12 @@ lead_days = c3.slider("Lead time (days)", 1, max_lead, min(10, max_lead),
                                                        else ""))
 ens_models = [m for m in models if m.kind == "ensemble"]
 if ens_models:
-    members = int(c4.number_input("Ensemble members", 1, max(m.max_members for m in ens_models),
+    members = int(c4.number_input("Ensemble members", 1, None,
                                   max(m.default_members for m in ens_models),
-                                  help="For the ensemble models, each capped at its own limit on the "
-                                       "Spark. Deterministic models give one forecast."))
+                                  help="For the ensemble models; deterministic models give one forecast. "
+                                       "Time and file size grow with the number of members (members run "
+                                       "one after another, so GPU memory doesn't). Per member, 10 days:  \n"
+                                       + "  \n".join(f"{m.name}: {m.member_cost}" for m in ens_models)))
 else:
     members = 1
     c4.text_input("Ensemble members", "1 (deterministic)", disabled=True)

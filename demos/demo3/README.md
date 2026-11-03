@@ -105,10 +105,18 @@ elsewhere). The definitions follow Narayana's note and the ROMP package
 
 Every setting (thresholds, dry-spell length and window, search start) can be changed on the page.
 
-- **Rainfall used:** observed CHIRPS (`demo3/obs.py`; one ~90 MB file per year, downloaded once
-  into `outputs/_obs/chirps/`) from the search start to the day before the forecast, then the
-  forecast's daily rainfall put on the CHIRPS grid. CHIRPS covers land, 50°S–50°N, and runs about
-  a month behind; days missing before the forecast are flagged on the page.
+India, Bangladesh and Pakistan default to Moron–Robertson with MOK filter (ROMP's MWset amounts
+cover 97% of Pakistan's monsoon belt); everywhere else defaults to ICPAC. Colombia has no
+published definition: ICPAC's rule reproduces its observed season starts (CHIRPS v3 1998–2025),
+searching from mid-February and mid-August for the Andes' two seasons (`onset.REGION_NOTES`).
+
+- **Rainfall used:** observed CHIRPS v3.0 at 0.25° (`demo3/obs.py`) from the search start to the
+  day before the forecast, then the forecast's daily rainfall put on the CHIRPS grid. This is the
+  "sat" version (days within each pentad split using IMERG), so it starts in 1998. Programme
+  countries read their yearly box from `gs://aim4scale_training_2026/CHIRPSv3_Country_Boxes_025deg`
+  (~3 MB a year); other regions download CHC's global 0.25° daily files (~0.9 MB a day). Both are
+  cached in `outputs/_obs/chirps_v3/`. CHIRPS covers land, 60°S–60°N, and runs about a month
+  behind; days missing before the forecast are flagged on the page.
 - **Possible onset:** confirming onset needs the wet spell plus the dry-spell window (24 days for
   ICPAC, 35 for Moron–Robertson), longer than a 10–15 day forecast. A wet spell whose check runs
   past the end of the data is shown as possible onset, not onset.

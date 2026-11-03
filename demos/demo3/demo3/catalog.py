@@ -16,6 +16,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 ARCO_ERA5 = "ARCO ERA5 (Google)"
+# ARCO ERA5 goes back to 1940, but the models were trained on ERA5 from 1979 (the satellite era).
+ERA5_MIN = date(1979, 1, 1)
 IFS_OPEN = "IFS analysis (ECMWF Open Data)"
 # ECMWF open data on AWS starts 2024-03-01 and is current to within a few days.
 IFS_MIN, IFS_MAX = date(2024, 3, 1), date.today() - timedelta(days=2)
@@ -85,11 +87,12 @@ class Model:
     init_source: str
     env: str                      # runner environment name
     max_lead_days: int
-    max_members: int = 1
     default_members: int = 1
+    member_cost: str = ""         # time and file size per member for 10 days on the Spark
     slow: bool = False            # suggest loading a saved run in class
-    init_min: date = date(2020, 1, 1)
+    init_min: date = ERA5_MIN
     init_max: date | None = None  # None: the last day ERA5 is available (see era5_dates)
+    trained_years: tuple[int, int] | None = None  # first and last year of training data, if published
     notes: str = ""
     missing: tuple[str, ...] = ()  # variables (VAR_LABELS keys) the model does not forecast
     grid_deg: float = 0.25          # output grid spacing
@@ -114,8 +117,9 @@ class Model:
     def date_reason(self) -> str:
         lo, hi = self.date_range()
         if self.init_source == ARCO_ERA5:
-            return (f"{self.name} starts from ERA5 (Google's copy), which is available up to "
-                    f"{hi:%-d %b %Y} (it runs about 3 months behind real time).")
+            return (f"{self.name} starts from ERA5 (Google's copy), available from {lo:%Y} (the "
+                    f"satellite era the models were trained on) to {hi:%-d %b %Y} (it runs about "
+                    "3 months behind real time).")
         if self.key.startswith("aifs2"):
             return ("AIFS v2 needs ocean-wave inputs: for 00Z starts from 2000 to 2025 they come from "
                     "the ECMWF wave dataset (the rest from ERA5); from 13 May 2026, everything comes "
@@ -124,15 +128,19 @@ class Model:
                 "to 2 days ago.")
 
 
+# trained_years, from the developers' documentation: AIFS v2 ERA5 1979-2022 then analyses 2018-2024
+# (ECMWF); GraphCast operational ERA5 1979-2017 then HRES 2016-2021 (DeepMind); Atlas ERA5 1980-2019
+# (NVIDIA model card); NeuralGCM precipitation 2001-2018 (arXiv 2412.11973). Aurora 1.5's and FGN's
+# training years aren't published.
 MODELS: list[Model] = [
     Model("aifs2_single", "AIFS Single v2.0", "ECMWF", "deterministic", IFS_OPEN, "e2s018",
-          max_lead_days=15, init_min=WAVE_MIN, init_max=IFS_MAX,
+          max_lead_days=15, init_min=WAVE_MIN, init_max=IFS_MAX, trained_years=(1979, 2024),
           notes="From 13 May 2026 it starts from ECMWF's IFS analyses (open data). For 00Z starts "
                 "in 2000–2025 it starts from the ECMWF wave dataset plus ERA5.",
           weights_gb=1.0, output_mb_10d=262,
           inputs="ECMWF's IFS analysis at the start time and 6 h before: surface, soil and 14 pressure-level fields, interpolated from the 0.25° grid onto the model's own (N320) grid."),
     Model("graphcast", "GraphCast", "Google DeepMind", "deterministic", ARCO_ERA5, "graphcast",
-          max_lead_days=10,
+          max_lead_days=10, trained_years=(1979, 2021),
           weights_gb=0.14, output_mb_10d=269,
           inputs='ERA5 at the start time and 6 h before: 6 atmospheric variables on 13 pressure levels plus surface fields, on the 0.25° grid.'),
     Model("aurora15", "Aurora 1.5", "Microsoft", "deterministic", ARCO_ERA5, "e2s018",
@@ -140,25 +148,26 @@ MODELS: list[Model] = [
           weights_gb=4.9, output_mb_10d=269,
           inputs='ERA5 at the start time and 6 h before: 5 atmospheric variables on 13 pressure levels plus 4 surface fields, on the 0.25° grid. The model steps one hour at a time.'),
     Model("aifs2_ens", "AIFS ENS v2", "ECMWF", "ensemble", IFS_OPEN, "e2s018ens",
-          max_lead_days=15, max_members=3, default_members=2, slow=True,
-          init_min=WAVE_MIN, init_max=IFS_MAX,
+          max_lead_days=15, default_members=2, slow=True, member_cost="~2 min, ~265 MB",
+          init_min=WAVE_MIN, init_max=IFS_MAX, trained_years=(1979, 2024),
           notes="From 13 May 2026 it starts from ECMWF's IFS analyses (open data). For 00Z starts "
                 "in 2000–2025 it starts from the ECMWF wave dataset plus ERA5.",
           weights_gb=2.4, output_mb_10d=795,
           inputs="ECMWF's IFS analysis at the start time and 6 h before: surface, soil and 14 pressure-level fields, interpolated onto the model's own (N320) grid. Each member adds its own random noise."),
     Model("atlas_crps", "Atlas CRPS", "NVIDIA", "ensemble", ARCO_ERA5, "e2s018",
-          max_lead_days=10, max_members=3, default_members=2,
+          max_lead_days=10, default_members=2, trained_years=(1980, 2019), member_cost="~6 min, ~300 MB",
           weights_gb=12.5, output_mb_10d=900,
           inputs='ERA5 at the start time: surface and pressure-level fields on the 0.25° grid. Each member draws fresh random noise.'),
     Model("neuralgcm", "NeuralGCM", "Google", "ensemble", ARCO_ERA5, "neuralgcm",
-          max_lead_days=10, max_members=3, default_members=2, missing=("t2m",), grid_deg=2.8,
+          max_lead_days=10, default_members=2, missing=("t2m",), grid_deg=2.8, member_cost="~45 s, ~2 MB",
+          trained_years=(2001, 2018),
           notes="2.8° (~300 km) stochastic precipitation version — the only NeuralGCM checkpoint "
                 "that forecasts rain. No 2 m temperature output.",
           weights_gb=0.045, output_mb_10d=4.5,
           inputs="ERA5 at the start time, regridded from 0.25° to the model's 2.8° grid; sea-surface temperature and sea ice are held at their starting values."),
     Model("fgn", "FGN Mini (WeatherNext 2, 1°)", "Google DeepMind", "ensemble",
           "IFS analysis (ECMWF Open Data)", "fgn",
-          max_lead_days=10, max_members=3, default_members=3, grid_deg=1.0,
+          max_lead_days=10, default_members=3, grid_deg=1.0, member_cost="~45 s, ~25 MB",
           init_min=IFS_MIN, init_max=IFS_MAX,
           notes="The full 0.25° FGN does not fit in a Spark's memory, so this is Google's 1° Mini "
                 "version (cyclone-tuned weights, the only Mini Google publishes). Starting conditions "
@@ -183,7 +192,8 @@ USE_CASE_NEEDS = {"Heat": "t2m", "Precipitation": "tp", "Onset": "tp"}
 # Models whose rainfall is known to be off on the Spark (checked against observations)
 RAIN_CAVEATS = {"aurora15": "Aurora's rainfall comes out 2–3 times too dry in our runs (still being "
                             "investigated), so it will rarely reach rainfall or onset thresholds."}
-CHIRPS_LAT = 50.0  # observed rainfall for onset covers 50°S–50°N
+CHIRPS_LAT = 60.0  # observed rainfall for onset (CHIRPS v3) covers 60°S–60°N (obs.LAT_LIMIT)
+CHIRPS_FIRST_YEAR = 1998  # ... from 1998, the start of the IMERG-based version (obs.FIRST_YEAR)
 
 
 def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
@@ -197,6 +207,12 @@ def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
                              f"{lo:%-d %b %Y} to {hi:%-d %b %Y}. {m.date_reason()}"))
     if init.hour not in (0, 12):
         out.append(("error", "Forecasts start at 00Z or 12Z."))
+    if m.trained_years and m.trained_years[0] <= init.year <= m.trained_years[1]:
+        first, last = m.trained_years
+        out.append(("warning", f"{m.name} was trained on data from {first} to {last}, so it has "
+                               f"already seen the weather around {init:%-d %b %Y}: its forecast can "
+                               f"look better than it would on new data. For a fair test, start after "
+                               f"{last}."))
     if m.key.startswith("aifs2") and lo <= init.date() < AIFS2_MIN:
         if init.date() > WAVE_MAX:
             out.append(("error", f"{m.name} can't start between 1 Jan and 12 May 2026: the ECMWF wave "
@@ -212,8 +228,6 @@ def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
         out.append(("error", f"{m.name} forecasts at most {m.max_lead_days} days ahead."))
     if m.kind == "deterministic" and members != 1:
         out.append(("error", f"{m.name} is deterministic: it gives one forecast, not an ensemble."))
-    elif members > m.max_members:
-        out.append(("error", f"{m.name} runs at most {m.max_members} members on the Spark."))
     need = USE_CASE_NEEDS.get(use_case)
     if need in m.missing:
         out.append(("warning", f"{m.name} does not forecast {VAR_LABELS[need]}, so there is no "
@@ -223,8 +237,11 @@ def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
         out.append(("warning", RAIN_CAVEATS[m.key]))
     if use_case == "Onset" and box is not None and box.is_valid():
         if box.lat_min >= CHIRPS_LAT or box.lat_max <= -CHIRPS_LAT:
-            out.append(("error", f"Onset uses observed rainfall from CHIRPS, which covers 50°S–50°N "
+            out.append(("error", f"Onset uses observed rainfall from CHIRPS, which covers 60°S–60°N "
                                  f"only; {region_name} is outside it."))
+    if use_case == "Onset" and init.year < CHIRPS_FIRST_YEAR:
+        out.append(("error", f"Onset uses observed rainfall from CHIRPS, which starts in "
+                             f"{CHIRPS_FIRST_YEAR}. Choose a later start date."))
     if box is not None and box.is_valid():
         n = min((box.lat_max - box.lat_min), (box.lon_max - box.lon_min)) / m.grid_deg
         km = round(m.grid_deg * 111, -1)
