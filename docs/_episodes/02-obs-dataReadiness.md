@@ -78,6 +78,7 @@ The tab Input Data allows to specify the input station data and the interpolatio
  > CDT has 7 spatial interpolation methods: Inverse Distance Weighted, Ordinary Kriging, Universal Kriging, Modified Shepard interpolation, Spheremap interpolation method, Nearest Neighbor and Nearest Neighbor with elevation - 3D.
 
 > By default CDT uses a local interpolation technique, therefore, you have to provide the minimum and maximum number of stations used to interpolate a grid point, and the maximum distance within which the stations are selected. See the spatial interpolation methods for further details, and the interpolation dialog to select the method to be used and set the interpolation parameters.
+
 6.	Click on the button   Create Grid for Interpolation   to provide the grid to be used to interpolate the data. It will display the grid creation dialog box.
 7.	In the case where the variable to be interpolated cannot be negative or below a certain value, check    Change negative values to    , enter the value you want to change the negative values in the activated input field.
 8.	To mask the grid outside a given polygons, check    Blank grid outside the Shapefile    , this will activate the drop down list below allowing you to provide the Shapefile to be used. See the blanking options to control the buffer outside the polygons.
