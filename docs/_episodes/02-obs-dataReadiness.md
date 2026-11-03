@@ -111,7 +111,7 @@ check   Data already computed , this will activated the button Load Data allowin
 ### 1. Bias Adjustment  {-}
 
 
-All estimated gridded data (satellite rainfall estimates, models output, …) are subject to different types of errors, including errors from sensors, algorithms and random errors.
+All estimated gridded data (satellite rainfall estimates, models output, ...) are subject to different types of errors, including errors from sensors, algorithms and random errors.
 There are two main sources errors for the estimated gridded data: random error and systematic bias. These discrepancies between the estimated gridded data and the station observations need to be corrected before further analysis. The systematic bias can be reduced or eliminated by applying statistical bias correction methods.
 
 __Computing Bias coefficients__
