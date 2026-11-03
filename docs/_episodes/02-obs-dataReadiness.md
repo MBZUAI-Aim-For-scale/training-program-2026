@@ -38,7 +38,7 @@ The menu [**Data Preparation** ‣ **Download Country boundary**]() allows you t
    
    **2** is the second subdivision (example: District),
    
-4. Specify the folder to save the downloaded ESRI shapefile by browsing to it using the browse button Score: <img src="../fig/cdt_dots.png" width="5" height="5" style="vertical-align:middle"> or typing the full path to the folder.
+4. Specify the folder to save the downloaded ESRI shapefile by browsing to it using the browse button Score: <img src="../fig/cdt_dots.png" width="10" height="10" style="vertical-align:middle"> or typing the full path to the folder.
 
 
 ## Download Satellite Rainfall Estimates data 
