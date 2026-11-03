@@ -86,3 +86,12 @@ The tab Input Data allows to specify the input station data and the interpolatio
 When you finish to set everything in this tab, click on the button Interpolate to start the interpolation process.
 
 
+This creates a folder named __INTEPORLATION__<file name of station data>__under the folder you provided (9) to save the outputs. Inside this folder 2 directories and 1 file are created:
+•	__CDTDATASET__: directory containing all the required files used by CDT; for ordinary and universal kriging, the fitted variogram models are saved under this folder inside the file Fitted_variogram.rds
+•	__DATA_NetCDF__:directory containing the interpolated data in netCDF format
+•	__SpatialInterpolation.rds__: an index file, you will need to reload the outputs of the interpolation if you want to display it later
+
+
+The tab Maps allows to display the maps of the interpolated data.
+
+![CDT Download Interface](../fig/cdt4.png)
