@@ -54,7 +54,7 @@ tracks_in = {}
 for name, M in [("SFNO", SFNO), ("AIFS", AIFS), ("Aurora", Aurora)]:
     t0 = time.perf_counter()
     model = M.load_model(M.load_default_package())
-    path = f"outputs/lab07_{name.lower()}.zarr"
+    path = f"../outputs/lab07_{name.lower()}.zarr"
     io = ZarrBackend(file_name=path, backend_kwargs={"overwrite": True})
     torch.cuda.reset_peak_memory_stats()
     run.deterministic([INIT], NSTEPS, model, arco, io,
@@ -131,7 +131,7 @@ for name in errors:
     c.plot(errors.index, errors[name], "-o", ms=3, c=colors[name], label=name)
 c.set_xlabel("lead time (h)"); c.set_ylabel("track error (km)"); c.grid(alpha=.3); c.legend(fontsize=8)
 c.set_title("Position error")
-plt.tight_layout(); plt.savefig("outputs/lab07_idai.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab07_idai.png", dpi=110, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # ## What to notice

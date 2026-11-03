@@ -4,7 +4,7 @@
 # for each: **heat days** (damage to flowering maize), **vapour-pressure deficit** (how hard the air pulls water
 # out of plants), **dry spells**, and the **temperature-humidity index** for cattle.
 #
-# Requires `outputs/lab04_africa_ensemble.zarr` from Lab 04 (no GPU, no download). Expected time: 2 min.
+# Requires `../outputs/lab04_africa_ensemble.zarr` from Lab 04 (no GPU, no download). Expected time: 2 min.
 # All thresholds are **placeholders** from the general literature: set them with your crop and livestock experts.
 
 # %%
@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-ds = xr.open_zarr("outputs/lab04_africa_ensemble.zarr").isel(time=0)
+ds = xr.open_zarr("../outputs/lab04_africa_ensemble.zarr").isel(time=0)
 ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon")   # wrapped 342..52 -> -18..52
 init = pd.Timestamp(ds.time.values)
 ds = ds.isel(lead_time=slice(1, None)).load()          # drop the initial state
@@ -62,7 +62,7 @@ for a, (title, da), (cmap, vmin, vmax) in zip(axs.flat, indicators.items(), styl
     a.coastlines(linewidth=0.6, zorder=3); a.add_feature(cfeature.BORDERS, linewidth=0.3, zorder=3)
     a.set_title(title, fontsize=10); fig.colorbar(im, ax=a, shrink=0.75)
 fig.suptitle(f"Crop and livestock stress, next {NDAYS} days (AIFS-ENS, {NENS} members, init {init:%Y-%m-%d})")
-plt.tight_layout(); plt.savefig("outputs/lab06_stress_maps.png", dpi=100, bbox_inches="tight"); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab06_stress_maps.png", dpi=100, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # ## A table per farming region
@@ -103,7 +103,7 @@ ax[0].axhline(HEAT_C, ls="--", c="k"); ax[0].set_ylabel("daily max °C")
 ax[1].axhline(VPD_HIGH, ls="--", c="k"); ax[1].set_ylabel("daily max VPD (kPa)")
 for a in ax:
     a.set_xlabel("day"); a.set_title(PLACE)
-plt.tight_layout(); plt.savefig("outputs/lab06_point.png", dpi=120); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab06_point.png", dpi=120); plt.show()
 
 # %% [markdown]
 # ## Exercise

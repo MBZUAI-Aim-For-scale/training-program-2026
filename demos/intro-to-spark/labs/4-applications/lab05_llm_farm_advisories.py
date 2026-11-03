@@ -7,7 +7,7 @@
 # we check each message against the facts we gave it.
 #
 # Model: **Qwen3-8B** (Apache 2.0, no Hugging Face login needed). First run downloads ~16 GB of weights; they
-# need ~16 GB of memory in bf16. Requires `outputs/lab04_africa_ensemble.zarr`
+# need ~16 GB of memory in bf16. Requires `../outputs/lab04_africa_ensemble.zarr`
 # from Lab 04 and the `spark-intro` container (Lab 00), which includes `transformers`. Run this after Lab 04 has finished, not at
 # the same time, on a shared Spark. Expected time: ~3 min with weights cached.
 
@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-ds = xr.open_zarr("outputs/lab04_africa_ensemble.zarr").isel(time=0)
+ds = xr.open_zarr("../outputs/lab04_africa_ensemble.zarr").isel(time=0)
 ds = ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon")   # wrapped 342..52 -> -18..52
 init = pd.Timestamp(ds["time"].values)
 NENS = ds.sizes["ensemble"]
@@ -241,15 +241,15 @@ for city, text in zip(CITIES, english):
 pd.DataFrame(rows)[["place", "chars", "status", "issues"]]
 
 # %%
-with open("outputs/lab05_advisories.json", "w") as fh:
+with open("../outputs/lab05_advisories.json", "w") as fh:
     json.dump({"model": MODEL_ID, "forecast_init": str(init), "facts": facts, "advisories": rows},
               fh, indent=1, ensure_ascii=False)
-with open("outputs/lab05_advisories.md", "w") as fh:
+with open("../outputs/lab05_advisories.md", "w") as fh:
     fh.write(f"# Advisories from AIFS-ENS init {init:%Y-%m-%d %H} UTC ({NENS} members)\n\n"
              f"Written by {MODEL_ID}. Not reviewed by a person.\n\n")
     for r in rows:
         fh.write(f"**{r['place']}** — {r['status']} {r['issues']}\n\n{r['text']}\n\n")
-print("wrote outputs/lab05_advisories.json and .md")
+print("wrote ../outputs/lab05_advisories.json and .md")
 
 # %% [markdown]
 # ## Exercise

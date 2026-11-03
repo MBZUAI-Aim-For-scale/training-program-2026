@@ -37,7 +37,7 @@ model = SFNO.load_model(SFNO.load_default_package())
 print(f"model loaded in {time.perf_counter()-t0:.0f}s, {sum(p.numel() for p in model.parameters())/1e6:.0f} M params")
 
 VARS = np.array(["t2m", "u10m", "v10m", "msl", "tcwv"])
-out_path = "outputs/lab02_forecast.zarr"
+out_path = "../outputs/lab02_forecast.zarr"
 io = ZarrBackend(file_name=out_path, backend_kwargs={"overwrite": True})
 torch.cuda.reset_peak_memory_stats()
 t0 = time.perf_counter()
@@ -79,7 +79,7 @@ for a, (da, title, cmap, vmin, vmax) in zip(axs, panels):
         a.plot(lo, la, "ko", ms=2.5, transform=ccrs.PlateCarree())
     a.set_title(title); fig.colorbar(im, ax=a, shrink=0.7, orientation="horizontal", pad=0.04)
 fig.suptitle(f"SFNO forecast from GFS, init {start:%Y-%m-%d %H} UTC")
-plt.savefig("outputs/lab02_africa.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.savefig("../outputs/lab02_africa.png", dpi=110, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # ## City table

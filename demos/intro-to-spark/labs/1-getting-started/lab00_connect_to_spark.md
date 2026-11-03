@@ -30,7 +30,7 @@ docker ps                                                    # who else is runni
 docker run --rm --device nvidia.com/gpu=all ubuntu nvidia-smi -L   # can containers see the GPU?
 ```
 
-If the last command fails with `unresolvable CDI devices`, see [Demo 3 SETUP step 1](../../demo3/SETUP.md).
+If the last command fails with `unresolvable CDI devices`, see [Demo 3 SETUP step 1](../../../demo3/SETUP.md).
 
 ## 3. Get the labs and start the lab container (on the Spark)
 
@@ -47,7 +47,7 @@ bash demos/intro-to-spark/docker/run.sh <your-port>          # prints a token; k
 ssh -N -L <your-port>:localhost:<your-port> spark
 ```
 
-Open `http://localhost:<your-port>`, paste the token, and open `labs/lab01_know_your_spark.ipynb`.
+Open `http://localhost:<your-port>`, paste the token, and open `labs/1-getting-started/lab01_know_your_spark.ipynb`.
 
 ## Why it's done this way
 

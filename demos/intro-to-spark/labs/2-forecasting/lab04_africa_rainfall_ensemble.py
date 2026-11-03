@@ -13,14 +13,14 @@
 # Requires the `spark-intro` container (Lab 00) and internet (IFS initial conditions + ~1 GB of weights on first run).
 # Expected time: ~12 min for 8 members. Peak memory: ~36 GiB GPU, ~60 GiB system, so run it alone on a shared box.
 #
-# **In class:** if the instructor has already put a run in `outputs/lab04_africa_ensemble.zarr` (375 MB), set
+# **In class:** if the instructor has already put a run in `../outputs/lab04_africa_ensemble.zarr` (375 MB), set
 # `USE_CACHED = True` below. The lab then skips the model, uses that run's start date, and needs no internet or
 # GPU, even if IFS data is unavailable that day. All teams can then do Labs 04, 06 and 10 at once (post-processing
 # only). Labs 05 (LLM, ~38 GiB) and 08 (SFNO + solar model, ~33 GiB) still load models on the GPU: run them one
 # team at a time, or as an instructor demo.
 
 # %%
-USE_CACHED = False   # True: reuse an existing outputs/lab04_africa_ensemble.zarr instead of running the model
+USE_CACHED = False   # True: reuse an existing ../outputs/lab04_africa_ensemble.zarr instead of running the model
 
 import os
 import time
@@ -56,7 +56,7 @@ CITIES = {"Nairobi": (-1.29, 36.82), "Addis Ababa": (9.03, 38.74), "Kampala": (0
 # ## Load the model and run the ensemble
 
 # %%
-out_path = "outputs/lab04_africa_ensemble.zarr"
+out_path = "../outputs/lab04_africa_ensemble.zarr"
 if USE_CACHED:
     if not os.path.exists(out_path):
         raise FileNotFoundError(f"USE_CACHED=True but {out_path} is missing: copy the instructor's run there, "
@@ -114,7 +114,7 @@ for a, (da, title, cmap, vmin, vmax) in zip(ax, panels):
     a.set_title(title)
     fig.colorbar(im, ax=a, shrink=0.6)
 fig.suptitle(f"AIFS-ENS, {NENSEMBLE} members, init {start:%Y-%m-%d %H} UTC")
-plt.savefig("outputs/lab04_africa_rain.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.savefig("../outputs/lab04_africa_rain.png", dpi=110, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # ## Daily rainfall at cities: how much do the members agree?
@@ -134,7 +134,7 @@ for a in axs[1]:
 for a in axs[:, 0]:
     a.set_ylabel("rain (mm/day)")
 axs[0, 0].legend()
-plt.tight_layout(); plt.savefig("outputs/lab04_city_rain.png", dpi=120, bbox_inches="tight"); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab04_city_rain.png", dpi=120, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # ## Exercise

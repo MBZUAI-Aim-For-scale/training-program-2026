@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-CACHE = "outputs/lab10_era5_daily_rain_africa.nc"
+CACHE = "../outputs/lab10_era5_daily_rain_africa.nc"
 if not os.path.exists(CACHE):
     t0 = time.perf_counter()
     src = xr.open_zarr("gs://weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr",
@@ -61,7 +61,7 @@ for n, (la, lo) in PLACES.items():
     b.plot(doy_clim.dayofyear, doy_clim.sel(lat=la, lon=lo, method="nearest"), label=n)
 b.set_xticks([1, 60, 121, 182, 244, 305], ["Jan", "Mar", "May", "Jul", "Sep", "Nov"])
 b.set_ylabel("mm/day (31-day smoothed)"); b.legend(); b.grid(alpha=.3); b.set_title("One rainy season or two?")
-plt.tight_layout(); plt.savefig("outputs/lab10_climate.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab10_climate.png", dpi=110, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # ## 2. Onset of the rains, every year, every grid point
@@ -129,7 +129,7 @@ for row, (name, on) in zip(axs, results.items()):
         cb = fig.colorbar(im, ax=a, shrink=0.7)
         if cmap == "viridis":
             cb.set_ticks(ticks); cb.set_ticklabels([(start + pd.Timedelta(days=t)).strftime("%d %b") for t in ticks])
-plt.tight_layout(); plt.savefig("outputs/lab10_onset.png", dpi=100, bbox_inches="tight"); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab10_onset.png", dpi=100, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # ### Agronomists argue about the definition. Test 24 of them on the GPU.
@@ -154,8 +154,8 @@ for n, (la, lo) in PLACES.items():
 # climate at 1.5°: we average the forecast onto the coarse grid first.)
 
 # %%
-if os.path.exists("outputs/lab04_africa_ensemble.zarr"):
-    fc = xr.open_zarr("outputs/lab04_africa_ensemble.zarr").isel(time=0)
+if os.path.exists("../outputs/lab04_africa_ensemble.zarr"):
+    fc = xr.open_zarr("../outputs/lab04_africa_ensemble.zarr").isel(time=0)
     fc = fc.assign_coords(lon=((fc.lon + 180) % 360) - 180).sortby("lon")
     init = pd.Timestamp(fc.time.values)
     total = (fc["tp06"].isel(lead_time=slice(1, None)).clip(min=0) * 1000).sum("lead_time").mean("ensemble").load()
@@ -167,7 +167,7 @@ if os.path.exists("outputs/lab04_africa_ensemble.zarr"):
     im = ax.pcolormesh(pct.lon, pct.lat, pct, cmap="BrBG", vmin=0, vmax=200, transform=ccrs.PlateCarree())
     ax.coastlines(); ax.add_feature(cfeature.BORDERS, linewidth=0.3); fig.colorbar(im, ax=ax, shrink=0.7, label="% of normal")
     ax.set_title(f"Forecast rain {init:%d %b}–{init + pd.Timedelta(days=4):%d %b %Y} as % of the 1981–2022 normal")
-    plt.savefig("outputs/lab10_anomaly.png", dpi=110, bbox_inches="tight"); plt.show()
+    plt.savefig("../outputs/lab10_anomaly.png", dpi=110, bbox_inches="tight"); plt.show()
 else:
     print("Run Lab 04 first for this section.")
 

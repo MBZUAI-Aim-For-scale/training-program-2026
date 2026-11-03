@@ -83,7 +83,7 @@ fig, ax = plt.subplots(1, 2, figsize=(9, 3))
 ax[0].bar(tflops.keys(), tflops.values(), color="#76B900"); ax[0].set_ylabel("TFLOPS"); ax[0].set_title("compute")
 ax[1].bar(["copy"], [bw], color="#555"); ax[1].axhline(273, ls="--", c="r"); ax[1].set_ylabel("GB/s")
 ax[1].set_title("memory bandwidth (red = spec)")
-plt.tight_layout(); plt.savefig("outputs/lab01_benchmark.png", dpi=120); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab01_benchmark.png", dpi=120); plt.show()
 
 # %% [markdown]
 # **What this means for weather models:** each forecast step reads all the model's weights and the whole

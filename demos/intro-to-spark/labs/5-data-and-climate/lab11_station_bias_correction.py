@@ -27,7 +27,7 @@ ok = inv[(inv.ELEMENT == "TMAX") & (inv.FIRSTYEAR <= YEARS[0]) & (inv.LASTYEAR >
 st = meta[meta.ID.isin(ok) & meta.ID.str[:2].isin(["KE", "ET", "TZ", "UG"])].set_index("ID")
 print(len(st), "stations")
 
-CACHE = "outputs/lab11_station_tmax.parquet"
+CACHE = "../outputs/lab11_station_tmax.parquet"
 if not os.path.exists(CACHE):
     days = pd.date_range(f"{YEARS[0]}-01-01", f"{YEARS[1]}-12-31", freq="D").to_pydatetime().tolist()
     obs = GHCNDaily(stations=list(st.index), verbose=False)(days, ["t2m_max"])
@@ -41,7 +41,7 @@ print(f"{len(obs)} station-days")
 # Daily max = max of the 00/06/12/18 UTC values (03/09/15/21 East Africa Time), as a forecast model would give.
 
 # %%
-ECACHE = "outputs/lab11_era5_tmax_1p5deg.nc"
+ECACHE = "../outputs/lab11_era5_tmax_1p5deg.nc"
 if not os.path.exists(ECACHE):
     t0 = time.perf_counter()
     src = xr.open_zarr("gs://weatherbench2/datasets/era5/1959-2023_01_10-6h-240x121_equiangular_with_poles_conservative.zarr",
@@ -123,7 +123,7 @@ for k, (c, col) in enumerate([("raw", "gray"), ("linear", "#76B900"), ("ml_unsee
     ax[1].bar(x + (k - 1) * 0.27, per[c], 0.27, color=col, label=c)
 ax[1].set_xticks(x, per.index, rotation=90, fontsize=7); ax[1].set_ylabel("mean abs error (°C)"); ax[1].legend()
 ax[1].set_title("Error per station, 2020–2022")
-plt.tight_layout(); plt.savefig("outputs/lab11_bias_correction.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab11_bias_correction.png", dpi=110, bbox_inches="tight"); plt.show()
 per.round(2)
 
 # %% [markdown]

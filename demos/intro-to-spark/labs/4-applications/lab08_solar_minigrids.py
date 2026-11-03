@@ -10,7 +10,7 @@
 #    trained to predict solar radiation from the weather state. This shows how Earth-2 chains a forecast model
 #    with a specialised "what does this weather mean for X" model.
 #
-# Requires `outputs/lab04_africa_ensemble.zarr` (Lab 04) and internet for GFS and weights on first run.
+# Requires `../outputs/lab04_africa_ensemble.zarr` (Lab 04) and internet for GFS and weights on first run.
 # Expected time: ~2 min.
 
 # %%
@@ -23,7 +23,7 @@ import xarray as xr
 def to_africa(ds):
     return ds.assign_coords(lon=((ds.lon + 180) % 360) - 180).sortby("lon")
 
-ens = to_africa(xr.open_zarr("outputs/lab04_africa_ensemble.zarr").isel(time=0))
+ens = to_africa(xr.open_zarr("../outputs/lab04_africa_ensemble.zarr").isel(time=0))
 init = pd.Timestamp(ens.time.values).to_pydatetime()
 # ssrd06 is J/m² accumulated over the 6 h ending at each lead time; lead 0 has no past 6 h.
 ghi_ens = (ens["ssrd06"].isel(lead_time=slice(1, None)) / 3.6e6).load()          # kWh/m² per 6 h
@@ -47,14 +47,14 @@ LON = np.concatenate([np.arange(342, 360, 0.25), np.arange(0, 52.01, 0.25)])
 t0 = time.perf_counter()
 px = SFNO.load_model(SFNO.load_default_package())   # SFNO outputs every input the solar model needs
 dx = SolarRadiationAFNO6H.load_model(SolarRadiationAFNO6H.load_default_package())
-io = ZarrBackend(file_name="outputs/lab08_solar_afno.zarr", backend_kwargs={"overwrite": True})
+io = ZarrBackend(file_name="../outputs/lab08_solar_afno.zarr", backend_kwargs={"overwrite": True})
 torch.cuda.reset_peak_memory_stats()
 run.diagnostic([init], NDAYS * 4, px, dx, GFS(), io, output_coords={"lat": LAT, "lon": LON})
 print(f"SFNO + solar diagnostic: {time.perf_counter()-t0:.0f}s incl. load, "
       f"peak GPU {torch.cuda.max_memory_allocated()/2**30:.1f} GiB")
 del px, dx; torch.cuda.empty_cache()
 
-afno = to_africa(xr.open_zarr("outputs/lab08_solar_afno.zarr").isel(time=0))
+afno = to_africa(xr.open_zarr("../outputs/lab08_solar_afno.zarr").isel(time=0))
 ghi_afno_daily = (afno["ssrd"].isel(lead_time=slice(1, None)) / 3.6e6).load().coarsen(lead_time=4, boundary="trim").sum()
 
 # %% [markdown]
@@ -79,7 +79,7 @@ for a, (da, title, cmap, vmin, vmax) in zip(axs, panels):
     a.coastlines(linewidth=0.6); a.add_feature(cfeature.BORDERS, linewidth=0.3)
     a.set_title(title, fontsize=10); fig.colorbar(im, ax=a, shrink=0.7, orientation="horizontal", pad=0.04)
 fig.suptitle(f"Surface solar radiation, next {NDAYS} days from {init:%Y-%m-%d}")
-plt.savefig("outputs/lab08_solar_maps.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.savefig("../outputs/lab08_solar_maps.png", dpi=110, bbox_inches="tight"); plt.show()
 diff = (mean_afno - mean_ens)
 print(f"SFNO+AFNO minus AIFS-ENS over Africa: mean {float(diff.mean()):+.2f}, "
       f"90% of points within ±{float(abs(diff).quantile(0.9)):.2f} kWh/m²/day")
@@ -125,7 +125,7 @@ ax.plot(dates, e.mean("ensemble"), "o-", c="darkorange", label="AIFS-ENS mean")
 ax.plot(dates, ghi_afno_daily.sel(lat=la, lon=lo, method="nearest") * PR * MINIGRID_KWP, "s--", c="k",
         label="SFNO + SolarRadiationAFNO")
 ax.set_ylabel(f"kWh/day from {MINIGRID_KWP} kWp"); ax.set_title(SITE); ax.legend(fontsize=8); ax.grid(alpha=.3)
-plt.tight_layout(); plt.savefig("outputs/lab08_site.png", dpi=120); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab08_site.png", dpi=120); plt.show()
 
 # %% [markdown]
 # ## Exercise

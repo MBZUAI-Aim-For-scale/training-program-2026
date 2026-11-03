@@ -23,7 +23,7 @@ BOX = dict(lat=slice(15, -12), lon=slice(28, 52))   # East Africa (latitude desc
 
 model = SFNO.load_model(SFNO.load_default_package())
 arco = ARCO()
-out_path = "outputs/lab03_forecast.zarr"
+out_path = "../outputs/lab03_forecast.zarr"
 io = ZarrBackend(file_name=out_path, backend_kwargs={"overwrite": True})
 run.deterministic([INIT], NSTEPS, model, arco, io, output_coords={"variable": np.array(["t2m"])})
 fc_full = xr.open_zarr(out_path)["t2m"].isel(time=0).load() - 273.15     # (lead_time, lat, lon), global
@@ -100,7 +100,7 @@ ax[1].scatter(per_station.elev_m, per_station["ERA5-obs"], c="gray", marker="s",
 ax[1].axhline(0, c="k", lw=0.8); ax[1].set_xlabel("station elevation (m)"); ax[1].set_ylabel("daily max error (°C)")
 ax[1].set_title("Error at stations vs elevation"); ax[1].legend(); ax[1].grid(alpha=.3)
 from IPython.display import display
-fig.tight_layout(); fig.savefig("outputs/lab03_verification.png", dpi=120); display(fig)
+fig.tight_layout(); fig.savefig("../outputs/lab03_verification.png", dpi=120); display(fig)
 
 # %% [markdown]
 # ## What to notice

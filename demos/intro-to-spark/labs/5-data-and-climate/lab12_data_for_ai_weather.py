@@ -31,7 +31,7 @@ def du(path):
     return sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(path) for f in fs)
 
 GB, MB = 2**30, 2**20
-os.makedirs("outputs", exist_ok=True)
+os.makedirs("../outputs", exist_ok=True)
 
 # %% [markdown]
 # ## 1. What does each model need as input?
@@ -126,7 +126,7 @@ from earth2studio.data import fetch_data
 from earth2studio.data.utils import datasource_cache_root
 
 main_cache = datasource_cache_root()
-lab_cache = os.path.abspath("outputs/lab12_cache")
+lab_cache = os.path.abspath("../outputs/lab12_cache")
 shutil.rmtree(lab_cache, ignore_errors=True)
 os.environ["EARTH2STUDIO_CACHE"] = lab_cache
 
@@ -194,7 +194,7 @@ print(f"msl: {float(africa.sel(variable='msl').mean()):.0f}  <- Pascals, divide 
 # We store Lab 04's 5-day rainfall ensemble for Africa three ways and time both kinds of read.
 
 # %%
-src = "outputs/lab04_africa_ensemble.zarr"
+src = "../outputs/lab04_africa_ensemble.zarr"
 if not os.path.exists(src):
     print("Lab 04 output not found, skipping section 5")
 else:
@@ -203,10 +203,10 @@ else:
     rain = xr.DataArray(rain.values, dims=rain.dims, coords={k: rain[k].values for k in rain.dims}, name="tp06")
     print(f"tp06 ensemble: {dict(rain.sizes)}, {rain.nbytes/MB:.0f} MB in memory")
     layouts = {
-        "NetCDF, no compression": ("outputs/lab12_rain.nc", None),
-        "Zarr, chunked as maps (1 lead time per chunk)": ("outputs/lab12_rain_maps.zarr",
+        "NetCDF, no compression": ("../outputs/lab12_rain.nc", None),
+        "Zarr, chunked as maps (1 lead time per chunk)": ("../outputs/lab12_rain_maps.zarr",
                                                          {"ensemble": -1, "lead_time": 1, "lat": -1, "lon": -1}),
-        "Zarr, chunked as time series (32x32 tiles)": ("outputs/lab12_rain_series.zarr",
+        "Zarr, chunked as time series (32x32 tiles)": ("../outputs/lab12_rain_series.zarr",
                                                       {"ensemble": -1, "lead_time": -1, "lat": 32, "lon": 32}),
     }
     res = []
@@ -284,7 +284,7 @@ fig, ax = plt.subplots(figsize=(7, 7.5), subplot_kw={"projection": ccrs.PlateCar
 ax.set_extent([-20, 55, -37, 40]); ax.coastlines(linewidth=0.6); ax.add_feature(cfeature.BORDERS, linewidth=0.3)
 ax.plot(st.LON, st.LAT, "o", ms=1.5, c="tab:red", transform=ccrs.PlateCarree())
 ax.set_title(f"GHCN-Daily stations with TMAX in {now.year-1}-{now.year}")
-plt.savefig("outputs/lab12_stations.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.savefig("../outputs/lab12_stations.png", dpi=110, bbox_inches="tight"); plt.show()
 
 # %% [markdown]
 # Most national met services hold many more stations than they share internationally. On a Spark the data stays in
@@ -293,7 +293,7 @@ plt.savefig("outputs/lab12_stations.png", dpi=110, bbox_inches="tight"); plt.sho
 # ## Clean up
 
 # %%
-for p in [lab_cache, "outputs/lab12_rain.nc", "outputs/lab12_rain_maps.zarr", "outputs/lab12_rain_series.zarr"]:
+for p in [lab_cache, "../outputs/lab12_rain.nc", "../outputs/lab12_rain_maps.zarr", "../outputs/lab12_rain_series.zarr"]:
     if os.path.isdir(p):
         shutil.rmtree(p)
     elif os.path.exists(p):
@@ -311,7 +311,7 @@ print("removed this lab's temporary files")
 #   wrap them in a helper.
 # - **Observations** are the scarce resource in Africa, and the one only your institution can add.
 #
-# See the one-page checklist: [`../docs/06-data-guideline-one-pager.md`](../docs/06-data-guideline-one-pager.md).
+# See the one-page checklist: [`../../docs/06-data-guideline-one-pager.md`](../../docs/06-data-guideline-one-pager.md).
 #
 # ## Exercise
 # 1. Repeat section 3 for AIFS-ENS from `IFS(source="google")`. Which model needs more data per run?

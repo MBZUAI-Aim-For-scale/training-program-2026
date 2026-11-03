@@ -1,7 +1,7 @@
 # One-pager: the data side of running AI weather models
 
 The model is the easy part. A daily AI forecast service needs four kinds of data, on time and in the right form.
-Numbers marked *measured* come from [Lab 12](../labs/lab12_data_for_ai_weather.ipynb) on one DGX Spark (2026-11-02).
+Numbers marked *measured* come from [Lab 12](../labs/5-data-and-climate/lab12_data_for_ai_weather.ipynb) on one DGX Spark (2026-11-02).
 
 ## The four kinds of data
 

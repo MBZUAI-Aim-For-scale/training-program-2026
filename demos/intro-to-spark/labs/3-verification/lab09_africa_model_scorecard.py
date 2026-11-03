@@ -39,7 +39,7 @@ for name, M in MODELS.items():
     t0 = time.perf_counter()
     model = M.load_model(M.load_default_package())
     for init in INITS:
-        io = ZarrBackend(file_name=f"outputs/lab09_{name}_{init:%Y%m%d}.zarr", backend_kwargs={"overwrite": True})
+        io = ZarrBackend(file_name=f"../outputs/lab09_{name}_{init:%Y%m%d}.zarr", backend_kwargs={"overwrite": True})
         run.deterministic([init], NSTEPS, model, arco, io, verbose=False,
                           output_coords={"variable": np.array(VARS), "lat": LAT, "lon": LON})
     runtime[name] = (time.perf_counter() - t0) / len(INITS)
@@ -67,7 +67,7 @@ for init in INITS:
     persist = truth.isel(valid=0, drop=True)
     scores.append(rmse(persist, truth).to_dataframe("rmse").reset_index().assign(model="persistence", init=init))
     for name in MODELS:
-        fc = xr.open_zarr(f"outputs/lab09_{name}_{init:%Y%m%d}.zarr").isel(time=0)
+        fc = xr.open_zarr(f"../outputs/lab09_{name}_{init:%Y%m%d}.zarr").isel(time=0)
         fc = prep(fc.to_array("variable")).rename(lead_time="valid")
         fc = fc.assign_coords(valid=np.arange(NSTEPS + 1) * 6)
         scores.append(rmse(fc, truth).to_dataframe("rmse").reset_index().assign(model=name, init=init))
@@ -95,7 +95,7 @@ for name, c in zip(["persistence", *MODELS], ["gray", "#76B900", "tab:blue", "ta
     ax[1].plot(mean.loc["t2m"].index, mean.loc["t2m"][name], "-o", ms=3, c=c, label=name)
 ax[1].set_xlabel("lead time (h)"); ax[1].set_ylabel("t2m RMSE over Africa (K)"); ax[1].legend(); ax[1].grid(alpha=.3)
 ax[1].set_title("2 m temperature error")
-plt.tight_layout(); plt.savefig("outputs/lab09_scorecard.png", dpi=110, bbox_inches="tight"); plt.show()
+plt.tight_layout(); plt.savefig("../outputs/lab09_scorecard.png", dpi=110, bbox_inches="tight"); plt.show()
 
 table = mean.xs(120, level="lead_h").T.round(2)
 table["runtime_s"] = pd.Series(runtime).round(0)
