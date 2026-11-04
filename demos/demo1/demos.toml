@@ -43,4 +43,4 @@ container = "ai_weather"
 context = "."
 dockerfile = "demos/demo4/docker/Dockerfile"
 run = ["bash", "demos/demo4/docker/run.sh", "start"]
-port = 8501
+port = 8503
