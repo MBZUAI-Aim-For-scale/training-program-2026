@@ -1,5 +1,7 @@
 # Demo 4: AI Weather Model Benchmarking
 
+**New to this? Follow the step-by-step [Beginner's Guide](../BEGINNER_GUIDE.md#demo-4--the-ai-weather-model-scorecard).**
+
 Because AI models and datasets are large, the benchmarking environment is containerized using Docker and hosted on a remote server. You will launch the backend via Docker and access the interactive Streamlit UI from your local machine using an SSH tunnel.
 
 ---
@@ -35,21 +37,21 @@ EOF
 
 4. **Start the container stack**:
 ```bash
-bash docker/run.sh rebuild
+bash demos/demo4/docker/run.sh rebuild
 
 ```
 
 
-*(For subsequent runs without rebuilding, use `bash docker/run.sh start` or `DEV=1 bash docker/run.sh start` for live code editing).*
+*(For subsequent runs without rebuilding, use `bash demos/demo4/docker/run.sh start` or `DEV=1 bash demos/demo4/docker/run.sh start` for live code editing).*
 5. **Create the SSH tunnel** (from your local machine):
 ```bash
-ssh -L 8501:localhost:8501  <you>@country-spark
+ssh -L 8503:localhost:8503  <you>@country-spark
 
 ```
 
 
 6. **Access dashboards**:
-  * **Streamlit UI**: `http://localhost:8501`
+  * **Streamlit UI**: `http://localhost:8503`
   * **Jupyter Lab**: `http://localhost:8888`
 
 
@@ -84,7 +86,7 @@ python run_momp.py --mode prob --model AIFS_ENS
 
 ## UI-Based Execution (Streamlit Dashboard)
 
-1. **Navigate to Benchmarking**: Open `http://localhost:8501` and select **Short Medium Benchmarking** in the sidebar.
+1. **Navigate to Benchmarking**: Open `http://localhost:8503` and select **Short Medium Benchmarking** in the sidebar.
 2. **Configure Benchmark Inputs**:
   * **Ground Truth**: Select `CHIRPS` or `ENACTS`.
   * **Benchmark Coverage**: Select region (e.g., `Ethiopia`).

@@ -162,13 +162,13 @@ When running AI weather models, Docker manages two primary storage locations:
 The container image includes all dependencies for running AI weather models:
 
 ```bash
-docker build -t ai_weather -f docker/Dockerfile .
+docker build -t ai_weather -f demos/demo4/docker/Dockerfile .
 ```
 
 **Build characteristics:**
 
 - **First build**: ~1 hour (compiling earth2grid, NATTEN libraries).
-- **Subsequent builds**: Seconds (using Docker layer cache), unless `docker/requirements.txt` or `docker/locks/` changed, which rebuilds from that step.
+- **Subsequent builds**: Seconds (using Docker layer cache), unless `demos/demo4/docker/requirements.txt` or `demos/demo4/docker/locks/` changed, which rebuilds from that step.
 - **Image contents**: Python environments, dependencies, application code.
 - **Excluded**: Model weights (downloaded on first run).
 
@@ -231,30 +231,30 @@ git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
 cd training-program-2026
 
 # 2. Build the container image (~1 hour first time) and start it
-bash docker/run.sh rebuild
+bash demos/demo4/docker/run.sh rebuild
 
 # 3. Access the UI from your laptop (on Tailscale)
-ssh -L 8501:localhost:8501 <user>@<spark>
-# Then browse to http://localhost:8501 and choose Demo3 in the menu
+ssh -L 8503:localhost:8503 <user>@<spark>
+# Then browse to http://localhost:8503 and choose Demo3 in the menu
 ```
 
 On a Spark, `run.sh` also reads saved runs from the program's bucket (`gs://aim4scale_training_2026/demo3`) with the machine's read-only key, `/etc/fleet-gcs-key.json`, which it mounts into the container. Never copy that key into the image or the repository.
 
 ### 4.2 Runtime Configuration Flags
 
-Prepend these flags to `bash docker/run.sh` to customize behavior:
+Prepend these flags to `bash demos/demo4/docker/run.sh` to customize behavior:
 
 | Flag | Purpose | Example | Default |
 | --- | --- | --- | --- |
-| `DEV=1` | Mount local code for live development | `DEV=1 bash docker/run.sh` | Disabled |
-| `DEMO_CACHE=/path` | Redirect model weight cache location | `DEMO_CACHE=/shared/cache bash docker/run.sh` | `~/.cache/ai_weather/` |
-| `DEMO_OUTPUTS=/path` | Redirect saved forecasts, movies and logs | `DEMO_OUTPUTS=/data/outputs bash docker/run.sh` | `training-program-2026/outputs/` |
-| `DEMO3_BUCKET=gs://...` | Bucket to load saved runs from (empty: none) | `DEMO3_BUCKET= bash docker/run.sh` | `gs://aim4scale_training_2026/demo3` |
-| `DEMO3_IFS_SOURCE=azure` | Use Azure mirror for ECMWF data | `DEMO3_IFS_SOURCE=azure bash docker/run.sh` | AWS |
+| `DEV=1` | Mount local code for live development | `DEV=1 bash demos/demo4/docker/run.sh` | Disabled |
+| `DEMO_CACHE=/path` | Redirect model weight cache location | `DEMO_CACHE=/shared/cache bash demos/demo4/docker/run.sh` | `~/.cache/ai_weather/` |
+| `DEMO_OUTPUTS=/path` | Redirect saved forecasts, movies and logs | `DEMO_OUTPUTS=/data/outputs bash demos/demo4/docker/run.sh` | `training-program-2026/outputs/` |
+| `DEMO3_BUCKET=gs://...` | Bucket to load saved runs from (empty: none) | `DEMO3_BUCKET= bash demos/demo4/docker/run.sh` | `gs://aim4scale_training_2026/demo3` |
+| `DEMO3_IFS_SOURCE=azure` | Use Azure mirror for ECMWF data | `DEMO3_IFS_SOURCE=azure bash demos/demo4/docker/run.sh` | AWS |
 
 > #### Development Workflow
 >
-> Use `DEV=1` during active development to avoid rebuilding the container after every code change. Changes to a page file show after a page refresh; changes to the modules it imports (e.g. `apps/forecasting/`) need `bash docker/run.sh restart`.
+> Use `DEV=1` during active development to avoid rebuilding the container after every code change. Changes to a page file show after a page refresh; changes to the modules it imports (e.g. `apps/forecasting/`) need `bash demos/demo4/docker/run.sh restart`.
 {: .tip}
 
 > #### First-Run Downloads
@@ -386,7 +386,7 @@ EOF
 
 4. **Launch the container stack**:
 ```bash
-bash docker/run.sh rebuild
+bash demos/demo4/docker/run.sh rebuild
 
 ```
 
@@ -395,8 +395,8 @@ bash docker/run.sh rebuild
 > 
 > 
 > Rebuilding (`rebuild`) is only necessary when modifying system-level Docker layers. For daily runs or live development, use:
-> * `bash docker/run.sh start` — Fast startup using cached build layers.
-> * `DEV=1 bash docker/run.sh start` — Mounts host source code directly for real-time edits without rebuilding.
+> * `bash demos/demo4/docker/run.sh start` — Fast startup using cached build layers.
+> * `DEV=1 bash demos/demo4/docker/run.sh start` — Mounts host source code directly for real-time edits without rebuilding.
 > {: .tip}
 > 
 > 
@@ -404,13 +404,13 @@ bash docker/run.sh rebuild
 
 5. **Create the SSH tunnel** (run in a new terminal window on your local machine):
 ```bash
-ssh -L 8501:localhost:8501 -L 8888:localhost:8888 <you>@country-spark
+ssh -L 8503:localhost:8503 -L 8888:localhost:8888 <you>@country-spark
 
 ```
 
 
 6. **Access web interfaces**:
-* **Streamlit Benchmarking UI**: `http://localhost:8501`
+* **Streamlit Benchmarking UI**: `http://localhost:8503`
 * **Jupyter Lab Workstation**: `http://localhost:8888`
 
 
@@ -516,7 +516,7 @@ AI weather models require specialized libraries for:
 
 ### 8.2 Library Versions
 
-Pinned in `docker/locks/` for reproducibility. Key versions:
+Pinned in `demos/demo4/docker/locks/` for reproducibility. Key versions:
 
 - PyTorch: 2.1+ (CUDA 12.x)
 - JAX: 0.4+ (with CUDA support)
@@ -530,11 +530,11 @@ Pinned in `docker/locks/` for reproducibility. Key versions:
 
 | Symptom | Likely Cause | Resolution |
 | --- | --- | --- |
-| `docker run` fails: `unresolvable CDI devices` | Docker started before GPU registry populated | `systemctl --user restart docker`, then `bash docker/run.sh restart` |
+| `docker run` fails: `unresolvable CDI devices` | Docker started before GPU registry populated | `systemctl --user restart docker`, then `bash demos/demo4/docker/run.sh restart` |
 | `docker run` fails: `failed to fulfil mount request ... libnvidia-...: no such file` | NVIDIA libraries updated since boot | An admin runs `sudo systemctl start nvidia-cdi-refresh.service`, or reboot (section 1.1) |
-| Port 8501 already in use when starting | Another container (e.g. the old stand-alone `demo3`) holds it | `docker ps`, then `docker stop <name>` and `bash docker/run.sh` |
-| A code change doesn't show (with `DEV=1`) | The page keeps imported modules loaded | `bash docker/run.sh restart` |
-| Browser can't reach `localhost:8501` | SSH tunnel not open or port conflict | Use `-L 8502:localhost:8501` and navigate to `:8502` |
+| Port 8503 already in use when starting | Another container (e.g. the old stand-alone `demo3`) holds it | `docker ps`, then `docker stop <name>` and `bash demos/demo4/docker/run.sh` |
+| A code change doesn't show (with `DEV=1`) | The page keeps imported modules loaded | `bash demos/demo4/docker/run.sh restart` |
+| Browser can't reach `localhost:8503` | SSH tunnel not open or port conflict | Use `-L 8502:localhost:8503` and navigate to `:8502` |
 | Run fails during starting condition download | ECMWF/Google mirrors throttled | Retry or use `DEMO3_IFS_SOURCE=azure` |
 | First model run is exceptionally slow | Downloading model weights (~30 min for Atlas CRPS) | Expected behavior; subsequent runs are fast |
 | ROMP run stops after switching tracks | DET and PROB mixed in one run | Set mode in config or with `--mode`, run separately |
@@ -576,10 +576,10 @@ docker logs -f ai_weather
 docker restart ai_weather
 
 # Fetch latest code: restarts with DEV=1, otherwise rebuilds and restarts
-bash docker/run.sh update
+bash demos/demo4/docker/run.sh update
 
 # Full rebuild and restart cycle
-bash docker/run.sh rebuild
+bash demos/demo4/docker/run.sh rebuild
 
 # Clean up old containers
 docker system prune -f
@@ -680,7 +680,7 @@ Every benchmark result should document:
 > Set `DEV=1` to mount the local directory into the container:
 >
 > ```bash
-> DEV=1 bash docker/run.sh
+> DEV=1 bash demos/demo4/docker/run.sh
 > ```
 >
 > This allows you to edit code locally and see changes immediately without rebuilding.

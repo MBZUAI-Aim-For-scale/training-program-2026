@@ -1,5 +1,7 @@
 # Demo 3 — Running Your First AI Weather Forecast
 
+**New to this? Follow the step-by-step [Beginner's Guide](../BEGINNER_GUIDE.md#demo-3--run-your-first-ai-weather-forecast).**
+
 A Streamlit app, running on the DGX Spark, for running AI weather models. Participants choose up to four models, a start date, lead time, region and use case (heat, precipitation or rainy-season onset), run the forecast (or load a saved run), and compare it with observations.
 
 **Status:**
