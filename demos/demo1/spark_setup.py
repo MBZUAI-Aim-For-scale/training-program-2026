@@ -31,6 +31,8 @@ import tomllib
 import urllib.request
 from pathlib import Path
 
+import verify_bucket_access
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 STATE = HERE / "state"
@@ -315,6 +317,16 @@ def step_smoke(run, sid, log, image):
     return "CUDA matmul + flash-attention ok"
 
 
+def step_bucket(run, sid, log):
+    log.write(f"key: {verify_bucket_access.key_path}\nbucket: {verify_bucket_access.BUCKET}\n")
+    try:
+        return verify_bucket_access.check()
+    except verify_bucket_access.BucketError as e:
+        raise Failed(f"Google bucket not readable: {e}")
+    except OSError as e:  # urllib's network errors
+        raise Failed(f"couldn't reach Google: {e}")
+
+
 # --- Demo steps ---------------------------------------------------------------------------
 
 BUILD_STEP = re.compile(r"^#\d+ \[(?:[\w.-]+ )?\s*(\d+)/(\d+)\] (.*)")
@@ -434,6 +446,7 @@ HOST_STEPS = [
     ("host.cdi", "Containers can use the GPU", step_cdi),
     ("host.gpu_wait", "Docker waits for GPU after reboot", step_gpu_wait),
     ("host.disk", "Disk space", step_disk),
+    ("host.bucket", "Google bucket access", step_bucket),
     ("host.smoke", "PyTorch GPU smoke test", step_smoke),
 ]
 
@@ -469,7 +482,7 @@ def cmd_run(args, argv):
         print("Spark host (demo1)", flush=True)
         smoke_image = cfg.get("smoke_test", {}).get("image", "nvcr.io/nvidia/pytorch:25.03-py3")
         for sid, title, fn in HOST_STEPS:
-            if sid not in ("host.gpu", "host.docker") and run.status("host.docker") == "failed":
+            if sid not in ("host.gpu", "host.docker", "host.bucket") and run.status("host.docker") == "failed":
                 run.skip(sid, "Docker isn't running")
             elif sid == "host.smoke" and run.status("host.cdi") == "failed":
                 run.skip(sid, "containers can't see the GPU")
