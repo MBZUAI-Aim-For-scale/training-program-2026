@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<function_msg>
+    <message>
+        <content id="1">
+            <text lang="en"> Apply bias correction ... </text>
+        </content>
+        <content id="2">
+            <text lang="en"> Bias Correction done </text>
+        </content>
+        <content id="3">
+            <text lang="en"> Unable to open </text>
+        </content>
+        <content id="4">
+            <text lang="en"> Grids do not match </text>
+        </content>
+    </message>
+</function_msg>

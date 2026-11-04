@@ -1,10 +1,14 @@
 # Demo 1: set up the Spark
 
+**New to this? Follow the step-by-step [Beginner's Guide](../BEGINNER_GUIDE.md#demo-1--set-up-the-spark).**
+
 Prepares a DGX Spark for the other demos: checks the machine, then builds and starts
 a Docker container for each demo listed in `demos.toml`.
 
+Run the site to launch all the demos:
+
 ```bash
-python3 demos/demo1/spark_setup.py
+python3 demos/demo1/spark_setup.py dashboard
 ```
 
 It first starts a progress dashboard in the background and prints its link
@@ -22,8 +26,9 @@ bash shutdown.sh                          # stop any setup run, the dashboard an
 ```
 
 **Host checks:** GPU, Docker, GPU access from containers, the after-reboot GPU wait
-(SETUP.md step 1, installed if missing), disk space, and a PyTorch + flash-attention
-smoke test (the same test as `Untitled.ipynb`).
+(SETUP.md step 1, installed if missing), disk space, read access to the program's Google
+bucket (with the key at `/etc/fleet-gcs-key.json`; also `python3 verify_bucket_access.py`),
+and a PyTorch + flash-attention smoke test (the same test as `Untitled.ipynb`).
 
 **For each demo:** build its image (only if it's missing), start its container (a stopped
 one is recreated), and wait until its page answers.

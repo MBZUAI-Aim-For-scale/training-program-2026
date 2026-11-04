@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dialog_box>
+    <title>
+        <text lang="en"> Min and Max with Observation Dates </text>
+        <text lang="fr"> Min et Max avec Dates d'Observation </text>
+    </title>
+    <widget>
+        <button id="1">
+            <text lang="en"> Aggregation Parameters </text>
+        </button>
+        <label id="1">
+            <text lang="en"> Time Series Aggregation </text>
+            <text lang="fr"> Agrégation Series Temporelles </text>
+        </label>
+        <label id="2">
+            <text lang="en"> TO </text>
+            <text lang="fr"> A </text>
+        </label>
+        <label id="3">
+            <text lang="en"> Start Month </text>
+            <text lang="fr"> Mois de début </text>
+        </label>
+        <label id="4">
+            <text lang="en"> Length </text>
+            <text lang="fr"> Longueur </text>
+        </label>
+        <label id="5">
+            <text lang="en"> Input Data </text>
+            <text lang="fr"> Données d'entrées </text>
+        </label>
+        <label id="6">
+            <text lang="en"> File containing stations input data </text>
+            <text lang="fr"> Fichier contenant les données des stations </text>
+        </label>
+        <label id="9">
+            <text lang="en"> File to save aggregated data </text>
+            <text lang="fr"> Fichier de sauvegarde des données agrégées </text>
+        </label>
+        <label id="11">
+            <text lang="en"> Hour </text>
+            <text lang="fr"> Heure </text>
+        </label>
+        <label id="12">
+            <text lang="en"> Minute </text>
+            <text lang="fr"> Minute </text>
+        </label>
+        <label id="13">
+            <text lang="en"> Observation hour </text>
+            <text lang="fr"> Heure d'Observation </text>
+        </label>
+    </widget>
+    <help>
+        <content id="1">
+            <status>
+                <text lang="en"> Select the time step of the input data to aggregate </text>
+                <text lang="fr"> Sélectionnez le pas de temps des données d'entrée à agréger </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Select the time step of the input data to aggregate </text>
+                <text lang="fr"> Sélectionnez le pas de temps des données d'entrée à agréger </text>
+            </tooltip>
+        </content>
+        <content id="2">
+            <status>
+                <text lang="en"> Select the time step of the aggregated data </text>
+                <text lang="fr"> Sélectionnez le pas de temps des données agrégées </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Select the time step of the aggregated data </text>
+                <text lang="fr"> Sélectionnez le pas de temps des données agrégées </text>
+            </tooltip>
+        </content>
+        <content id="3">
+            <status>
+                <text lang="en"> Select the start month of the season </text>
+                <text lang="fr"> Sélectionnez le mois de début de la saison </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Select the start month of the season </text>
+                <text lang="fr"> Sélectionnez le mois de début de la saison </text>
+            </tooltip>
+        </content>
+        <content id="4">
+            <status>
+                <text lang="en"> Select the length of the season (e.g., 3 for three-month season) </text>
+                <text lang="fr"> Sélectionnez la longueur de la saison (ex, 3 pour une saison de trois mois) </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Select the length of the season (e.g., 3 for three-month season) </text>
+                <text lang="fr"> Sélectionnez la longueur de la saison (ex, 3 pour une saison de trois mois) </text>
+            </tooltip>
+        </content>
+        <content id="5">
+            <status>
+                <text lang="en"> Select the file containing the data to aggregate </text>
+                <text lang="fr"> Sélectionnez le fichier contenant les données à agréger </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Select the file containing the data to aggregate </text>
+                <text lang="fr"> Sélectionnez le fichier contenant les données à agréger </text>
+            </tooltip>
+        </content>
+        <content id="8">
+            <status>
+                <text lang="en"> Browse file if not listed </text>
+                <text lang="fr"> Parcourir fichier si pas répertorié </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Browse file if not listed </text>
+                <text lang="fr"> Parcourir fichier si pas répertorié </text>
+            </tooltip>
+        </content>
+        <content id="9">
+            <status>
+                <text lang="en"> or browse here </text>
+                <text lang="fr"> ou parcourir ici </text>
+            </status>
+            <tooltip>
+                <text lang="en"> or browse here </text>
+                <text lang="fr"> ou parcourir ici </text>
+            </tooltip>
+        </content>
+        <content id="10">
+            <status>
+                <text lang="en"> Enter the full path of the file to save aggregated data </text>
+                <text lang="fr"> Entrez le chemin complet du fichier pour sauver les données agrégées </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Enter the full path of the file to save aggregated data </text>
+                <text lang="fr"> Entrez le chemin complet du fichier pour sauver les données agrégées </text>
+            </tooltip>
+        </content>
+        <content id="12">
+            <status>
+                <text lang="en"> Enter the observation hour to compute the daily data \n For example: The cumulative rainfall recorded on 2018-07-30 at 9:00 \n is the rainfall for the day 2018-07-29 </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Enter the observation hour to compute the daily data \n For example: The cumulative rainfall recorded on 2018-07-30 at 9:00 \n is the rainfall for the day 2018-07-29 </text>
+            </tooltip>
+        </content>
+    </help>
+    <message>
+        <content id="1">
+            <text lang="en"> No input file </text>
+            <text lang="fr"> Aucun fichier d'entrée </text>
+        </content>
+        <content id="2">
+            <text lang="en"> Browse or enter the file to save results </text>
+            <text lang="fr"> Parcourir le répertoire ou entrer le fichier pour sauver les résultats </text>
+        </content>
+        <content id="4">
+            <text lang="en"> Data aggregation finished successfully </text>
+            <text lang="fr"> Agrégation de données terminée avec succès </text>
+        </content>
+        <content id="5">
+            <text lang="en"> Data aggregation failed </text>
+            <text lang="fr"> Agrégation de données échouée </text>
+        </content>
+        <content id="6">
+            <text lang="en"> Aggregating time series ... </text>
+            <text lang="fr"> Agrégation des series temporelles ... </text>
+        </content>
+        <content id="13">
+            <text lang="en"> Time series aggregation finished </text>
+            <text lang="fr"> Agrégation des series temporelles effectuée </text>
+        </content>
+        <content id="14">
+            <text lang="en"> No aggregation, too much missing values </text>
+            <text lang="fr"> No aggregation, too much missing values </text>
+        </content>
+    </message>
+</dialog_box>

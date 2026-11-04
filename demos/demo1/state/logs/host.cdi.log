@@ -1,4 +1,0 @@
-$ docker run --rm --device nvidia.com/gpu=all ubuntu nvidia-smi -L
-GPU 0: NVIDIA GB10 (UUID: GPU-024d6593-6aca-82a1-74b0-01ca05c9fb8d)
-
-[ok] containers see the GPU

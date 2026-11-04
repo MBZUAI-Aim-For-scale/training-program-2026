@@ -105,14 +105,14 @@ git git@github.com:MBZUAI-Aim-For-scale/training-program-2026.git
 cd training-program-2026
 
 # 2. Build the container (first time only, ~1 hour)
-docker build -t ai_weather -f docker/Dockerfile .
+docker build -t ai_weather -f demos/demo4/docker/Dockerfile .
 
 # 3. Start the container
-bash docker/run.sh rebuild
+bash demos/demo4/docker/run.sh rebuild
 
 # 4. Access from your laptop (on Tailscale)
-ssh -L 8501:localhost:8501 <user>@<spark>
-# Then browse to http://localhost:8501
+ssh -L 8503:localhost:8503 <user>@<spark>
+# Then browse to http://localhost:8503
 ```
 
 ### 1.2 Runtime Options
@@ -121,13 +121,13 @@ Common configuration flags (see [Demo 1](/training-program-2026/01-setup) for th
 
 ```bash
 # Development mode (live code updates without rebuild)
-DEV=1 bash docker/run.sh
+DEV=1 bash demos/demo4/docker/run.sh
 
 # Custom cache location for model weights
-DEMO3_CACHE=/shared/cache bash docker/run.sh
+DEMO3_CACHE=/shared/cache bash demos/demo4/docker/run.sh
 
 # Use Azure mirror for ECMWF data
-DEMO3_IFS_SOURCE=azure bash docker/run.sh
+DEMO3_IFS_SOURCE=azure bash demos/demo4/docker/run.sh
 ```
 
 > #### First-Run Downloads
@@ -445,7 +445,7 @@ FGN is Google DeepMind's Functional Generative Network for probabilistic forecas
 | Symptom | Quick Resolution |
 | --- | --- |
 | Container won't start: "unresolvable CDI devices" | `systemctl --user restart docker && docker start demo3` |
-| Port 8501 already in use | Use `ssh -L 8502:localhost:8501` and navigate to `:8502` |
+| Port 8503 already in use | Use `ssh -L 8502:localhost:8503` and navigate to `:8502` |
 | Model run fails during download | Retry or use `DEMO3_IFS_SOURCE=azure` |
 | Out of memory errors | Check GPU memory with `nvidia-smi`; consider smaller lead times or fewer members |
 

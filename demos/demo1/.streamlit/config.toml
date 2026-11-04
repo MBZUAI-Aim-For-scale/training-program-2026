@@ -1,0 +1,8 @@
+# Read by the dashboard's Streamlit (spark_setup.py starts it from this folder)
+[theme]
+base = "light"
+
+[client]
+# No Deploy button or Streamlit page list: they show briefly before the dashboard's own styling loads
+toolbarMode = "minimal"
+showSidebarNavigation = false

@@ -1,0 +1,56 @@
+{
+    // Language ISO 639-1 Code to be used: "en", "fr", "es", ...
+    "lang.iso": "en",
+    // List of lang.iso available in the xml files: e.g., ["en", "fr", "es"]
+    "lang.iso.list": ["en", "fr"],
+    // List of language name available in the xml files: e.g., ["English", "Français", "Español"]
+    "lang.name.list": ["English", "Francais"],
+    // Missing value code
+    "missval": "-99",
+    // Anomaly missing value code
+    "missval.anom": "-9999",
+    // Default file extension for ASCII file, options: "csv", "txt"
+    "ascii.file.ext": "csv",
+    // full path to the working directory
+    "wd": "",
+    // region of interest
+    "region":
+    {
+        "minlon": 42,
+        "maxlon": 52,
+        "minlat": -26,
+        "maxlat": -11.5
+    },
+    // Precipitation merging precision
+    "prec.precip":
+    {
+        // If true, the precision of the variable will be taken from the data source
+        "from.data": true,
+        // If "from.data": false, specify the precision.
+        // Valid options: "short", "integer", "float" or "double"
+        "prec": "short"
+    },
+    // CDT dataset chunk 
+    "cdtDataset.chunk":
+    {
+        // Number of pixels per chunk
+        "chunksize": 100,
+        // Number of chunk files to be used for each calculation
+        "chunkfac": 5,
+        // function to use to create the dataset: 1 or 2
+        "chunkfun": 2
+    },
+    "parallel":
+    {
+        // use parallel processing
+        "dopar": true,
+        // set number of cores automatically detectCores() - 1
+        "detect.cores": false,
+        // set the Number of cores to be used if "detect.cores": false,
+        "nb.cores": 3
+    },
+    // to use Google Maps API key, put null if you do not have api key
+    "Google.Maps.API.key": null,
+    // display execution time
+    "execution.time": false
+}
