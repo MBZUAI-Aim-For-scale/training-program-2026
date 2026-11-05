@@ -36,7 +36,7 @@ By the end of this lesson, you will be able to:
 - Deploy and launch the Demo 3 Streamlit application on a DGX Spark.
 - Execute AI weather models (AIFS, GraphCast, Aurora, Atlas CRPS, FGN, NeuralGCM) in containerized environments.
 - Generate use-case-specific forecasts (temperature exceedance, precipitation exceedance, onset/cessation).
-- Compare model forecasts against ERA5 observations using event movies.
+- Compare model forecasts against observations (CHIRPS v3 rainfall, CHIRTS maximum temperature) using event movies.
 - Interpret model performance metrics and output formats.
 
 ## Lesson Roadmap
@@ -101,19 +101,21 @@ The Demo 3 application consists of:
 
 ```bash
 # 1. Clone and navigate to the demo
-git git@github.com:MBZUAI-Aim-For-scale/training-program-2026.git
-cd training-program-2026
+git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026/demos/demo3
 
-# 2. Build the container (first time only, ~1 hour)
-docker build -t ai_weather -f demos/demo4/docker/Dockerfile .
+# 2. Build the container (first time only, up to an hour)
+docker build -t demo3 -f docker/Dockerfile .
 
 # 3. Start the container
-bash demos/demo4/docker/run.sh rebuild
+bash docker/run.sh
 
 # 4. Access from your laptop (on Tailscale)
-ssh -L 8503:localhost:8503 <user>@<spark>
-# Then browse to http://localhost:8503
+ssh -L 8502:localhost:8502 <user>@<spark>
+# Then browse to http://localhost:8502
 ```
+
+On a Spark set up with Demo 1, you can skip these steps: open the dashboard (http://localhost:8500), click **Demo 3** and then **Launch**. See [`demos/BEGINNER_GUIDE.md`](https://github.com/MBZUAI-Aim-For-scale/training-program-2026/blob/main/demos/BEGINNER_GUIDE.md).
 
 ### 1.2 Runtime Options
 
@@ -121,13 +123,13 @@ Common configuration flags (see [Demo 1](/training-program-2026/01-setup) for th
 
 ```bash
 # Development mode (live code updates without rebuild)
-DEV=1 bash demos/demo4/docker/run.sh
+DEV=1 bash docker/run.sh
 
 # Custom cache location for model weights
-DEMO3_CACHE=/shared/cache bash demos/demo4/docker/run.sh
+DEMO3_CACHE=/shared/cache bash docker/run.sh
 
-# Use Azure mirror for ECMWF data
-DEMO3_IFS_SOURCE=azure bash demos/demo4/docker/run.sh
+# Try the Azure mirror for ECMWF data first (the other mirror is tried if one fails)
+DEMO3_IFS_SOURCE=azure bash docker/run.sh
 ```
 
 > #### First-Run Downloads
@@ -163,7 +165,7 @@ Organize into your designated use-case groups to begin the hands-on exercises. E
 > **Questions:**
 > - How long did the forecast take to run?
 > - What variables are shown in the output maps?
-> - How does the forecast compare to ERA5 observations in the event movie?
+> - How does the forecast compare to the observations in the event movie?
 {: .exercise}
 
 <details>
@@ -202,7 +204,7 @@ Every model execution produces a single, globally covered NetCDF file. All runne
 import xarray as xr
 
 # Load a forecast
-ds = xr.open_dataset("outputs/aifs_single/20241007T00_240h_m1.nc")
+ds = xr.open_dataset("outputs/aifs2_single/20241007T00_240h_m1.nc")
 
 # Access 2m temperature at lead time 24h
 t2m_24h = ds["t2m"].sel(lead_time=24)
@@ -223,10 +225,10 @@ print(ds)
 
 ### 3.3 Event Movie Pipeline
 
-The visualization pipeline reads Demo 3 output files and dynamically fetches ERA5 observations from Google's ARCO dataset (cached locally in `outputs/_obs_cache/` if the cluster's primary ERA5 volume is unavailable). The selected use case dictates the movie variable:
+The visualization pipeline reads Demo 3 output files and the observations from the program's bucket. The selected use case dictates the movie variable and the observations:
 
-- **Heat**: daily maximum 2m temperature
-- **Precipitation**: daily rainfall accumulation
+- **Heat**: daily maximum 2m temperature, against CHIRTS (ERA5 for regions outside the programme countries). The models output every 6 hours, so their daily maximum reads about 0.3–1.3 °C low.
+- **Precipitation**: daily rainfall accumulation, against CHIRPS v3.
 
 Movies are rendered on-demand and cached in `outputs/_movies/`.
 
@@ -445,8 +447,9 @@ FGN is Google DeepMind's Functional Generative Network for probabilistic forecas
 | Symptom | Quick Resolution |
 | --- | --- |
 | Container won't start: "unresolvable CDI devices" | `systemctl --user restart docker && docker start demo3` |
-| Port 8503 already in use | Use `ssh -L 8502:localhost:8503` and navigate to `:8502` |
-| Model run fails during download | Retry or use `DEMO3_IFS_SOURCE=azure` |
+| Port 8502 already in use | `docker ps`, then `docker stop <name>` (ForecastCheck, Demo 5, also defaults to 8502; start it with `PORT=8505`) |
+| `Conflict. The container name "/demo3" is already in use` | `docker rm -f demo3`, then `bash docker/run.sh` (the latest `run.sh` does this itself) |
+| Model run fails during download | ECMWF mirrors throttle at times; Demo 3 tries the other one by itself. If both fail, try again later |
 | Out of memory errors | Check GPU memory with `nvidia-smi`; consider smaller lead times or fewer members |
 
 ## Next Steps

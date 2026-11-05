@@ -38,9 +38,47 @@ def source_for(init, ifs_mirror: str = "aws"):
     """Wave + ERA5 for 00Z starts in 2000-2025, else ECMWF open data (from 13 May 2026)."""
     if available(init):
         return WaveERA5()
-    from earth2studio.data import IFS
-    # ECMWF open-data GRIB downloads can be slow; the default 600 s timeout is too short.
-    return IFS(source=ifs_mirror, async_timeout=3600)
+    return IFSFallback(ifs_mirror)
+
+
+class IFSFallback:
+    """ECMWF open data (IFS analyses) from one mirror, falling back to the other.
+
+    The mirrors throttle at times ("503 Service Unavailable"), and ecmwf-opendata then
+    retries 500 times, 2 minutes apart (about 16 hours). Here each mirror gets a few
+    short retries before the other one is tried."""
+
+    RETRIES, RETRY_AFTER_S, TIMEOUT_S = 4, 30, 1800
+
+    def __init__(self, first: str = "aws"):
+        self.mirrors = [first] + [m for m in ("aws", "azure") if m != first]
+
+    def _source(self, mirror: str):
+        from earth2studio.data import IFS
+        src = IFS(source=mirror, async_timeout=self.TIMEOUT_S)
+        src.client.maximum_retries = self.RETRIES
+        src.client.retry_after = self.RETRY_AFTER_S
+        src.client.use_server_retry_after = False
+        return src
+
+    def __call__(self, time, variable):
+        err = None
+        for mirror in self.mirrors:
+            src = self._source(mirror)
+            start = datetime.now().timestamp()
+            try:
+                return src(time, variable)
+            except Exception as e:  # noqa: BLE001 - any failure: try the other mirror
+                err = e
+                print(f"ECMWF open data from the {mirror} mirror failed ({type(e).__name__}: {e}); "
+                      "trying the other mirror", flush=True)
+                # a failed download can leave a partial GRIB at its cache path, which
+                # would be read as complete next time: drop what this attempt wrote
+                for p in Path(src.cache).glob("*"):
+                    if p.is_file() and p.stat().st_mtime >= start:
+                        p.unlink(missing_ok=True)
+        raise RuntimeError("Couldn't get ECMWF open data from either mirror (AWS or Azure); "
+                           "try again later") from err
 
 
 def _wave_file(day: datetime) -> Path:

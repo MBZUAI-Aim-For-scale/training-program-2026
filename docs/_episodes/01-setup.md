@@ -235,10 +235,19 @@ bash demos/demo4/docker/run.sh rebuild
 
 # 3. Access the UI from your laptop (on Tailscale)
 ssh -L 8503:localhost:8503 <user>@<spark>
-# Then browse to http://localhost:8503 and choose Demo3 in the menu
+# Then browse to http://localhost:8503 (Demo 4)
 ```
 
-On a Spark, `run.sh` also reads saved runs from the program's bucket (`gs://aim4scale_training_2026/demo3`) with the machine's read-only key, `/etc/fleet-gcs-key.json`, which it mounts into the container. Never copy that key into the image or the repository.
+Demo 3 runs in its own container, `demo3`, on port **8502**. Start it from the Demo 1 dashboard (see [`demos/BEGINNER_GUIDE.md`](https://github.com/MBZUAI-Aim-For-scale/training-program-2026/blob/main/demos/BEGINNER_GUIDE.md)), or by hand:
+
+```bash
+cd training-program-2026/demos/demo3
+docker build -t demo3 -f docker/Dockerfile .   # first time only (up to an hour)
+bash docker/run.sh
+ssh -L 8502:localhost:8502 <user>@<spark>      # from your laptop; then browse to http://localhost:8502
+```
+
+On a Spark, both start scripts also read saved runs from the program's bucket (`gs://aim4scale_training_2026/demo3`) with the machine's read-only key, `/etc/fleet-gcs-key.json`, which it mounts into the container. Never copy that key into the image or the repository.
 
 ### 4.2 Runtime Configuration Flags
 
@@ -249,8 +258,16 @@ Prepend these flags to `bash demos/demo4/docker/run.sh` to customize behavior:
 | `DEV=1` | Mount local code for live development | `DEV=1 bash demos/demo4/docker/run.sh` | Disabled |
 | `DEMO_CACHE=/path` | Redirect model weight cache location | `DEMO_CACHE=/shared/cache bash demos/demo4/docker/run.sh` | `~/.cache/ai_weather/` |
 | `DEMO_OUTPUTS=/path` | Redirect saved forecasts, movies and logs | `DEMO_OUTPUTS=/data/outputs bash demos/demo4/docker/run.sh` | `training-program-2026/outputs/` |
-| `DEMO3_BUCKET=gs://...` | Bucket to load saved runs from (empty: none) | `DEMO3_BUCKET= bash demos/demo4/docker/run.sh` | `gs://aim4scale_training_2026/demo3` |
-| `DEMO3_IFS_SOURCE=azure` | Use Azure mirror for ECMWF data | `DEMO3_IFS_SOURCE=azure bash demos/demo4/docker/run.sh` | AWS |
+
+Demo 3 has its own flags, which go before `bash demos/demo3/docker/run.sh`:
+
+| Flag | Purpose | Example | Default |
+| --- | --- | --- | --- |
+| `DEV=1` | Use the code in `demos/demo3/` live instead of the copy in the image | `DEV=1 bash demos/demo3/docker/run.sh` | Disabled |
+| `DEMO3_CACHE=/path` | Model weight cache | `DEMO3_CACHE=/shared/cache bash demos/demo3/docker/run.sh` | `~/.cache/demo3/` |
+| `DEMO3_OUTPUTS=/path` | Saved forecasts, movies and logs | `DEMO3_OUTPUTS=/data/outputs bash demos/demo3/docker/run.sh` | `demos/demo3/outputs/` |
+| `DEMO3_BUCKET=gs://...` | Bucket to load saved runs from (empty: none) | `DEMO3_BUCKET= bash demos/demo3/docker/run.sh` | `gs://aim4scale_training_2026/demo3` |
+| `DEMO3_IFS_SOURCE=azure` | ECMWF mirror to try first (the other is tried if it fails) | `DEMO3_IFS_SOURCE=azure bash demos/demo3/docker/run.sh` | AWS |
 
 > #### Development Workflow
 >
@@ -532,10 +549,11 @@ Pinned in `demos/demo4/docker/locks/` for reproducibility. Key versions:
 | --- | --- | --- |
 | `docker run` fails: `unresolvable CDI devices` | Docker started before GPU registry populated | `systemctl --user restart docker`, then `bash demos/demo4/docker/run.sh restart` |
 | `docker run` fails: `failed to fulfil mount request ... libnvidia-...: no such file` | NVIDIA libraries updated since boot | An admin runs `sudo systemctl start nvidia-cdi-refresh.service`, or reboot (section 1.1) |
-| Port 8503 already in use when starting | Another container (e.g. the old stand-alone `demo3`) holds it | `docker ps`, then `docker stop <name>` and `bash demos/demo4/docker/run.sh` |
+| Port 8503 already in use when starting | Another container holds it | `docker ps`, then `docker stop <name>` and `bash demos/demo4/docker/run.sh` |
+| Port 8502 already in use when starting Demo 3 | Another container holds it (ForecastCheck, Demo 5, also defaults to 8502) | `docker ps`, then `docker stop <name>`; or start Demo 5 with `PORT=8505` |
 | A code change doesn't show (with `DEV=1`) | The page keeps imported modules loaded | `bash demos/demo4/docker/run.sh restart` |
 | Browser can't reach `localhost:8503` | SSH tunnel not open or port conflict | Use `-L 8502:localhost:8503` and navigate to `:8502` |
-| Run fails during starting condition download | ECMWF/Google mirrors throttled | Retry or use `DEMO3_IFS_SOURCE=azure` |
+| Run fails during starting condition download | ECMWF mirrors throttled ("503 Service Unavailable") | Demo 3 tries the other mirror by itself after a few retries; if both fail, try again later |
 | First model run is exceptionally slow | Downloading model weights (~30 min for Atlas CRPS) | Expected behavior; subsequent runs are fast |
 | ROMP run stops after switching tracks | DET and PROB mixed in one run | Set mode in config or with `--mode`, run separately |
 | Model missing from ROMP output | Not registered for that track | Check `BENCHMARK_MODEL_CATALOG` in `config.py` |
