@@ -10,6 +10,7 @@ shown and press **Enter**.
 | [Demo 1](#demo-1--set-up-the-spark) | Sets up the Spark and starts the other demos | http://localhost:8500 |
 | [Demo 3](#demo-3--run-your-first-ai-weather-forecast) | Run AI weather models and compare them with observations | http://localhost:8502 |
 | [Demo 4](#demo-4--the-ai-weather-model-scorecard) | Benchmark AI models for rainy-season onset | http://localhost:8503 |
+| Demo 5 ([lesson](../docs/_episodes/05-AI-Forest-test.md)) | Verify GraphCast and IFS over years of past forecasts (ForecastCheck) | http://localhost:8505 |
 
 ---
 

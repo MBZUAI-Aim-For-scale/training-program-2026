@@ -22,7 +22,7 @@ services:
               count: all
               capabilities: [gpu, utility]
     ports:
-      - "127.0.0.1:8503:8501" # Streamlit Dashboard
+      - "127.0.0.1:${PORT:-8503}:8501" # Streamlit Dashboard (PORT: from demos/demo1/demos.toml)
       - "127.0.0.1:8888:8888" # Jupyter Lab (optional)
     environment:
       - NVIDIA_VISIBLE_DEVICES=all

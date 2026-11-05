@@ -104,7 +104,7 @@ ForecastCheck has three stages. They never call each other: each one writes NetC
 ```
                  cloud bucket  gs://<bucket>/demo5/{SEN|SLE}-local-engine
                       │
-                      │  bash docker/run.sh fetch
+                      │  bash demos/demo5/run.sh fetch
                       ▼
  data/{country}/forecast/…    raw GraphCast / IFS forecasts
  data/{country}/truth/{product}/…      observations (chirts, era5, chirps)
@@ -125,7 +125,7 @@ ForecastCheck has three stages. They never call each other: each one writes NetC
  data/{country}/diagnostics/…   ◄────────────────────┘
                       │
                       ▼
-               bash docker/run.sh start   (the dashboard)
+               bash demos/demo5/run.sh start   (the dashboard)
 ```
 
 Two naming rules make the files self-describing:
@@ -135,47 +135,48 @@ Two naming rules make the files self-describing:
 
 ## 3. Set Up and Start Everything
 
-ForecastCheck runs in **Docker**, the way the demos of Demos 1–3 do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script, `docker/run.sh`, wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU.
+ForecastCheck runs in **Docker**, the way Demos 1–4 do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU.
+
+On the Spark, ForecastCheck is part of the course: Demo 1's setup fetches its code from [its own repository](https://github.com/africlimate-research/forecastcheck) into `demos/demo5/forecastcheck`, keeps it up to date, and builds its image, and the Demo 1 dashboard has a **Launch** button for it. Every command below goes through `bash demos/demo5/run.sh`, typed in `~/training-program-2026`: it runs ForecastCheck's own `docker/run.sh` with the course's settings (Demo 5's port, the Spark's key for the bucket, and your country).
 
 You type **one block of commands**, now. The computation then runs in the background, and Sections 4–8 explain what it is doing, stage by stage, while it works.
 
-Log in to the Spark with a port forward, so the dashboard will reach your laptop. ForecastCheck uses port **8502**, so it does not collide with the course app on 8501:
+Log in to the Spark with a port forward, so the dashboard will reach your laptop. Demo 5 uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's):
 
 ```bash
-ssh -L 8502:localhost:8502 <user>@<spark>
+ssh -L 8505:localhost:8505 <user>@<spark>
 ```
 
 Then:
 
 ```bash
-# 1. Get the code
-git clone https://github.com/africlimate-research/forecastcheck.git
-cd forecastcheck
+cd ~/training-program-2026
 
-# 2. Get the image: build it (about 5 minutes), or load the one your trainer gives you
-bash docker/run.sh build              # or: bash docker/run.sh load forecastcheck-image.tar.gz
+# 1. Get the code and the image (about 5 minutes the first time; skip this if the
+#    Demo 1 dashboard already shows Demo 5 as ready)
+python3 demos/demo1/spark_setup.py --only demo5 --build-only
 
-# 3. Choose your country: senegal, sierra-leone, kenya or rwanda
-echo senegal > .deployment
+# 2. Choose your country: senegal, sierra-leone, kenya or rwanda
+#    (on those countries' Sparks it's already set to theirs)
+echo senegal > demos/demo5/forecastcheck/.deployment
 
-# 4. Fetch your country's data (Section 4 explains what arrives)
-export GOOGLE_APPLICATION_CREDENTIALS=/etc/fleet-gcs-key.json
-bash docker/run.sh fetch --apply
+# 3. Fetch your country's data (Section 4 explains what arrives)
+bash demos/demo5/run.sh fetch --apply
 
-# 5. Start the whole pipeline: it runs in the background, even if you log out
-bash docker/run.sh pipeline
+# 4. Start the whole pipeline: it runs in the background, even if you log out
+bash demos/demo5/run.sh pipeline
 
-# 6. Start the dashboard; it stays up until you stop it
-bash docker/run.sh start
+# 5. Start the dashboard (or Launch Demo 5 from the Demo 1 dashboard); it stays up until you stop it
+bash demos/demo5/run.sh start
 ```
 
-Open <http://localhost:8502> on your laptop. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `bash docker/run.sh logs pipeline` (Ctrl-C stops following, not the run).
+Open <http://localhost:8505> on your laptop. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `bash demos/demo5/run.sh logs pipeline` (Ctrl-C stops following, not the run).
 
-When you have finished with the dashboard, stop it. Your results stay in `data/`, and `bash docker/run.sh start` brings it back:
+When you have finished with the dashboard, stop it. Your results stay in `data/`, and `bash demos/demo5/run.sh start` brings it back:
 
 ```bash
-# 7. When you are done: stop the dashboard (data/ is kept)
-bash docker/run.sh stop
+# 6. When you are done: stop the dashboard (data/ is kept)
+bash demos/demo5/run.sh stop
 ```
 
 
@@ -191,20 +192,25 @@ bash docker/run.sh stop
 > Everything above runs in the Spark's terminal, and so do `status`, `logs`, `restart` and `stop`. The `python -m …` commands shown in Sections 6–8 are the ones `pipeline` runs for you. To try one yourself, open a terminal inside ForecastCheck, where they work exactly as shown:
 >
 > ```bash
-> bash docker/run.sh shell              # the prompt changes; type `exit` to leave
+> bash demos/demo5/run.sh shell              # the prompt changes; type `exit` to leave
 > ```
 >
-> Or run a single one from the Spark's terminal: `bash docker/run.sh run python -m verification.run …`. Everything reads and writes the same `data/` folder. `bash docker/run.sh help` lists every command.
+> Or run a single one from the Spark's terminal: `bash demos/demo5/run.sh run python -m verification.run …`. Everything reads and writes the same `data/` folder. `bash demos/demo5/run.sh help` lists every command.
+{: .tip}
+
+> #### Where ForecastCheck lives on the Spark
+>
+> Its code is in `~/training-program-2026/demos/demo5/forecastcheck`, a copy of [ForecastCheck's repository](https://github.com/africlimate-research/forecastcheck) that Demo 1's setup keeps on its newest `main`, and rebuilds the image for when it changes. `data/` and `.deployment` are in that folder too; they aren't part of the code, so updates never touch them. Run the commands from `~/training-program-2026`, or from anywhere with the full path: `bash ~/training-program-2026/demos/demo5/run.sh status`.
 {: .tip}
 
 > #### Which country am I?
 >
-> The one-line file `.deployment` decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. If you change it, run `bash docker/run.sh restart` so the dashboard follows.
+> The one-line file `.deployment` decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. If you change it, run `bash demos/demo5/run.sh restart` so the dashboard follows.
 {: .tip}
 
 > #### Without Docker
 >
-> On a machine without Docker, use conda instead: `conda env create -f environment.yml` and `conda activate forecastcheck`, then drop `bash docker/run.sh` from the commands (`./scripts/fetch_country.sh`, `./scripts/run_pipeline.sh`, and `streamlit run ui/app.py` for the dashboard, on port 8501). The repository's README has the details.
+> On a machine without Docker, use conda instead: `conda env create -f environment.yml` and `conda activate forecastcheck`, then drop `bash demos/demo5/run.sh` from the commands (`./scripts/fetch_country.sh`, `./scripts/run_pipeline.sh`, and `streamlit run ui/app.py` for the dashboard, on port 8501). The repository's README has the details.
 {: .tip}
 
 ## 4. The Data
@@ -245,11 +251,11 @@ export GOOGLE_APPLICATION_CREDENTIALS=<key>.json
 
 Never open the key, paste its contents into a file or a chat, or copy it elsewhere: the path is all anyone needs. The variable lasts for the current terminal; set it again in a new one.
 
-`bash docker/run.sh fetch` knows your country from `.deployment` and where its data lives from the country file. It downloads the GraphCast and IFS forecasts, every truth product in your country's folder (CHIRTS and ERA5 for Heat, CHIRPS for Rainfall) and the elevation map, and lays the files out the way ForecastCheck expects. Without `--apply` it only lists what it would fetch: a good habit before a large download.
+`bash demos/demo5/run.sh fetch` knows your country from `.deployment` and where its data lives from the country file. It downloads the GraphCast and IFS forecasts, every truth product in your country's folder (CHIRTS and ERA5 for Heat, CHIRPS for Rainfall) and the elevation map, and lays the files out the way ForecastCheck expects. Without `--apply` it only lists what it would fetch: a good habit before a large download.
 
 ```bash
-bash docker/run.sh fetch              # dry run: lists what would be fetched
-bash docker/run.sh fetch --apply      # downloads
+bash demos/demo5/run.sh fetch              # dry run: lists what would be fetched
+bash demos/demo5/run.sh fetch --apply      # downloads
 ```
 
 Every team runs the same commands. What Section 3's fetch brought in:
@@ -268,7 +274,7 @@ Re-running is safe: it copies only what is missing or changed, and never leaves 
 > - No network, or a slow one? Your trainer can give you a copy of the country folder (for example on a shared disk). Point the script at it; nothing is downloaded and the result is identical:
 >
 > ```bash
-> bash docker/run.sh fetch --from /path/to/SEN-local-engine --apply
+> bash demos/demo5/run.sh fetch --from /path/to/SEN-local-engine --apply
 > ```
 {: .warning}
 
@@ -277,8 +283,8 @@ Re-running is safe: it copies only what is missing or changed, and never leaves 
 > Your trainer may give you national data that cannot be published, for example rain-gauge records or a gridded product corrected with gauges, on a flash disk. It comes as a folder laid out like the bucket's. Add it with the same command; the folder is only read, never changed, and the data is placed next to what you already fetched, so every later step includes it:
 >
 > ```bash
-> bash docker/run.sh fetch --from /media/$USER/<flash-disk>/<folder>          # dry run
-> bash docker/run.sh fetch --from /media/$USER/<flash-disk>/<folder> --apply
+> bash demos/demo5/run.sh fetch --from /media/$USER/<flash-disk>/<folder>          # dry run
+> bash demos/demo5/run.sh fetch --from /media/$USER/<flash-disk>/<folder> --apply
 > ```
 >
 > It stays on this machine: `data/` is never committed, and results computed from it are not shared outside the class.
@@ -476,7 +482,7 @@ The calibrated files are large, mostly because of the threshold probabilities (`
 
 > #### Optional: watch one calibration live
 >
-> Your pipeline does the full calibration for you. To see IDR fit with your own eyes, run one small slice in `bash docker/run.sh shell`, **once `bash docker/run.sh status` says the pipeline is not running**: both would write the same files. Heat track:
+> Your pipeline does the full calibration for you. To see IDR fit with your own eyes, run one small slice in `bash demos/demo5/run.sh shell`, **once `bash demos/demo5/run.sh status` says the pipeline is not running**: both would write the same files. Heat track:
 >
 > ```bash
 > python -m calibration.run --variable temperature_max --model graphcast --leads 1,3 --train-years 2016,2017,2018,2019,2020,2021 --test-year 2022 --product chirts
@@ -566,7 +572,7 @@ ForecastCheck picks, for each $\alpha$, the cut-off $p^*$ that gives the best va
 
 ## 9. The Dashboard
 
-The dashboard has been running since Section 3 (`bash docker/run.sh start`). Open <http://localhost:8502> on your laptop; the SSH tunnel from Section 3 forwards it. It discovers results when it starts: after `bash docker/run.sh pipeline` it restarts by itself, and after commands you ran yourself, run `bash docker/run.sh restart` and refresh the browser.
+The dashboard has been running since Section 3 (`bash demos/demo5/run.sh start`). Open <http://localhost:8505> on your laptop; the SSH tunnel from Section 3 forwards it. It discovers results when it starts: after `bash demos/demo5/run.sh pipeline` it restarts by itself, and after commands you ran yourself, run `bash demos/demo5/run.sh restart` and refresh the browser.
 
 The tour below uses the Heat track's screenshots (Senegal). Every country sees the same pages with its own regions and thresholds; Section 9.7 shows what is different in the Rainfall track.
 
@@ -787,10 +793,10 @@ Every number in the dashboard is true *for a given truth product, year, area and
 
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
-| `python: command not found`, or `ModuleNotFoundError` | The command ran in the Spark's terminal, not inside ForecastCheck | Open `bash docker/run.sh shell` first, or prefix it with `bash docker/run.sh run` |
-| *"no 'forecastcheck' image yet"* | The image is not built or loaded on this Spark | `bash docker/run.sh build` (or `load` your trainer's file) |
+| `python: command not found`, or `ModuleNotFoundError` | The command ran in the Spark's terminal, not inside ForecastCheck | Open `bash demos/demo5/run.sh shell` first, or prefix it with `bash demos/demo5/run.sh run` |
+| *"no 'forecastcheck' image yet"* | The image is not built or loaded on this Spark | `python3 demos/demo1/spark_setup.py --only demo5 --build-only` (or `bash demos/demo5/run.sh load` your trainer's file) |
 | *"Docker is not answering"*, or `Cannot connect to the Docker daemon` | Docker is not running in your account | `systemctl --user restart docker`, as in Demo 1 |
-| *"port is already allocated"* or *"address already in use"* on `start` | Something else uses 8502 (another dashboard, or an SSH tunnel on this machine) | `PORT=8503 bash docker/run.sh start`, and tunnel 8503 instead |
+| *"port is already allocated"* or *"address already in use"* on `start` | Something else uses 8505 (another dashboard, or an SSH tunnel on this machine) | `PORT=8506 bash demos/demo5/run.sh start`, and tunnel 8506 instead |
 | *"the data bucket needs a Google Cloud key"* | The key is not set in this terminal | `export GOOGLE_APPLICATION_CREDENTIALS=/etc/fleet-gcs-key.json` (Section 4.2) |
 | *"cannot read gs://…"* when fetching | The key path is wrong, or cannot read the bucket | Check the path in the `export` line (Section 4.2) |
 | *"no country selected"* | `.deployment` is missing | `echo senegal > .deployment` (or `sierra-leone`, `kenya`, `rwanda`) |
@@ -799,9 +805,9 @@ Every number in the dashboard is true *for a given truth product, year, area and
 | A Heat-track run looks for `precipitation` files | `--variable` is missing | Add `--variable temperature_max` or `temperature_min` |
 | Rainfall values look 24 times too small | The dashboard shows mm/hr | Multiply by 24 for mm/day (Section 6.2) |
 | `SKIP — missing file` for IFS before 2018 | Expected: IFS starts in 2018 | Nothing |
-| New results do not appear in the dashboard | The dashboard caches what it found at start-up | `bash docker/run.sh restart`, then refresh the browser |
+| New results do not appear in the dashboard | The dashboard caches what it found at start-up | `bash demos/demo5/run.sh restart`, then refresh the browser |
 | No altitude selector | `data/{country}/assets/dem.nc` is missing | Re-run the fetch; it prints a note when the DEM is absent |
-| The dashboard does not open on the laptop | No port forward, or the dashboard is not running | Reconnect with `ssh -L 8502:localhost:8502 <user>@<spark>`; check `bash docker/run.sh status` |
+| The dashboard does not open on the laptop | No port forward, or the dashboard is not running | Reconnect with `ssh -L 8505:localhost:8505 <user>@<spark>`; check `bash demos/demo5/run.sh status` |
 
 ## Exercises
 
@@ -809,7 +815,7 @@ Work in your country team. Exercises 1–3 run while the pipeline computes; Exer
 
 > #### Exercise 1: Read Before You Download (5 min)
 >
-> 1. Run `bash docker/run.sh fetch` again, **without** `--apply`. Why does it now find nothing to fetch? How many files did Section 3's fetch bring in (Section 4.2)?
+> 1. Run `bash demos/demo5/run.sh fetch` again, **without** `--apply`. Why does it now find nothing to fetch? How many files did Section 3's fetch bring in (Section 4.2)?
 > 2. Which lead times are in the bucket? Which one is not in the pipeline commands, and why might that be?
 > 3. Open `config/verification.toml`. Write down your country's thresholds, seasons and altitude bands.
 {: .exercise}

@@ -105,7 +105,7 @@ start_compose() {
   check_gpu_availability
   echo "Starting AI Weather services via Docker Compose..."
   docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" up -d
-  echo "[SUCCESS] AI Forecasting operational: http://localhost:8503"
+  echo "[SUCCESS] AI Forecasting operational: http://localhost:${PORT:-8503}"
 }
 
 # ----------------------------------------------------------------------

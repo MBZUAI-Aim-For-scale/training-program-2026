@@ -40,7 +40,8 @@ DEMOS = [
      "about": "Compare models across evaluation metrics and explore the AI Almanac for your use case.",
      "container": "demo4", "setup": "demo4", "path": "/?page=SM_Benchmarking"},
     {"n": 5, "title": "Putting your forecast to the test",
-     "about": "Evaluate the forecasts you ran in Demo 3 against different metrics."},
+     "about": "Evaluate the forecasts you ran in Demo 3 against different metrics.",
+     "container": "forecastcheck", "setup": "demo5"},
     # {"n": 6, "title": "Ground truth challenge",
     #  "about": "Compare model performance against different observational datasets."},
     # {"n": 7, "title": "Feasibility assessment",
@@ -314,7 +315,8 @@ def setup_running() -> bool:
 
 def launch(demo: dict):
     """Run spark_setup.py for one demo in the background; its progress lands in state/status.json."""
-    args = ["--host-only"] if demo["setup"] == "demo1" else ["--only", demo["setup"]]
+    # (--no-pull: a Launch starts what's here; the setup runs update other repositories' code.)
+    args = ["--host-only"] if demo["setup"] == "demo1" else ["--only", demo["setup"], "--no-pull"]
     with open(setup.STATE / "launch.log", "a") as log:
         subprocess.Popen([sys.executable, str(setup.HERE / "spark_setup.py"), *args, "--no-dashboard"],
                          cwd=setup.HERE, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)

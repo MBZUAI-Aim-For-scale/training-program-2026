@@ -8,6 +8,8 @@
   python3 spark_setup.py --build-only         host checks + build images (if their code changed),
                                               start nothing: the dashboard's Launch starts a demo
   python3 spark_setup.py --host-only          host checks only
+  python3 spark_setup.py --no-pull            don't update demos whose code is in another
+                                              repository (`source` in demos.toml)
   python3 spark_setup.py --no-dashboard       terminal output only
   python3 spark_setup.py status               print the last run's steps
   python3 spark_setup.py dashboard [--stop]   start (or stop) just the dashboard
@@ -22,6 +24,11 @@ fingerprint of its committed sources (its `watch` paths in demos.toml, by defaul
 context and Dockerfile), and a later run rebuilds when the checkout's fingerprint differs.
 Uncommitted edits don't count (use --rebuild). An image built before this, or copied from
 another Spark without the label, is kept as it is until --rebuild.
+
+A demo whose code lives in another repository (`source` in demos.toml: its url, branch and
+the folder here it goes in, which .gitignore leaves out) is cloned there on the first run
+and pulled (fast-forward only) on every run but the dashboard's Launch (--no-pull), so it
+follows that branch; its image is rebuilt when the pulled commit changes.
 """
 from __future__ import annotations
 
@@ -109,7 +116,15 @@ def hint_for(text: str) -> str:
 
 def load_config() -> dict:
     with open(HERE / "demos.toml", "rb") as f:
-        return tomllib.load(f)
+        cfg = tomllib.load(f)
+    # Every demo (and the dashboard) needs its own port: demos.toml is the one place they're set.
+    ports = [("dashboard", int(cfg.get("dashboard", {}).get("port", 8500)))] + [(d["id"], d["port"]) for d in cfg["demo"]]
+    taken: dict[int, str] = {}
+    for name, port in ports:
+        if port in taken:
+            sys.exit(f"demos.toml: {name} and {taken[port]} both use port {port}; give each its own")
+        taken[port] = name
+    return cfg
 
 
 def tail(path: Path, lines: int = 40) -> str:
@@ -342,12 +357,46 @@ def step_bucket(run, sid, log):
 BUILD_STEP = re.compile(r"^#\d+ \[(?:[\w.-]+ )?\s*(\d+)/(\d+)\] (.*)")
 
 
+def step_source(run, sid, log, demo, pull):
+    """Clone a demo's code from its own repository (`source`), or fast-forward it to the
+    branch's newest commit (unless --no-pull). Changes made there are never overwritten."""
+    src = demo["source"]
+    dest = REPO / src["path"]
+    if not (dest / ".git").is_dir():
+        if dest.exists() and any(dest.iterdir()):
+            raise Failed(f"{src['path']} is there but isn't a clone of {src['url']}; move it away and retry")
+        rc, out = sh(["git", "clone", "--branch", src["branch"], src["url"], str(dest)], log, timeout=1800)
+        if rc:
+            raise Failed(f"couldn't clone {src['url']}: {last_line(out)}")
+    elif pull:
+        g = ["git", "-C", str(dest)]
+        rc, out = sh([*g, "fetch", "origin", f"+refs/heads/{src['branch']}:refs/remotes/origin/{src['branch']}"],
+                     log, timeout=600)
+        if rc:  # (offline, say: carry on with the code that's here)
+            raise Warn(f"couldn't update from {src['url']} ({last_line(out)}); using the code that's here")
+        rc, out = sh([*g, "merge", "--ff-only", f"origin/{src['branch']}"], log, timeout=120)
+        if rc:
+            raise Warn(f"{src['path']} has changes or commits of its own, so it wasn't updated: {last_line(out)}")
+    r = subprocess.run(["git", "-C", str(dest), "log", "-1", "--format=%h %cs %s"], capture_output=True, text=True)
+    return f"{src['branch']} at {r.stdout.strip()[:120]}" + ("" if pull else " (not updated: --no-pull)")
+
+
 def source_fingerprint(demo: dict) -> str | None:
     """A fingerprint of the committed files the demo's image is built from: git's hashes of
     its `watch` paths (default: its build context and Dockerfile) at HEAD. None outside a git
     checkout, or if a path isn't committed (then images are only rebuilt with --rebuild)."""
     parts = []
-    for path in demo.get("watch") or [demo["context"], demo["dockerfile"]]:
+    src = demo.get("source")
+    if src:  # (its code is another repository's: that checkout's commit)
+        try:
+            r = subprocess.run(["git", "-C", str(REPO / src["path"]), "rev-parse", "HEAD"],
+                               capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if r.returncode != 0:
+            return None
+        parts.append(f"source={r.stdout.strip()}")
+    for path in demo.get("watch") or ([] if src else [demo["context"], demo["dockerfile"]]):
         rel = os.path.normpath(path)
         rel = "" if rel == "." else rel
         try:
@@ -413,7 +462,8 @@ def step_start(run, sid, log, demo):
     if c:  # stopped or crashed: recreate so it picks up the current image and settings
         log.write(f"container {name} exists but is {c['State']['Status']}; recreating it\n")
         sh(["docker", "rm", "-f", name], log, timeout=60)
-    rc, out = sh(demo["run"], log, env=demo.get("env"), timeout=300)
+    # Its host port comes from demos.toml (the only place ports are set), as PORT.
+    rc, out = sh(demo["run"], log, env={"PORT": str(demo["port"]), **(demo.get("env") or {})}, timeout=300)
     if rc:
         raise Failed(f"start failed: {last_line(out)}")
     time.sleep(3)
@@ -510,6 +560,8 @@ def plan(cfg: dict, only: list[str] | None, host_only: bool,
         sys.exit(f"unknown demo id(s): {set(only) - {d['id'] for d in demos}}")
     steps = [{"id": sid, "group": "demo1", "title": title} for sid, title, _ in HOST_STEPS]
     for d in demos:
+        if d.get("source"):
+            steps.append({"id": f"{d['id']}.source", "group": d["id"], "title": f"Get the code (`{d['source']['url']}`)"})
         steps.append({"id": f"{d['id']}.build", "group": d["id"], "title": f"Build image `{d['image']}`"})
         if not build_only:  # (--build-only: the dashboard's Launch starts it, one demo at a time)
             steps += [{"id": f"{d['id']}.start", "group": d["id"], "title": f"Start container `{d['container']}`"},
@@ -548,6 +600,10 @@ def cmd_run(args, argv):
         for d in demos:
             ids = [f"{d['id']}.{s}" for s in ("build", "start", "health")]
             print(f"\n{d['title']}", flush=True)
+            if d.get("source") and run.step(f"{d['id']}.source", step_source, d, not args.no_pull) == "failed":
+                for sid in ids if not args.build_only else ids[:1]:
+                    run.skip(sid, "no code to build")
+                continue
             if args.build_only:
                 if docker_ok:
                     run.step(ids[0], step_build, d, args.rebuild)
@@ -606,6 +662,8 @@ def main(argv=None):
     how.add_argument("--build-only", action="store_true",
                      help="host checks and builds (of images whose code changed); start nothing")
     r.add_argument("--no-dashboard", action="store_true", help="don't start the progress dashboard")
+    r.add_argument("--no-pull", action="store_true",
+                   help="don't update demos whose code is in another repository (the dashboard's Launch)")
     sub.add_parser("status", help="print the last run's steps")
     dash = sub.add_parser("dashboard", help="start just the progress dashboard")
     dash.add_argument("--stop", action="store_true", help="stop it instead")

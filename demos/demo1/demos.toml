@@ -1,4 +1,13 @@
 # What demo1 sets up on a Spark: host checks first, then one Docker container per demo.
+#
+# Ports: this file is the one place they're set. spark_setup.py passes each demo its
+# `port` as PORT, and every demo's start script uses it (with the same number as its
+# default, for running it by hand). All on 127.0.0.1 only. In use:
+#   8500  this dashboard              8504  Demo 2 (CDT, noVNC)
+#   8501  the repo's top-level app    8505  Demo 5 (ForecastCheck)
+#   8502  Demo 3                      8888  Demo 4's Jupyter Lab (demos/demo4/docker)
+#   8503  Demo 4                      8889  Demo 1's JupyterLab sandbox (docker-compose.yml)
+# A new demo takes the next free one (8506, ...).
 # Paths are relative to the ai_weather repo root. Add a [[demo]] block to track a new demo.
 #
 # Each demo gets three steps: build its image (skipped while the image is up to date with
@@ -53,3 +62,18 @@ dockerfile = "demos/demo4/docker/Dockerfile"
 watch = ["demos/demo4", "run_momp.py", "setup.py", "setup.cfg", "pyproject.toml"]
 run = ["bash", "demos/demo4/docker/run.sh", "start"]
 port = 8503
+
+# Demo 5's code is ForecastCheck's own repository: cloned into `path` (not part of this repo,
+# see .gitignore) and pulled to the branch's newest commit on every setup run, so it stays
+# up to date with it; the image is rebuilt when that commit changes. Its port isn't
+# ForecastCheck's default 8502 (Demo 3's): demos/demo5/run.sh passes this one.
+[[demo]]
+id = "demo5"
+title = "Demo 5 · Putting your forecast to the test (ForecastCheck)"
+image = "forecastcheck"
+container = "forecastcheck"
+context = "demos/demo5/forecastcheck"
+dockerfile = "demos/demo5/forecastcheck/docker/Dockerfile"
+run = ["bash", "demos/demo5/run.sh", "start"]
+port = 8505
+source = { url = "https://github.com/africlimate-research/forecastcheck.git", branch = "main", path = "demos/demo5/forecastcheck" }

@@ -47,4 +47,4 @@ The dashboard stays up after the script finishes. It keeps checking each contain
 so it also flags crashed or restarting containers, pages that don't answer, port clashes,
 and error lines in container logs. To add a demo, add a `[[demo]]` block to `demos.toml`.
 
-`docker-compose.yml` still starts the JupyterLab sandbox (`docker compose up`, port 8888).
+`docker-compose.yml` still starts the JupyterLab sandbox (`docker compose up`, port 8889).
