@@ -47,45 +47,16 @@ Demo 1 checks that the Spark is healthy (GPU, Docker, disk space, access to the 
 bucket) and then starts the other demos. It has a **dashboard**: a web page that shows what is
 running and has a **Launch** button for each demo.
 
-> If an organiser has already set up your Spark, skip to [Step 3](#step-3-open-the-dashboard).
+### Step 1: Start the dashboard
 
-### Step 1: Get the code (first time only)
-
-In the terminal, type:
+The code is already on the Spark. In the terminal, type:
 
 ```bash
-cd ~
-git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
-cd training-program-2026
+cd ~/training-program-2026
+python3 demos/demo1/spark_setup.py dashboard
 ```
 
-If it says `already exists`, the code is already there. Type `cd ~/training-program-2026`
-and then `git pull` to get the latest version.
-
-### Step 2: Run the full setup (first time only)
-
-```bash
-python3 demos/demo1/spark_setup.py
-```
-
-This does everything in order:
-
-1. **Checks the Spark**: the GPU is visible, Docker is running, containers can use the GPU,
-   there is enough disk space, the program's Google bucket can be read, and a short GPU test passes.
-2. **Builds each demo**. The first build of Demo 3 takes
-   **about an hour**. Later runs skip this step.
-3. **Starts each demo** and waits until its page answers.
-
-Each step is printed in the terminal as it happens. You can also watch it in the dashboard
-(Step 3) while it runs.
-
-### Step 3: Open the dashboard
-
-If the dashboard isn't running yet, start it in the terminal:
-
-```bash
-python3 ~/training-program-2026/demos/demo1/spark_setup.py dashboard
-```
+This starts the dashboard only. No demo starts until you launch it.
 
 Then open **http://localhost:8500** in the browser.
 
@@ -95,15 +66,29 @@ You will see:
 - A **card for each demo** with its status:
   - **Running**: it's started; click it to open the demo.
   - **Ready to launch**: built but not started.
-  - **Stopped** or **Image not built**: needs Step 2 or a Launch.
-- A **Run checks** button on the Demo 1 card that runs the Spark health checks again.
-  A failed check is shown in red with a suggested fix.
+  - **Stopped** or **Image not built**: click it, then **Launch ↗** on the page that opens.
+- A **Run checks** button on the Demo 1 card.
+- A **Country data** section at the bottom of the page.
+
+### Step 2: Check the Spark
+
+Click **Run checks** on the Demo 1 card. It checks that the GPU is visible, Docker is running,
+containers can use the GPU, there is enough disk space, the program's Google bucket can be read,
+and a short GPU test passes. A failed check is shown in red with a suggested fix.
+
+### Step 3: Download your country's data
+
+Under **Country data**, click the button to download your country's data from the program's
+bucket. The dashboard works out the country from the Spark's name. The download keeps going if
+you close the page, and clicking again skips files you already have.
 
 ### Step 4: Launch a demo
 
 1. Click a demo in the top bar (for example **Demo 3**).
 2. Read the short summary of what you'll learn.
 3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then shows the demo.
+   The first launch of each demo also builds it, which can take up to an hour. For Demo 2, click
+   **Launch CDT ↗**.
 
 **Only one demo runs at a time** on a Spark, because they share the GPU and memory. If another
 demo is running, the dashboard asks before stopping it. Anyone else using that demo loses their
@@ -133,7 +118,7 @@ First type `cd ~/training-program-2026/demos/demo1`, then any of these:
 | `Cannot connect to the Docker daemon` | `systemctl --user start docker` |
 | `no space left on device` | Ask an organiser; old images need clearing (`docker system df` shows what uses the space) |
 | `Google bucket not readable` | The Spark's key at `/etc/fleet-gcs-key.json` is missing or wrong; ask an organiser |
-| The browser says "Unable to connect" or "This site can't be reached" at localhost:8500 | The dashboard isn't running. Start it with the command in [Step 3](#step-3-open-the-dashboard) |
+| The browser says "Unable to connect" or "This site can't be reached" at localhost:8500 | The dashboard isn't running. Start it with the command in [Step 1](#step-1-start-the-dashboard) |
 | `setup already running` | Another setup is still going. Wait, or check the dashboard |
 
 ---
@@ -297,4 +282,4 @@ Results are saved on the Spark in `~/data/ROMP_OUT/` and show up in the web page
   running on the Spark for next time.
 - **Shutting everything down** (organisers): in the terminal, type
   `bash ~/training-program-2026/demos/demo1/shutdown.sh`. Nothing is deleted. Start again with
-  `python3 ~/training-program-2026/demos/demo1/spark_setup.py`.
+  `python3 ~/training-program-2026/demos/demo1/spark_setup.py dashboard`.

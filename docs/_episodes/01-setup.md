@@ -225,26 +225,37 @@ docker load < ai_weather_image.tar.gz
 
 ### 4.1 Core Setup Commands
 
+The Demo 1 dashboard is how you set up and start the demos. These steps are for working directly on the Spark, where the repository is already installed. Starting the dashboard doesn't start any demo.
+
+1. Open a terminal on the Spark and start the dashboard:
+
+   ```bash
+   cd ~/training-program-2026
+   python3 demos/demo1/spark_setup.py dashboard
+   ```
+
+2. Open a web browser on the Spark and go to **http://localhost:8500**.
+
+3. In the dashboard:
+
+   1. Click **Run checks** on the Demo 1 card to check the Spark.
+   2. Under **Country data**, click the button to download your country's data from the program's bucket. The download keeps going if you close the page.
+   3. Open a demo's page and click **Launch**. For Demo 2, click **Launch CDT**. The first launch of each demo builds its image, which can take a while; a new tab shows the progress.
+
+| Page | Container | Address |
+| --- | --- | --- |
+| Demo 1 dashboard | None (runs directly on the Spark) | http://localhost:8500 |
+| Demo 2: Climate Data Tools (CDT) | `cdt` | http://localhost:8504 |
+| Demo 3 | `demo3` | http://localhost:8502 |
+| Demo 4 | `ai_weather` | http://localhost:8503 |
+| Demo 5: ForecastCheck | `forecastcheck` | http://localhost:8505 |
+
+If you're working on Demo 3 itself, you can also start it by hand:
+
 ```bash
-# 1. Clone the repository
-git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
-cd training-program-2026
-
-# 2. Build the container image (~1 hour first time) and start it
-bash demos/demo4/docker/run.sh rebuild
-
-# 3. Access the UI from your laptop (on Tailscale)
-ssh -L 8503:localhost:8503 <user>@<spark>
-# Then browse to http://localhost:8503 (Demo 4)
-```
-
-Demo 3 runs in its own container, `demo3`, on port **8502**. Start it from the Demo 1 dashboard (see [`demos/BEGINNER_GUIDE.md`](https://github.com/MBZUAI-Aim-For-scale/training-program-2026/blob/main/demos/BEGINNER_GUIDE.md)), or by hand:
-
-```bash
-cd training-program-2026/demos/demo3
+cd ~/training-program-2026/demos/demo3
 docker build -t demo3 -f docker/Dockerfile .   # first time only (up to an hour)
 bash docker/run.sh
-ssh -L 8502:localhost:8502 <user>@<spark>      # from your laptop; then browse to http://localhost:8502
 ```
 
 On a Spark, both start scripts also read saved runs from the program's bucket (`gs://aim4scale_training_2026/demo3`) with the machine's read-only key, `/etc/fleet-gcs-key.json`, which it mounts into the container. Never copy that key into the image or the repository.

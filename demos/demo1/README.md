@@ -5,18 +5,20 @@
 Prepares a DGX Spark for the other demos: checks the machine, then builds and starts
 a Docker container for each demo listed in `demos.toml`.
 
-Run the site to launch all the demos:
+Start the dashboard, which is where you run the checks and launch the demos:
 
 ```bash
 python3 demos/demo1/spark_setup.py dashboard
 ```
 
-It first starts a progress dashboard in the background and prints its link
-(http://localhost:8500; from a laptop, `ssh -L 8500:localhost:8500 <spark>`). Then it works
-through the steps, printing each one in the terminal while the dashboard shows the same
-progress, flags errors, and suggests fixes.
+It starts the dashboard in the background and prints its link (http://localhost:8500). It
+doesn't start any demo. The dashboard's **Run checks** and **Launch** buttons run the steps below
+and show their progress, flag errors, and suggest fixes.
+
+The same steps from the terminal, printed as they run:
 
 ```bash
+python3 spark_setup.py                    # host checks + every demo, and leaves them all running
 python3 spark_setup.py --only demo3       # host checks + one demo
 python3 spark_setup.py --build-only       # host checks + builds, start nothing (Launch starts a demo)
 python3 spark_setup.py --rebuild          # rebuild images even if they're up to date
