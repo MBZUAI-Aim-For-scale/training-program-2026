@@ -18,13 +18,23 @@ progress, flags errors, and suggests fixes.
 
 ```bash
 python3 spark_setup.py --only demo3       # host checks + one demo
-python3 spark_setup.py --rebuild          # rebuild images even if they exist
+python3 spark_setup.py --build-only       # host checks + builds, start nothing (Launch starts a demo)
+python3 spark_setup.py --rebuild          # rebuild images even if they're up to date
 python3 spark_setup.py --host-only        # host checks only
 python3 spark_setup.py status             # last run, with suggested fixes
 python3 spark_setup.py dashboard [--stop] # start or stop just the dashboard
 python3 country_data.py [--plan]          # download this Spark's country data (or just show its size)
 bash shutdown.sh                          # stop any setup run, download, the dashboard and all containers
 ```
+
+**Rebuilds:** an image is rebuilt when the code it's built from changed (after a `git pull`,
+say), not on every run. Each build is labelled with a fingerprint of its committed sources,
+its `watch` paths in `demos.toml` (by default its build context and Dockerfile); uncommitted
+edits don't count. An image built before this, or copied from another Spark with
+`docker save`/`load` and no label, is kept as it is until you run `--rebuild` once.
+`--build-only` is for unattended setup, after a pull, for example: it builds what changed and
+starts nothing, since only one demo runs at a time. A demo container that's already running
+keeps its old image until it's stopped and launched again.
 
 **Country data:** the button at the bottom of the Demo 1 page downloads this Spark's data from the
 program's Google bucket, keeping going if you close the page. The country comes from the Spark's
@@ -51,4 +61,4 @@ The dashboard stays up after the script finishes. It keeps checking each contain
 so it also flags crashed or restarting containers, pages that don't answer, port clashes,
 and error lines in container logs. To add a demo, add a `[[demo]]` block to `demos.toml`.
 
-`docker-compose.yml` still starts the JupyterLab sandbox (`docker compose up`, port 8888).
+`docker-compose.yml` still starts the JupyterLab sandbox (`docker compose up`, port 8889).

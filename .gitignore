@@ -65,3 +65,15 @@ demos/demo1/state/
 # CDT's working files (mounted at /data in the cdt container)
 demos/demo2/data/
 >>>>>>> 3e0f7a15957d9bbcb53b0d3f64d9ab09dea9db9a
+
+# Demo 5: ForecastCheck, cloned and kept up to date by demos/demo1/spark_setup.py
+demos/demo5/forecastcheck/
+
+# What the demos write on a Spark (their start scripts' defaults): results, not code.
+demos/demo4/outputs/
+# Demo 4's benchmark results; the benchmark_spec.json files there are inputs, kept.
+demos/demo4/ai_weather/data/ROMP_OUT/**
+!demos/demo4/ai_weather/data/ROMP_OUT/**/
+!demos/demo4/ai_weather/data/ROMP_OUT/**/benchmark_spec.json
+# Demo 5's fetched data and results (demos/demo5/run.sh), next to ForecastCheck's code
+demos/demo5/data/

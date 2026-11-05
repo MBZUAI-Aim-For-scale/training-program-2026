@@ -8,7 +8,9 @@ services:
     restart: unless-stopped
     ipc: host
     env_file:
-      - ../../../.env
+      # Optional: without it, docker/run.sh's defaults apply (the program's bucket).
+      - path: ../../../.env
+        required: false
     ulimits:
       memlock: -1
       stack: 67108864
@@ -20,13 +22,16 @@ services:
               count: all
               capabilities: [gpu, utility]
     ports:
-      - "127.0.0.1:8503:8501" # Streamlit Dashboard
+      - "127.0.0.1:${PORT:-8503}:8501" # Streamlit Dashboard (PORT: from demos/demo1/demos.toml)
       - "127.0.0.1:8888:8888" # Jupyter Lab (optional)
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/run/gcp-key.json}
       - ROMP_DEMO_OUT_DIR=/app/ai_weather/data/ROMP_OUT
+      # (run.sh exports them, from .env or its defaults)
+      - DEMO_BUCKET=${DEMO_BUCKET:-aim4scale_training_2026}
+      - DEMO3_BUCKET=${DEMO3_BUCKET:-gs://aim4scale_training_2026/demo3}
     volumes:
       # Code Mount (aligned with Dockerfile WORKDIR /app)
       - ..:/app

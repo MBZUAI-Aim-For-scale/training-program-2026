@@ -19,10 +19,12 @@ from html import escape
 import streamlit as st
 
 import country_data
+import forecastcheck_data
 import spark_setup as setup
 
-# Every demo in the training program, in order. `container` is set once a demo has a Docker image;
-# `setup` is its id in demos.toml, whose steps spark_setup.py records in state/status.json.
+# Every demo in the training program, in order. `setup` is its id in demos.toml (once it has a Docker
+# image), whose steps spark_setup.py records in state/status.json; its `container` and `image` names
+# come from there too (below), so the two can't disagree.
 # `path` is added to the container's address, to open a page inside a bigger site; `health` is the page
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
 # launches with their own button (named by `label`); they don't count towards the one-demo-at-a-time rule.
@@ -32,22 +34,30 @@ DEMOS = [
     {"n": 2, "title": "Observational data readiness",
      "about": "How ENACTS is built by combining rain gauges with satellite products.",
      "tools": [{"n": 2, "tool": "cdt", "label": "CDT", "title": "Climate Data Tools",
-                "about": "The CDT desktop app, in the browser over VNC.", "container": "cdt", "setup": "cdt",
+                "about": "The CDT desktop app, in the browser over VNC.", "setup": "cdt",
                 "path": "/vnc.html?autoconnect=1&reconnect=1&resize=remote", "health": "/vnc.html"}]},
     {"n": 3, "title": "Running your first AI weather forecast",
      "about": "Run AI weather models locally, end to end, for your use case.",
-     "container": "demo3", "setup": "demo3"},
+     "setup": "demo3"},
     {"n": 4, "title": "The AI weather model scorecard",
      "about": "Compare models across evaluation metrics and explore the AI Almanac for your use case.",
-     "container": "demo4", "setup": "demo4", "path": "/?page=SM_Benchmarking"},
+     "setup": "demo4", "path": "/?page=SM_Benchmarking"},
     {"n": 5, "title": "Putting your forecast to the test",
-     "about": "Evaluate the forecasts you ran in Demo 3 against different metrics."},
+     "about": "Evaluate the forecasts you ran in Demo 3 against different metrics.",
+     "setup": "demo5"},
     # {"n": 6, "title": "Ground truth challenge",
     #  "about": "Compare model performance against different observational datasets."},
     # {"n": 7, "title": "Feasibility assessment",
     #  "about": "Decide which models, data and thresholds to take forward into a pilot."},
 ]
 BY_N = {d["n"]: d for d in DEMOS}
+# Each demo's (and tool's) container and image, as demos.toml names them. A `setup` that isn't
+# in demos.toml (or Demo 1 itself) gets no container: its page says it has none yet.
+_IN_TOML = {d["id"]: d for d in setup.load_config()["demo"]}
+for _d in DEMOS + [t for d in DEMOS for t in d.get("tools", [])]:
+    if _d.get("setup") in _IN_TOML:
+        _d["container"] = _IN_TOML[_d["setup"]]["container"]
+        _d["image"] = _IN_TOML[_d["setup"]]["image"]
 LESSONS = setup.REPO / "docs" / "_episodes"
 
 # Same palette as Demo 3; the top bar uses the shared site's navy
@@ -231,7 +241,7 @@ def status(demo: dict) -> tuple[str, str, str | None]:
         return "running", "Running", f"http://localhost:{ports[0]}{demo.get('path', '')}" if ports else None
     if c:
         return "stopped", f"Stopped ({c['State']['Status']})", None
-    if setup.inspect("image", name):
+    if setup.inspect("image", demo.get("image", name)):
         return "ready", "Ready to launch", None
     return "none", "Image not built", None
 
@@ -315,7 +325,9 @@ def setup_running() -> bool:
 
 def launch(demo: dict):
     """Run spark_setup.py for one demo in the background; its progress lands in state/status.json."""
-    args = ["--host-only"] if demo["setup"] == "demo1" else ["--only", demo["setup"]]
+    # (--no-pull: a Launch starts what's here; the setup runs update other repositories' code.)
+    args = ["--host-only"] if demo["setup"] == "demo1" else ["--only", demo["setup"], "--no-pull"]
+    setup.STATE.mkdir(parents=True, exist_ok=True)  # (a dashboard started by itself, before any setup run)
     with open(setup.STATE / "launch.log", "a") as log:
         subprocess.Popen([sys.executable, str(setup.HERE / "spark_setup.py"), *args, "--no-dashboard"],
                          cwd=setup.HERE, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -543,6 +555,69 @@ def demo_page(demo: dict):
         launch_card(demo)
         for tool in demo.get("tools", []):
             launch_card(tool)
+        if demo.get("setup") == "demo5":
+            forecastcheck_data_card()
+
+
+# --- Demo 5: download this Spark's country data for ForecastCheck ------------------------------
+
+def start_forecastcheck_download():
+    """Run forecastcheck_data.py in the background; it outlives this page, like a setup run."""
+    forecastcheck_data.LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(forecastcheck_data.LOG, "a") as log:
+        subprocess.Popen([sys.executable, str(setup.HERE / "forecastcheck_data.py")], cwd=setup.HERE,
+                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    time.sleep(0.5)  # lets it write its first status, so this page's next look already shows it running
+
+
+@st.fragment(run_every=3)
+def forecastcheck_data_card():
+    """Only for a Spark whose country ForecastCheck has (Kenya, Rwanda, Senegal, Sierra Leone)."""
+    host, countries = country_data.hostname(), forecastcheck_data.supported()
+    country = forecastcheck_data.spark_country()
+    names = ", ".join(forecastcheck_data.title(c) for c in countries)
+    with st.container(key="d1launch-fcdata"):
+        st.markdown('<div class="d1-launch-k">Country data for ForecastCheck</div>', unsafe_allow_html=True)
+        if not countries:
+            st.button("Download country data", key="fcdata-none", disabled=True, width="stretch")
+            st.markdown("<div class='d1-launch-note'>Launch Demo 5 first: its code isn't on this Spark yet.</div>",
+                        unsafe_allow_html=True)
+            return
+        if not country:
+            st.button("Download country data", key="fcdata-none", disabled=True, width="stretch")
+            st.markdown(f'<div class="d1-launch-note">ForecastCheck has data for {escape(names)}; this Spark '
+                        f'(<code>{escape(host)}</code>) isn\'t one of them. Pick a country to work with in the '
+                        f'lesson (<code>fcstcheck setup &lt;country&gt;</code>).</div>', unsafe_allow_html=True)
+            return
+        job = forecastcheck_data.read_status()
+        state = job["state"] if job and job.get("country") == country else None
+        tag, text, go = {"running": ("ready", "Downloading", None),
+                         "done": ("ok", "Downloaded", "Check for new data"),
+                         "failed": ("warn", "Not finished", "Try again"),
+                         "interrupted": ("warn", "Stopped", "Resume download"),
+                         }.get(state, ("off", "Not downloaded", f"Download {forecastcheck_data.title(country)} data"))
+        st.markdown(f'<div class="d1-launch-status"><span class="d1-tag {tag}">{text}</span></div>',
+                    unsafe_allow_html=True)
+        if state == "running":
+            st.button("Stop download", key="fcdata-stop", width="stretch", on_click=forecastcheck_data.stop,
+                      help="What's fetched stays; the next download fetches only what's missing")
+        elif not forecastcheck_data.image_ready():
+            st.button(go, key="fcdata-go", type="primary", width="stretch", disabled=True)
+            st.markdown('<div class="d1-launch-note">Launch Demo 5 first: the download runs in its image.</div>',
+                        unsafe_allow_html=True)
+        else:
+            st.button(go, key="fcdata-go", type="primary", width="stretch", on_click=start_forecastcheck_download,
+                      help="ForecastCheck's own fetch, for this Spark's country. Keeps going if you close this page.")
+        st.markdown(f'<div class="d1-launch-note">{escape(forecastcheck_data.title(country))}\'s forecasts and '
+                    'observations, from the program\'s bucket into Demo 5\'s data folder '
+                    '(<code>fcstcheck where</code>), the same as <code>fcstcheck fetch --apply</code>.</div>',
+                    unsafe_allow_html=True)
+        if job and state:
+            color = {"running": BLUE, "done": GREEN}.get(state, ORANGE if state == "interrupted" else RED)
+            st.markdown(f'<div class="d1-prog" style="--p:{color}"><div class="txt">'
+                        f'{escape(job.get("detail") or "")}</div></div>', unsafe_allow_html=True)
+            with st.expander("Command-line output"):
+                st.code(setup.tail(forecastcheck_data.LOG, 200) or "no output yet", language=None, height=320)
 
 
 @st.fragment(run_every=3)
@@ -709,4 +784,8 @@ if current["n"] != 1 and st.query_params.get("launch") == "1" and (tool or curre
     starting_page(tool or current)
 else:
     navbar(current["n"])
-    setup_page() if current["n"] == 1 else demo_page(current)
+    # (Statements, not `a() if … else b()`: Streamlit's "magic" would write that expression's None on the page.)
+    if current["n"] == 1:
+        setup_page()
+    else:
+        demo_page(current)

@@ -10,6 +10,7 @@ shown and press **Enter**.
 | [Demo 1](#demo-1--set-up-the-spark) | Sets up the Spark and starts the other demos | http://localhost:8500 |
 | [Demo 3](#demo-3--run-your-first-ai-weather-forecast) | Run AI weather models and compare them with observations | http://localhost:8502 |
 | [Demo 4](#demo-4--the-ai-weather-model-scorecard) | Benchmark AI models for rainy-season onset | http://localhost:8503 |
+| Demo 5 ([lesson](../docs/_episodes/05-AI-Forest-test.md)) | Verify GraphCast and IFS over years of past forecasts (ForecastCheck) | http://localhost:8505 |
 
 ---
 
@@ -119,7 +120,8 @@ First type `cd ~/training-program-2026/demos/demo1`, then any of these:
 | `python3 spark_setup.py status` | Shows the result of the last setup, with fixes for anything that failed |
 | `python3 spark_setup.py --host-only` | Runs only the Spark health checks |
 | `python3 spark_setup.py --only demo3` | Health checks, then sets up just one demo (`demo3` or `demo4`) |
-| `python3 spark_setup.py --rebuild` | Rebuilds every demo from scratch (after a big code update) |
+| `python3 spark_setup.py --build-only` | Health checks, then builds the demos whose code changed, without starting any |
+| `python3 spark_setup.py --rebuild` | Rebuilds every demo, even if its code didn't change |
 | `python3 verify_bucket_access.py` | Checks only that the Spark can read the program's data bucket |
 | `bash shutdown.sh` | Stops everything: setup runs, the dashboard and all demos. Nothing is deleted. |
 
@@ -215,17 +217,12 @@ Demo 4 measures how well AI models forecast the **rainy-season onset**, compared
 observed rainfall and with a simple climatology forecast. Climatology means "onset happens on
 its usual date". A model is only useful if it beats climatology.
 
-### Step 1: Tell Demo 4 where the data is (first time only)
+### Step 1: Where the data is (nothing to do)
 
-Demo 4 reads its forecasts and observations from the program's Google bucket. On the Spark, type:
-
-```bash
-cd ~/training-program-2026
-echo "DEMO_BUCKET=aim4scale_training_2026" >> .env
-```
-
-If the setup was run before this step, restart Demo 4 so it reads the setting:
-`docker rm -f ai_weather`, then launch it again from the dashboard.
+Demo 4 reads its forecasts and observations from the program's Google bucket,
+`aim4scale_training_2026`, with the Spark's own key. That's the default, so there's nothing to
+set up. To use another bucket, put `DEMO_BUCKET=<bucket-name>` in `~/training-program-2026/.env`,
+then restart Demo 4 (`docker rm -f ai_weather`, then launch it again from the dashboard).
 
 ### Step 2: Open Demo 4
 
@@ -288,7 +285,7 @@ Results are saved on the Spark in `~/data/ROMP_OUT/` and show up in the web page
 
 | What you see | What to do |
 |---|---|
-| `DEMO_BUCKET is not set` | Do [Step 1](#step-1-tell-demo-4-where-the-data-is-first-time-only), then restart Demo 4 |
+| `DEMO_BUCKET is ... not a valid Google bucket name` | Fix or remove the `DEMO_BUCKET=` line in `~/training-program-2026/.env` ([Step 1](#step-1-where-the-data-is-nothing-to-do)), then restart Demo 4 |
 | `Observation folder not found` or `Region mask not found` | Demo 4 can't reach the bucket. Run `python3 demos/demo1/verify_bucket_access.py` on the Spark and show the result to an organiser |
 | The page doesn't load | Check that Demo 4 shows **Running** in the dashboard; if not, launch it again |
 

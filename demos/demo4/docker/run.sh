@@ -28,36 +28,30 @@ root="$(cd "$here/../.." && pwd)"
 ENV_FILE="$root/.env"
 ENV_EXAMPLE="$root/.env.example"
 
+# The program's bucket, used when .env doesn't set them (or there's no .env at all): a fresh
+# clone on a Spark works with no manual step, reading the bucket with the Spark's key.
+DEFAULT_DEMO_BUCKET="aim4scale_training_2026"
+DEFAULT_DEMO3_BUCKET="gs://aim4scale_training_2026/demo3"
+
 # ----------------------------------------------------------------------
-# 1. Automated .env File Validation
+# 1. Settings: .env if there is one (optional), defaults for the rest
 # ----------------------------------------------------------------------
+ENV_ARGS=()
 validate_env_file() {
-  if [ ! -f "$ENV_FILE" ]; then
-    if [ -f "$ENV_EXAMPLE" ]; then
-      echo "[WARNING] .env file not found. Auto-generating .env from .env.example..."
-      cp "$ENV_EXAMPLE" "$ENV_FILE"
-    else
-      echo "[ERROR] Error: Neither .env nor .env.example found at $root" >&2
-      exit 1
-    fi
+  if [ -f "$ENV_FILE" ]; then
+    set -o allexport
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+    set +o allexport
+    ENV_ARGS=(--env-file "$ENV_FILE")
+  else
+    echo "[INFO] No .env at $root: using the defaults (see $ENV_EXAMPLE to change them)."
   fi
 
-  set -o allexport
-  # shellcheck source=/dev/null
-  source "$ENV_FILE"
-  set +o allexport
-
-  missing_vars=()
-  [ -z "${DEMO_BUCKET:-}" ] && missing_vars+=("DEMO_BUCKET")
-  [ -z "${DEMO3_BUCKET:-}" ] && missing_vars+=("DEMO3_BUCKET")
-
-  if [ ${#missing_vars[@]} -ne 0 ]; then
-    echo "[ERROR] Error: Missing required key(s) in .env file: ${missing_vars[*]}" >&2
-    echo "        Please populate them in $ENV_FILE before proceeding." >&2
-    exit 1
-  fi
-
-  echo "[OK] Configuration validated successfully."
+  # (Empty counts as unset, as in a .env copied from .env.example.)
+  export DEMO_BUCKET="${DEMO_BUCKET:-$DEFAULT_DEMO_BUCKET}"
+  export DEMO3_BUCKET="${DEMO3_BUCKET:-$DEFAULT_DEMO3_BUCKET}"
+  echo "[OK] Bucket: gs://${DEMO_BUCKET#gs://}"
 }
 
 # ----------------------------------------------------------------------
@@ -110,8 +104,8 @@ start_compose() {
   cleanup_standalone_conflicts
   check_gpu_availability
   echo "Starting AI Weather services via Docker Compose..."
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
-  echo "[SUCCESS] AI Forecasting operational: http://localhost:8503"
+  docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" up -d
+  echo "[SUCCESS] AI Forecasting operational: http://localhost:${PORT:-8503}"
 }
 
 # ----------------------------------------------------------------------
@@ -123,13 +117,13 @@ case "${1:-start}" in
     ;;
 
   logs)
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" logs -f
+    docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" logs -f
     ;;
 
   restart)
     cleanup_standalone_conflicts
     echo "Restarting AI Weather services..."
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart
+    docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" restart
     echo "[SUCCESS] Services restarted."
     ;;
 
@@ -139,23 +133,23 @@ case "${1:-start}" in
     cleanup_standalone_conflicts
     if [ "${DEV:-0}" = "1" ]; then
       echo "DEV=1 enabled; restarting services..."
-      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart
+      docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" restart
     else
       echo "Updating container with incremental build cache..."
-      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+      docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" up -d --build
     fi
     ;;
 
   rebuild)
     cleanup_standalone_conflicts
     echo "Rebuilding image from scratch..."
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --no-cache
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --force-recreate
+    docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" build --no-cache
+    docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" up -d --force-recreate
     ;;
 
   down|stop)
     echo "Stopping AI Weather services..."
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" down
+    docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" down
     ;;
 
   -h|--help|help)

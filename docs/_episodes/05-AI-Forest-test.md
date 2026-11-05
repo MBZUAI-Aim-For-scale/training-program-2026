@@ -104,7 +104,7 @@ ForecastCheck has three stages. They never call each other: each one writes NetC
 ```
                  cloud bucket  gs://<bucket>/demo5/{SEN|SLE}-local-engine
                       │
-                      │  bash docker/run.sh fetch
+                      │  fcstcheck fetch
                       ▼
  data/{country}/forecast/…    raw GraphCast / IFS forecasts
  data/{country}/truth/{product}/…      observations (chirts, era5, chirps)
@@ -125,7 +125,7 @@ ForecastCheck has three stages. They never call each other: each one writes NetC
  data/{country}/diagnostics/…   ◄────────────────────┘
                       │
                       ▼
-               bash docker/run.sh start   (the dashboard)
+               fcstcheck start   (the dashboard)
 ```
 
 Two naming rules make the files self-describing:
@@ -135,47 +135,52 @@ Two naming rules make the files self-describing:
 
 ## 3. Set Up and Start Everything
 
-ForecastCheck runs in **Docker**, the way the demos of Demos 1–3 do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script, `docker/run.sh`, wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU.
+ForecastCheck runs in **Docker**, the way Demos 1–4 do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU.
+
+On the Spark, ForecastCheck is part of the course: Demo 1's setup fetches its code from [its own repository](https://github.com/africlimate-research/forecastcheck) into `demos/demo5/forecastcheck`, keeps it up to date, and builds its image, and the Demo 1 dashboard has a **Launch** button for it. Every command is `fcstcheck …`, typed in any folder: it runs ForecastCheck's own `docker/run.sh` with the course's settings (Demo 5's port, the Spark's key for the bucket, your country, and Demo 5's data folder). Paths in this lesson are given in full; `fcstcheck where` prints them:
+
+| | |
+| --- | --- |
+| The code (ForecastCheck) | `~/training-program-2026/demos/demo5/forecastcheck` |
+| Your data and every result (`data/` in the outputs below) | `~/training-program-2026/demos/demo5/data` |
+| The settings (Section 5) | `~/training-program-2026/demos/demo5/forecastcheck/config/verification.toml` |
 
 You type **one block of commands**, now. The computation then runs in the background, and Sections 4–8 explain what it is doing, stage by stage, while it works.
 
-Log in to the Spark with a port forward, so the dashboard will reach your laptop. ForecastCheck uses port **8502**, so it does not collide with the course app on 8501:
+Log in to the Spark with a port forward, so the dashboard will reach your laptop. Demo 5 uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's):
 
 ```bash
-ssh -L 8502:localhost:8502 <user>@<spark>
+ssh -L 8505:localhost:8505 <user>@<spark>
 ```
 
 Then:
 
 ```bash
-# 1. Get the code
-git clone https://github.com/africlimate-research/forecastcheck.git
-cd forecastcheck
+# 1. Get the code, the image and the `fcstcheck` command (about 5 minutes the first
+#    time; skip this if the Demo 1 dashboard already shows Demo 5 as ready)
+python3 ~/training-program-2026/demos/demo1/spark_setup.py --only demo5 --build-only
 
-# 2. Get the image: build it (about 5 minutes), or load the one your trainer gives you
-bash docker/run.sh build              # or: bash docker/run.sh load forecastcheck-image.tar.gz
-
-# 3. Choose your country: senegal, sierra-leone, kenya or rwanda
-echo senegal > .deployment
-
-# 4. Fetch your country's data (Section 4 explains what arrives)
-export GOOGLE_APPLICATION_CREDENTIALS=/etc/fleet-gcs-key.json
-bash docker/run.sh fetch --apply
-
-# 5. Start the whole pipeline: it runs in the background, even if you log out
-bash docker/run.sh pipeline
-
-# 6. Start the dashboard; it stays up until you stop it
-bash docker/run.sh start
+# 2. Everything else, for your country (senegal, sierra-leone, kenya or rwanda):
+fcstcheck setup senegal
 ```
 
-Open <http://localhost:8502> on your laptop. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `bash docker/run.sh logs pipeline` (Ctrl-C stops following, not the run).
-
-When you have finished with the dashboard, stop it. Your results stay in `data/`, and `bash docker/run.sh start` brings it back:
+`fcstcheck setup` does, in order, what you could also type one at a time:
 
 ```bash
-# 7. When you are done: stop the dashboard (data/ is kept)
-bash docker/run.sh stop
+fcstcheck country senegal     # your country (on those countries' Sparks it's already theirs)
+fcstcheck fetch --apply       # fetch its data (Section 4 explains what arrives)
+fcstcheck pipeline            # the whole pipeline, in the background, even if you log out
+fcstcheck start               # the dashboard (or Launch Demo 5 from the Demo 1 dashboard)
+```
+
+If the terminal says `fcstcheck: command not found` right after step 1, log out and in again (or run `source ~/.profile`): the command is new. (`forecastcheck` is the same command, under its long name.)
+
+Open <http://localhost:8505> on your laptop. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `fcstcheck logs pipeline` (Ctrl-C stops following, not the run).
+
+When you have finished with the dashboard, stop it. Your results stay in the data folder, and `fcstcheck start` brings it back:
+
+```bash
+fcstcheck stop                # when you are done (your data is kept)
 ```
 
 
@@ -191,20 +196,25 @@ bash docker/run.sh stop
 > Everything above runs in the Spark's terminal, and so do `status`, `logs`, `restart` and `stop`. The `python -m …` commands shown in Sections 6–8 are the ones `pipeline` runs for you. To try one yourself, open a terminal inside ForecastCheck, where they work exactly as shown:
 >
 > ```bash
-> bash docker/run.sh shell              # the prompt changes; type `exit` to leave
+> fcstcheck shell              # the prompt changes; type `exit` to leave
 > ```
 >
-> Or run a single one from the Spark's terminal: `bash docker/run.sh run python -m verification.run …`. Everything reads and writes the same `data/` folder. `bash docker/run.sh help` lists every command.
+> Or run a single one from the Spark's terminal: `fcstcheck run python -m verification.run …`. Everything reads and writes the same `data/` folder. `fcstcheck help` lists every command.
+{: .tip}
+
+> #### Where ForecastCheck lives on the Spark
+>
+> Its code is in `~/training-program-2026/demos/demo5/forecastcheck`, a copy of [ForecastCheck's repository](https://github.com/africlimate-research/forecastcheck) that Demo 1's setup keeps on its newest `main`, rebuilding the image when it changes. Your data and every result are in `~/training-program-2026/demos/demo5/data`, next to the code rather than inside it (as the other demos keep theirs), so updates never touch them, and git leaves them out. ForecastCheck's own messages say `bash docker/run.sh …`; on the Spark, type `fcstcheck …` instead, which adds the course's port, key and data folder.
 {: .tip}
 
 > #### Which country am I?
 >
-> The one-line file `.deployment` decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. If you change it, run `bash docker/run.sh restart` so the dashboard follows.
+> The one-line file `.deployment` (in `~/training-program-2026/demos/demo5/forecastcheck`, set by `fcstcheck country`) decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. To see or change it: `fcstcheck country` or `fcstcheck country kenya` (a running dashboard follows by itself).
 {: .tip}
 
 > #### Without Docker
 >
-> On a machine without Docker, use conda instead: `conda env create -f environment.yml` and `conda activate forecastcheck`, then drop `bash docker/run.sh` from the commands (`./scripts/fetch_country.sh`, `./scripts/run_pipeline.sh`, and `streamlit run ui/app.py` for the dashboard, on port 8501). The repository's README has the details.
+> On a machine without Docker, use conda instead: `conda env create -f environment.yml` and `conda activate forecastcheck`, then drop `fcstcheck` from the commands (`./scripts/fetch_country.sh`, `./scripts/run_pipeline.sh`, and `streamlit run ui/app.py` for the dashboard, on port 8501). The repository's README has the details.
 {: .tip}
 
 ## 4. The Data
@@ -237,7 +247,7 @@ Rainfall in the forecast files is in **mm/hr** (the day's total divided by 24); 
 
 ### 4.2 How `fetch` works
 
-The bucket is read-only and private to the training. On the DGX Spark a key that can read it is already installed; the `export` line of Section 3 tells the Google Cloud tools where it is, **by its path**:
+The bucket is read-only and private to the training. On the DGX Spark a key that can read it is already installed, at `/etc/fleet-gcs-key.json`, and `fcstcheck` tells the Google Cloud tools where it is, **by its path**. Elsewhere, or to use another key, set the path yourself before the command:
 
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS=<key>.json
@@ -245,11 +255,11 @@ export GOOGLE_APPLICATION_CREDENTIALS=<key>.json
 
 Never open the key, paste its contents into a file or a chat, or copy it elsewhere: the path is all anyone needs. The variable lasts for the current terminal; set it again in a new one.
 
-`bash docker/run.sh fetch` knows your country from `.deployment` and where its data lives from the country file. It downloads the GraphCast and IFS forecasts, every truth product in your country's folder (CHIRTS and ERA5 for Heat, CHIRPS for Rainfall) and the elevation map, and lays the files out the way ForecastCheck expects. Without `--apply` it only lists what it would fetch: a good habit before a large download.
+`fcstcheck fetch` knows your country (`fcstcheck country`) and where its data lives from the country file. It downloads the GraphCast and IFS forecasts, every truth product in your country's folder (CHIRTS and ERA5 for Heat, CHIRPS for Rainfall) and the elevation map, and lays the files out the way ForecastCheck expects. Without `--apply` it only lists what it would fetch: a good habit before a large download.
 
 ```bash
-bash docker/run.sh fetch              # dry run: lists what would be fetched
-bash docker/run.sh fetch --apply      # downloads
+fcstcheck fetch              # dry run: lists what would be fetched
+fcstcheck fetch --apply      # downloads
 ```
 
 Every team runs the same commands. What Section 3's fetch brought in:
@@ -263,12 +273,12 @@ Re-running is safe: it copies only what is missing or changed, and never leaves 
 
 > #### If the fetch stops
 >
-> - *"the data bucket needs a Google Cloud key"*: the key is not set in this terminal. Run the `export` line above, then the command again.
-> - *"cannot read gs://…"*: the key is set but cannot read the bucket. Check the path in the `export` line. (The script also sets `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` to the same path, which some setups need.)
+> - *"the data bucket needs a Google Cloud key"*: there's no key at `/etc/fleet-gcs-key.json` on this machine (ask your trainer), and none set in this terminal. Set one with the `export` line above, then run the command again.
+> - *"cannot read gs://…"*: there is a key, but it cannot read the bucket. If you set one with `export`, check its path. (The script also sets `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` to the same path, which some setups need.)
 > - No network, or a slow one? Your trainer can give you a copy of the country folder (for example on a shared disk). Point the script at it; nothing is downloaded and the result is identical:
 >
 > ```bash
-> bash docker/run.sh fetch --from /path/to/SEN-local-engine --apply
+> fcstcheck fetch --from /path/to/SEN-local-engine --apply
 > ```
 {: .warning}
 
@@ -277,8 +287,8 @@ Re-running is safe: it copies only what is missing or changed, and never leaves 
 > Your trainer may give you national data that cannot be published, for example rain-gauge records or a gridded product corrected with gauges, on a flash disk. It comes as a folder laid out like the bucket's. Add it with the same command; the folder is only read, never changed, and the data is placed next to what you already fetched, so every later step includes it:
 >
 > ```bash
-> bash docker/run.sh fetch --from /media/$USER/<flash-disk>/<folder>          # dry run
-> bash docker/run.sh fetch --from /media/$USER/<flash-disk>/<folder> --apply
+> fcstcheck fetch --from /media/$USER/<flash-disk>/<folder>          # dry run
+> fcstcheck fetch --from /media/$USER/<flash-disk>/<folder> --apply
 > ```
 >
 > It stays on this machine: `data/` is never committed, and results computed from it are not shared outside the class.
@@ -287,14 +297,14 @@ Re-running is safe: it copies only what is missing or changed, and never leaves 
 ### 4.3 Check it landed
 
 ```bash
-ls data/senegal/truth data/senegal/assets
+ls ~/training-program-2026/demos/demo5/data/senegal/truth ~/training-program-2026/demos/demo5/data/senegal/assets
 ```
 
-Expect `dem.nc` under `assets`, and under `truth`: `chirts` and `era5` for the Heat track, `chirps` for the Rainfall track. Use your country's folder: `data/sierra_leone/…`, `data/kenya/…`, `data/rwanda/…`.
+Expect `dem.nc` under `assets`, and under `truth`: `chirts` and `era5` for the Heat track, `chirps` for the Rainfall track. Use your country's folder: `…/data/sierra_leone/…`, `…/data/kenya/…`, `…/data/rwanda/…`.
 
 ## 5. The Country Settings
 
-Everything a forecaster is likely to change lives in one file, `config/verification.toml`. No Python.
+Everything a forecaster is likely to change lives in one file, `config/verification.toml` (on the Spark: `~/training-program-2026/demos/demo5/forecastcheck/config/verification.toml`). No Python.
 
 ```toml
 [Senegal.thresholds]
@@ -476,7 +486,7 @@ The calibrated files are large, mostly because of the threshold probabilities (`
 
 > #### Optional: watch one calibration live
 >
-> Your pipeline does the full calibration for you. To see IDR fit with your own eyes, run one small slice in `bash docker/run.sh shell`, **once `bash docker/run.sh status` says the pipeline is not running**: both would write the same files. Heat track:
+> Your pipeline does the full calibration for you. To see IDR fit with your own eyes, run one small slice in `fcstcheck shell`, **once `fcstcheck status` says the pipeline is not running**: both would write the same files. Heat track:
 >
 > ```bash
 > python -m calibration.run --variable temperature_max --model graphcast --leads 1,3 --train-years 2016,2017,2018,2019,2020,2021 --test-year 2022 --product chirts
@@ -566,7 +576,7 @@ ForecastCheck picks, for each $\alpha$, the cut-off $p^*$ that gives the best va
 
 ## 9. The Dashboard
 
-The dashboard has been running since Section 3 (`bash docker/run.sh start`). Open <http://localhost:8502> on your laptop; the SSH tunnel from Section 3 forwards it. It discovers results when it starts: after `bash docker/run.sh pipeline` it restarts by itself, and after commands you ran yourself, run `bash docker/run.sh restart` and refresh the browser.
+The dashboard has been running since Section 3 (`fcstcheck start`). Open <http://localhost:8505> on your laptop; the SSH tunnel from Section 3 forwards it. It discovers results when it starts: after `fcstcheck pipeline` it restarts by itself, and after commands you ran yourself, run `fcstcheck restart` and refresh the browser.
 
 The tour below uses the Heat track's screenshots (Senegal). Every country sees the same pages with its own regions and thresholds; Section 9.7 shows what is different in the Rainfall track.
 
@@ -787,21 +797,22 @@ Every number in the dashboard is true *for a given truth product, year, area and
 
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
-| `python: command not found`, or `ModuleNotFoundError` | The command ran in the Spark's terminal, not inside ForecastCheck | Open `bash docker/run.sh shell` first, or prefix it with `bash docker/run.sh run` |
-| *"no 'forecastcheck' image yet"* | The image is not built or loaded on this Spark | `bash docker/run.sh build` (or `load` your trainer's file) |
+| `python: command not found`, or `ModuleNotFoundError` | The command ran in the Spark's terminal, not inside ForecastCheck | Open `fcstcheck shell` first, or prefix it with `fcstcheck run` |
+| *"no 'forecastcheck' image yet"* | The image is not built or loaded on this Spark | `python3 ~/training-program-2026/demos/demo1/spark_setup.py --only demo5 --build-only` (or `fcstcheck load` your trainer's file) |
 | *"Docker is not answering"*, or `Cannot connect to the Docker daemon` | Docker is not running in your account | `systemctl --user restart docker`, as in Demo 1 |
-| *"port is already allocated"* or *"address already in use"* on `start` | Something else uses 8502 (another dashboard, or an SSH tunnel on this machine) | `PORT=8503 bash docker/run.sh start`, and tunnel 8503 instead |
-| *"the data bucket needs a Google Cloud key"* | The key is not set in this terminal | `export GOOGLE_APPLICATION_CREDENTIALS=/etc/fleet-gcs-key.json` (Section 4.2) |
-| *"cannot read gs://…"* when fetching | The key path is wrong, or cannot read the bucket | Check the path in the `export` line (Section 4.2) |
-| *"no country selected"* | `.deployment` is missing | `echo senegal > .deployment` (or `sierra-leone`, `kenya`, `rwanda`) |
+| *"port is already allocated"* or *"address already in use"* on `start` | Something else uses 8505 (another dashboard, or an SSH tunnel on this machine) | `PORT=8506 fcstcheck start`, and tunnel 8506 instead |
+| *"the data bucket needs a Google Cloud key"* | This Spark has no `/etc/fleet-gcs-key.json`, and no key is set in this terminal | Ask your trainer, or `export GOOGLE_APPLICATION_CREDENTIALS=<key>.json` (Section 4.2) |
+| *"cannot read gs://…"* when fetching | The key cannot read the bucket, or the path you exported is wrong | Check the path in your `export` line, if any (Section 4.2) |
+| *"no country selected"* | No country chosen yet | `fcstcheck country senegal` (or `sierra-leone`, `kenya`, `rwanda`) |
+| `fcstcheck: command not found` | The command is new since you logged in, or Demo 5 isn't set up on this Spark | Log out and in again (or `source ~/.profile`); if it's still missing, `python3 ~/training-program-2026/demos/demo1/spark_setup.py --only demo5 --build-only` |
 | *"… holds 2 truth products and none is configured"* | `--product` is missing (Heat track) | Add `--product chirts` or `--product era5` |
 | *"unknown truth product …"* | A misspelt `--product` | Use one of the products the message lists (`chirps` for the Rainfall track) |
 | A Heat-track run looks for `precipitation` files | `--variable` is missing | Add `--variable temperature_max` or `temperature_min` |
 | Rainfall values look 24 times too small | The dashboard shows mm/hr | Multiply by 24 for mm/day (Section 6.2) |
 | `SKIP — missing file` for IFS before 2018 | Expected: IFS starts in 2018 | Nothing |
-| New results do not appear in the dashboard | The dashboard caches what it found at start-up | `bash docker/run.sh restart`, then refresh the browser |
+| New results do not appear in the dashboard | The dashboard caches what it found at start-up | `fcstcheck restart`, then refresh the browser |
 | No altitude selector | `data/{country}/assets/dem.nc` is missing | Re-run the fetch; it prints a note when the DEM is absent |
-| The dashboard does not open on the laptop | No port forward, or the dashboard is not running | Reconnect with `ssh -L 8502:localhost:8502 <user>@<spark>`; check `bash docker/run.sh status` |
+| The dashboard does not open on the laptop | No port forward, or the dashboard is not running | Reconnect with `ssh -L 8505:localhost:8505 <user>@<spark>`; check `fcstcheck status` |
 
 ## Exercises
 
@@ -809,9 +820,9 @@ Work in your country team. Exercises 1–3 run while the pipeline computes; Exer
 
 > #### Exercise 1: Read Before You Download (5 min)
 >
-> 1. Run `bash docker/run.sh fetch` again, **without** `--apply`. Why does it now find nothing to fetch? How many files did Section 3's fetch bring in (Section 4.2)?
+> 1. Run `fcstcheck fetch` again, **without** `--apply`. Why does it now find nothing to fetch? How many files did Section 3's fetch bring in (Section 4.2)?
 > 2. Which lead times are in the bucket? Which one is not in the pipeline commands, and why might that be?
-> 3. Open `config/verification.toml`. Write down your country's thresholds, seasons and altitude bands.
+> 3. Open `~/training-program-2026/demos/demo5/forecastcheck/config/verification.toml`. Write down your country's thresholds, seasons and altitude bands.
 {: .exercise}
 
 > #### Exercise 2: Predict, Then Measure (10 min)
