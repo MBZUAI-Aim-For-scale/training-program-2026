@@ -18,6 +18,7 @@ from html import escape
 
 import streamlit as st
 
+import country_data
 import spark_setup as setup
 
 # Every demo in the training program, in order. `setup` is its id in demos.toml (once it has a Docker
@@ -449,6 +450,85 @@ def setup_page():
             demo_card(d, *s, run, busy)
 
     live()
+    country_data_card()
+
+
+# --- Demo 1: download this Spark's country data from the bucket -------------------------------
+
+@st.cache_data(ttl=300, show_spinner=False)
+def country_plan(country: str) -> tuple[int, int] | None:
+    """(files, bytes) of a country's data, or None if the bucket can't be read right now."""
+    try:
+        files = country_data.plan(country)
+    except (OSError, ValueError, KeyError, country_data.bucket_access.BucketError):
+        return None
+    return len(files), sum(int(o["size"]) for o in files)
+
+
+def start_country_download():
+    """Run country_data.py in the background; it outlives this page, like a setup run."""
+    country_data.LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(country_data.LOG, "a") as log:
+        subprocess.Popen([sys.executable, str(setup.HERE / "country_data.py")], cwd=setup.HERE,
+                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    time.sleep(0.5)  # lets it write its first status, so this page's next look already shows it running
+
+
+def country_progress(job: dict) -> str:
+    state, size = job["state"], country_data.size_text
+    pct = round(100 * job["done_bytes"] / job["total_bytes"]) if job["total_bytes"] else 0
+    done = f"{size(job['done_bytes'])} of {size(job['total_bytes'])}, {job['done_files']} of {job['total_files']} files"
+    if state == "running":
+        color, text = BLUE, f"<b>{pct}%</b> · {escape(done if job['total_files'] else job['detail'])}"
+    elif state == "interrupted":
+        color, text = ORANGE, f"<b>Stopped at {pct}%</b> · {escape(done)}. Finished files are kept."
+    elif state == "failed":
+        color, text = RED, f"<b>Failed</b> · {escape(job['detail'])}"
+    else:
+        color, text = GREEN, f"<b>Done</b> · {escape(job['detail'])}"
+    return (f'<div class="d1-prog" style="--p:{color}"><div class="bar"><span style="width:{pct}%"></span></div>'
+            f'<div class="txt">{text}</div></div>')
+
+
+@st.fragment(run_every=3)
+def country_data_card():
+    host = country_data.hostname()
+    country = country_data.country_from_hostname(host)
+    st.markdown('<div class="d1-section">Country data</div><div class="d1-rule"></div>', unsafe_allow_html=True)
+    with st.container(key="d1launch-data"):
+        if not country:
+            st.button("Download country data", key="launch-data-none", disabled=True)
+            st.markdown(f'<div class="d1-launch-note">No single country found in this Spark\'s name '
+                        f'(<code>{escape(host)}</code>). Known countries: '
+                        f'{escape(", ".join(c.replace("_", " ") for c in country_data.COUNTRIES))}.</div>',
+                        unsafe_allow_html=True)
+            return
+        job = country_data.read_status()
+        state = job["state"] if job else None
+        tag, text, go = {"running": ("ready", "Downloading", None),
+                         "done": ("ok", "Downloaded", "Check for updates"),
+                         "failed": ("warn", "Not finished", "Try again"),
+                         "interrupted": ("warn", "Stopped", "Resume download"),
+                         }.get(state, ("off", "Not downloaded", f"Download {country.replace('_', ' ')} data"))
+        plan = country_plan(country)
+        about = (f"{plan[0]:,} files, {country_data.size_text(plan[1])}" if plan
+                 else "Size unknown: can't read the bucket right now")
+        info, button = st.columns([0.72, 0.28])
+        info.markdown(f'<div class="d1-launch-k">{escape(host)} · {escape(country.replace("_", " "))}</div>'
+                      f'<div class="d1-launch-status"><span class="d1-tag {tag}">{text}</span></div>'
+                      f'<div class="d1-launch-note">{escape(about)}, saved to '
+                      f'<code>{escape(str(country_data.data_dir(country)))}</code>.</div>', unsafe_allow_html=True)
+        with button:
+            if state == "running":
+                st.button("Stop download", key="stop-data", width="stretch", on_click=country_data.stop,
+                          help="Finished files are kept; the next download skips them")
+            else:
+                st.button(go, key="launch-data", type="primary", width="stretch", on_click=start_country_download,
+                          help="Keeps going if you close this page. Files already here are skipped.")
+        if job:
+            st.markdown(country_progress(job), unsafe_allow_html=True)
+            with st.expander("Command-line output"):
+                st.code(setup.tail(country_data.LOG, 200) or "no output yet", language=None, height=320)
 
 
 # --- Demos 2+: a short page about the demo, and a Launch button that opens it in a new tab -----

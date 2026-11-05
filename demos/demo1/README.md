@@ -23,7 +23,8 @@ python3 spark_setup.py --rebuild          # rebuild images even if they're up to
 python3 spark_setup.py --host-only        # host checks only
 python3 spark_setup.py status             # last run, with suggested fixes
 python3 spark_setup.py dashboard [--stop] # start or stop just the dashboard
-bash shutdown.sh                          # stop any setup run, the dashboard and all containers
+python3 country_data.py [--plan]          # download this Spark's country data (or just show its size)
+bash shutdown.sh                          # stop any setup run, download, the dashboard and all containers
 ```
 
 **Rebuilds:** an image is rebuilt when the code it's built from changed (after a `git pull`,
@@ -34,6 +35,19 @@ edits don't count. An image built before this, or copied from another Spark with
 `--build-only` is for unattended setup, after a pull, for example: it builds what changed and
 starts nothing, since only one demo runs at a time. A demo container that's already running
 keeps its old image until it's stopped and launched again.
+
+**Country data:** the button at the bottom of the Demo 1 page downloads this Spark's data from the
+program's Google bucket, keeping going if you close the page. The country comes from the Spark's
+name (`kenya-spark` is Kenya, `sierra-leone-spark` is Sierra Leone). It fetches the country's 312
+files, one a year for 2000-2025, into `~/<country>_data` (such as `~/kenya_data`) with the same paths as the bucket
+(`SPARK_DATA_DIR` changes the location):
+
+- `CHIRPSv3_Country_0p25deg/<COUNTRY>/`
+- `CHIRTS_Country_0p25deg/<Tmax|Tmin>/<COUNTRY>/`
+- `Forecasts_Country_0p25deg/<AIFS_ENS_v2|AIFS_v2|graphcast>/<tp|t2m_max|t2m_min>/<COUNTRY>/`
+
+Sizes range from about 2 GB (Rwanda) to about 269 GB (Chile), and it checks the disk first. Clicking
+again skips files already downloaded. Nothing else in the bucket is downloaded.
 
 **Host checks:** GPU, Docker, GPU access from containers, the after-reboot GPU wait
 (SETUP.md step 1, installed if missing), disk space, read access to the program's Google
