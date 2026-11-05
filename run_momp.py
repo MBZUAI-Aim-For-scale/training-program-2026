@@ -21,14 +21,12 @@ from pathlib import Path
 # Paths
 # ------------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).resolve().parent
-if (PROJECT_ROOT / "ai_weather" / "config.py").is_file():
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(PROJECT_ROOT))
-    from ai_weather import config
+SOURCE_ROOT = PROJECT_ROOT / "demos/demo4"
+if (SOURCE_ROOT / "ai_weather/config.py").is_file():
+    sys.path.insert(0, str(SOURCE_ROOT))
+from ai_weather import config
 
-    sys.modules["config"] = config
-else:
-    import config
+sys.modules["config"] = config
 
 LOCAL_ROMP_ROOT = PROJECT_ROOT / "apps" / "benchmarking" / "ROMP"
 if (LOCAL_ROMP_ROOT / "momp" / "driver.py").is_file():

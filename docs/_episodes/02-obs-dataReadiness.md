@@ -21,20 +21,12 @@ keypoints:
 
 # Observational Data Readiness
 
-<<<<<<< HEAD
 # CDT Exercise
 
-##  Download Data
-
-## Download Country Administrative Boundaries
-
-
-The menu Data Preparation ‣ Download Country boundary   allows to download the country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
-=======
 ## Download Data
 ## Download Country Administrative Boundaries
 
-The menu [**Data Preparation** ‣ **Download Country boundary**]() allows you to download country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
+The menu **Data Preparation** ‣ **Download Country boundary** allows you to download country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
 
 ![CDT Download Interface](../fig/cdt_1.png)
 
@@ -273,6 +265,5 @@ Type into the R console the following command to get help on the available argum
 
 Click on the button  to start the merging.
 A folder named **MERGED_<name of climate variable>_Data_<start date>_<end date>** will be created under the folder you provided to save the outputs. It contains the netCDF files of the merged data and a log file.
->>>>>>> 3e0f7a15957d9bbcb53b0d3f64d9ab09dea9db9a
 
 

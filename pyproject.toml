@@ -84,5 +84,5 @@ exclude = '''
 '''
 
 [tool.ruff.lint.isort]
-known_first_party = ["ai_weather", "momp", "apps", "config", "ui"]
-force_sort_within_sections = true
+known-first-party = ["ai_weather", "momp", "apps", "config", "ui"]
+force-sort-within-sections = true

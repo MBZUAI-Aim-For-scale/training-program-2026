@@ -17,7 +17,9 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-ROOT = Path(__file__).resolve().parents[1]
+SOURCE_ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(SOURCE_ROOT))
 PYTHON = str(ROOT / '.venv' / 'bin' / 'python')
 
 

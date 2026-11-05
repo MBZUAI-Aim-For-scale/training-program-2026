@@ -33,8 +33,8 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 > #### Prerequisites
 > 
 > * Complete the Docker container setup in [Demo 1: Setting Up AI Weather Forecasting Lab](/training-program-2026/01-setup/) before proceeding.
-> * The container stack must be running (`bash docker/run.sh start`). ROMP and all model environments are pre-installed inside the container.  See [Demo 1, Section 7](/training-program-2026/01-setup#7-rompmomp-benchmarking-configuration).
-> * Familiarity with the Demo 3 Streamlit interface (`http://localhost:8501`) and NetCDF output format.
+> * The container stack must be running (`bash demos/demo4/docker/run.sh start`). ROMP and all model environments are pre-installed inside the container.  See [Demo 1, Section 7](/training-program-2026/01-setup#7-rompmomp-benchmarking-configuration).
+> * Familiarity with the Demo 3 Streamlit interface (`http://localhost:8503`) and NetCDF output format.
 > {: .prereq}
 
 
@@ -60,25 +60,25 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 3. **Start the container stack**
 
 	```{bash}
-	bash docker/run.sh start
+	bash demos/demo4/docker/run.sh start
 
 	```
 
-	Use `bash docker/run.sh rebuild` after image/dependency changes. The current Compose file mounts the repository at `/app`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
+	Use `bash demos/demo4/docker/run.sh rebuild` after image/dependency changes. The Demo 4 Compose file mounts `demos/demo4` at `/app` and the root runner at `/app/run_momp.py`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
 
 4. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
 
 	```{bash}
-	ssh -L 8501:localhost:8501 <you>@country-spark
+	ssh -N -L 8503:127.0.0.1:8503 <you>@country-spark
 
 	```
 
 
 5. **Access dashboards**:
 
-	* **Streamlit UI**: `http://localhost:8501`; click **Benchmarking** in the top menu.
+	* **Streamlit UI**: `http://localhost:8503`; click **Benchmarking** in the top menu.
 
-	The numerical and figure-reading exercises use the saved CSVs and figures. Run benchmarks through `run_momp.py` or the existing dashboard at `ui/pages/short_medium_benchmarking.py`. Scientific regeneration requires the matching prepared input files and the settings stated below.
+	The numerical and figure-reading exercises use the saved CSVs and figures. Run benchmarks through `run_momp.py` or the existing dashboard at `demos/demo4/ui/pages/short_medium_benchmarking.py`. Scientific regeneration requires the matching prepared input files and the settings stated below.
 
 
 ## Learning Objectives

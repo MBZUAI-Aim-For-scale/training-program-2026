@@ -1,4 +1,5 @@
-VERIFICATION_COUNTRY=Ethiopia \
-VERIFICATION_DATA_DIR=$(pwd)/data/diagnostics \
-OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES streamlit run ui/app.py --server.port 8502
-
+#!/usr/bin/env bash
+# Compatibility entrypoint for the relocated Demo 4 Docker stack.
+set -euo pipefail
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "$script_dir/demos/demo4/docker/run.sh" "$@"

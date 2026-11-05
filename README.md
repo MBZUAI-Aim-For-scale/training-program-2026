@@ -10,6 +10,18 @@ The program is designed to provide an interactive learning experience over the A
 
 ## Project Organization
 
+Demo 4's application, UI, tests and Docker stack live in [demos/demo4](demos/demo4/README.md).
+From the repository root, start it with `bash demos/demo4/docker/run.sh start`.
+The root `run.sh`, `docker-compose.yml`, and `demos/demo4/run.sh` forward to the
+same stack. It publishes the dashboard on remote host port **8503**:
+
+```bash
+ssh -N -L 8503:127.0.0.1:8503 <you>@country-spark
+```
+
+Open `http://localhost:8503`. The benchmark CLI remains at `run_momp.py` in the
+repository root.
+
 ```
 ├── LICENSE            <- Open-source license if one is chosen
 ├── Makefile           <- Makefile with convenience commands like `make data` or `make train`

@@ -38,7 +38,7 @@ DEMOS = [
      "container": "demo3", "setup": "demo3"},
     {"n": 4, "title": "The AI weather model scorecard",
      "about": "Compare models across evaluation metrics and explore the AI Almanac for your use case.",
-     "container": "demo4", "setup": "demo4", "path": "/?page=SM_Benchmarking"},
+     "container": "ai_weather", "setup": "demo4", "path": "/?page=SM_Benchmarking"},
     {"n": 5, "title": "Putting your forecast to the test",
      "about": "Evaluate the forecasts you ran in Demo 3 against different metrics."},
     # {"n": 6, "title": "Ground truth challenge",

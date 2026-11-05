@@ -87,9 +87,10 @@ def main():
     args = parser.parse_args()
 
     here = Path(__file__).resolve().parent
-    app_file = here / "ui/app.py"
-    if not app_file.exists():
-        print(f"ERROR: app.py not found at {app_file}")
+    candidates = [here / "demos/demo4/ui/app.py", here / "ui/app.py"]
+    app_file = next((path for path in candidates if path.is_file()), None)
+    if app_file is None:
+        print("ERROR: app.py not found in demos/demo4/ui or ui.")
         return 1
 
     if args.use_uv:

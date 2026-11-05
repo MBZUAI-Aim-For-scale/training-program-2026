@@ -41,7 +41,7 @@ class PackagingAuditTests(unittest.TestCase):
     def test_installed_momp_package_is_found_without_vendored_apps_tree(self):
         import ast
         import tempfile
-        tree = ast.parse(Path('ai_weather/config.py').read_text())
+        tree = ast.parse((Path(__file__).resolve().parents[1] / 'ai_weather/config.py').read_text())
         function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                         and node.name == '_find_momp_package_dir')
         namespace = {'Path': Path}

@@ -7,9 +7,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from ai_weather.runtime import check_runtime_python, select_runtime_python
-
 PROJECT_ROOT = Path(__file__).resolve().parent
+SOURCE_ROOT = PROJECT_ROOT / "demos/demo4"
+if (SOURCE_ROOT / "ai_weather/config.py").is_file():
+    sys.path.insert(0, str(SOURCE_ROOT))
+
+from ai_weather.runtime import check_runtime_python, select_runtime_python
 
 
 def main(argv=None):

@@ -88,14 +88,6 @@ elif [ -f "$ADC" ]; then
   export GOOGLE_APPLICATION_CREDENTIALS="/run/gcp-adc.json"
 fi
 
-cleanup_standalone_conflicts() {
-  # Force remove any lingering container named 'ai_weather' to prevent Compose collision
-  if docker ps -a --format '{{.Names}}' | grep -q "^ai_weather$"; then
-    echo "[INFO] Cleaning up conflicting container 'ai_weather'..."
-    docker rm -f ai_weather >/dev/null 2>&1 || true
-  fi
-}
-
 check_gpu_availability() {
   echo "Checking GPU availability..."
   if command -v nvidia-smi >/dev/null 2>&1; then
@@ -107,11 +99,11 @@ check_gpu_availability() {
 }
 
 start_compose() {
-  cleanup_standalone_conflicts
   check_gpu_availability
   echo "Starting AI Weather services via Docker Compose..."
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
-  echo "[SUCCESS] AI Forecasting operational: http://localhost:8503"
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120
+  echo "[SUCCESS] Streamlit is healthy on the remote host: http://127.0.0.1:8503"
+  echo "[INFO] SSH tunnel: ssh -N -L 8503:127.0.0.1:8503 <you>@country-spark"
 }
 
 # ----------------------------------------------------------------------
@@ -127,30 +119,28 @@ case "${1:-start}" in
     ;;
 
   restart)
-    cleanup_standalone_conflicts
     echo "Restarting AI Weather services..."
     docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120
     echo "[SUCCESS] Services restarted."
     ;;
 
   update)
     echo "Pulling latest git updates..."
     git -C "$here" pull
-    cleanup_standalone_conflicts
     if [ "${DEV:-0}" = "1" ]; then
-      echo "DEV=1 enabled; restarting services..."
-      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart
+      echo "DEV=1 enabled; recreating services with live code mounts..."
+      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120
     else
       echo "Updating container with incremental build cache..."
-      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build
+      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --wait --wait-timeout 120
     fi
     ;;
 
   rebuild)
-    cleanup_standalone_conflicts
     echo "Rebuilding image from scratch..."
     docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --no-cache
-    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --force-recreate
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --force-recreate --wait --wait-timeout 120
     ;;
 
   down|stop)
