@@ -59,6 +59,7 @@ for _d in DEMOS + [t for d in DEMOS for t in d.get("tools", [])]:
         _d["container"] = _IN_TOML[_d["setup"]]["container"]
         _d["image"] = _IN_TOML[_d["setup"]]["image"]
 LESSONS = setup.REPO / "docs" / "_episodes"
+DOCS_SITE = "https://mbzuai-aim-for-scale.github.io/training-program-2026"
 
 # Same palette as Demo 3; the top bar uses the shared site's navy
 NAVY, NAVY_DARK, BLUE, TEAL = "#1f2f6b", "#172457", "#4b6fd6", "#3f8f7a"
@@ -226,6 +227,22 @@ def lesson(n: int) -> dict:
         elif line.lstrip().startswith("- ") and isinstance(info.get(key), list):
             info[key].append(line.strip()[2:].strip().strip('"'))
     return info
+
+
+def lesson_url(n: int) -> str | None:
+    """A demo's lesson on the docs site. Its address is the lesson's file name, which Jekyll lowercases."""
+    files = sorted(LESSONS.glob(f"{n:02d}-*.md"))
+    return f"{DOCS_SITE}/{files[0].stem.lower()}/" if files else None
+
+
+def page_header(n: int, title: str, sub: str = ""):
+    """A demo tab's title, with a button to its lesson on the docs site."""
+    text, button = st.columns([0.76, 0.24], vertical_alignment="center")
+    text.markdown(f'<div class="d1-page-title">{escape(title)}</div><div class="d1-page-sub">{escape(sub)}</div>',
+                  unsafe_allow_html=True)
+    if url := lesson_url(n):
+        button.link_button("Additional information ↗", url, width="stretch",
+                           help=f"Opens the Demo {n} lesson in a new tab")
 
 
 def status(demo: dict) -> tuple[str, str, str | None]:
@@ -430,9 +447,8 @@ def demo_card(demo: dict, kind: str, label: str, link: str | None, run: dict | N
 
 
 def setup_page():
-    st.markdown('<div class="d1-page-title">Setting Up Your AI Weather Forecasting Lab</div>'
-                '<div class="d1-page-sub">Every demo in the training program, and whether it is running on '
-                'this Spark.</div>', unsafe_allow_html=True)
+    page_header(1, "Setting Up Your AI Weather Forecasting Lab",
+                "Every demo in the training program, and whether it is running on this Spark.")
 
     @st.fragment(run_every=3)  # re-reads Docker and the setup progress every few seconds
     def live():
@@ -540,8 +556,7 @@ def bullets(items: list[str], cls: str = "") -> str:
 
 def demo_page(demo: dict):
     info = lesson(demo["n"])
-    st.markdown(f'<div class="d1-page-title">Demo {demo["n"]} · {escape(demo["title"])}</div>'
-                '<div class="d1-page-sub"></div>', unsafe_allow_html=True)
+    page_header(demo["n"], f'Demo {demo["n"]} · {demo["title"]}')
 
     blurb, card = st.columns([0.6, 0.4], gap="large")
     with blurb:
