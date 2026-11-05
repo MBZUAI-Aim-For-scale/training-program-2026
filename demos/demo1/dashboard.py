@@ -472,7 +472,7 @@ def setup_page():
 
 # --- Demo 1: download this Spark's country data from the bucket -------------------------------
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner="Checking the bucket …")
 def country_plan(country: str) -> tuple[int, int] | None:
     """(files, bytes) of a country's data, or None if the bucket can't be read right now."""
     try:

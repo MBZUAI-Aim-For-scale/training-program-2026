@@ -102,10 +102,10 @@ def request(token: Token, url: str) -> urllib.request.Request:
     return urllib.request.Request(url, headers={"Authorization": f"Bearer {token.get()}"})
 
 
-def list_objects(token: Token) -> list[dict]:
+def list_objects(token: Token, prefix: str) -> list[dict]:
     objects, page = [], None
     while True:
-        query = {"maxResults": 1000, "fields": "nextPageToken,items(name,size,updated,md5Hash)"}
+        query = {"prefix": prefix, "maxResults": 1000, "fields": "nextPageToken,items(name,size,updated,md5Hash)"}
         if page:
             query["pageToken"] = page
         with urllib.request.urlopen(request(token, f"{API}/{BUCKET}/o?{urllib.parse.urlencode(query)}"),
@@ -137,7 +137,12 @@ def select(objects: list[dict], country: str) -> list[dict]:
 
 
 def plan(country: str, token: Token | None = None) -> list[dict]:
-    return select(list_objects(token or Token()), country)
+    """The country's files in the bucket. Lists only its folders: the whole bucket takes about 15 times as long."""
+    token = token or Token()
+    folders = sorted({name.rsplit("/", 1)[0] + "/" for name in layout_names(country)})
+    with ThreadPoolExecutor(WORKERS) as pool:
+        listings = pool.map(lambda folder: list_objects(token, folder), folders)
+        return select([o for listing in listings for o in listing], country)
 
 
 # --- Downloading --------------------------------------------------------------------------
