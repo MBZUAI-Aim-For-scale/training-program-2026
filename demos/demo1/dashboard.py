@@ -20,8 +20,9 @@ import streamlit as st
 
 import spark_setup as setup
 
-# Every demo in the training program, in order. `container` is set once a demo has a Docker image;
-# `setup` is its id in demos.toml, whose steps spark_setup.py records in state/status.json.
+# Every demo in the training program, in order. `setup` is its id in demos.toml (once it has a Docker
+# image), whose steps spark_setup.py records in state/status.json; its `container` and `image` names
+# come from there too (below), so the two can't disagree.
 # `path` is added to the container's address, to open a page inside a bigger site; `health` is the page
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
 # launches with their own button (named by `label`); they don't count towards the one-demo-at-a-time rule.
@@ -31,23 +32,30 @@ DEMOS = [
     {"n": 2, "title": "Observational data readiness",
      "about": "How ENACTS is built by combining rain gauges with satellite products.",
      "tools": [{"n": 2, "tool": "cdt", "label": "CDT", "title": "Climate Data Tools",
-                "about": "The CDT desktop app, in the browser over VNC.", "container": "cdt", "setup": "cdt",
+                "about": "The CDT desktop app, in the browser over VNC.", "setup": "cdt",
                 "path": "/vnc.html?autoconnect=1&reconnect=1&resize=remote", "health": "/vnc.html"}]},
     {"n": 3, "title": "Running your first AI weather forecast",
      "about": "Run AI weather models locally, end to end, for your use case.",
-     "container": "demo3", "setup": "demo3"},
+     "setup": "demo3"},
     {"n": 4, "title": "The AI weather model scorecard",
      "about": "Compare models across evaluation metrics and explore the AI Almanac for your use case.",
-     "container": "demo4", "setup": "demo4", "path": "/?page=SM_Benchmarking"},
+     "setup": "demo4", "path": "/?page=SM_Benchmarking"},
     {"n": 5, "title": "Putting your forecast to the test",
      "about": "Evaluate the forecasts you ran in Demo 3 against different metrics.",
-     "container": "forecastcheck", "setup": "demo5"},
+     "setup": "demo5"},
     # {"n": 6, "title": "Ground truth challenge",
     #  "about": "Compare model performance against different observational datasets."},
     # {"n": 7, "title": "Feasibility assessment",
     #  "about": "Decide which models, data and thresholds to take forward into a pilot."},
 ]
 BY_N = {d["n"]: d for d in DEMOS}
+# Each demo's (and tool's) container and image, as demos.toml names them. A `setup` that isn't
+# in demos.toml (or Demo 1 itself) gets no container: its page says it has none yet.
+_IN_TOML = {d["id"]: d for d in setup.load_config()["demo"]}
+for _d in DEMOS + [t for d in DEMOS for t in d.get("tools", [])]:
+    if _d.get("setup") in _IN_TOML:
+        _d["container"] = _IN_TOML[_d["setup"]]["container"]
+        _d["image"] = _IN_TOML[_d["setup"]]["image"]
 LESSONS = setup.REPO / "docs" / "_episodes"
 
 # Same palette as Demo 3; the top bar uses the shared site's navy
@@ -231,7 +239,7 @@ def status(demo: dict) -> tuple[str, str, str | None]:
         return "running", "Running", f"http://localhost:{ports[0]}{demo.get('path', '')}" if ports else None
     if c:
         return "stopped", f"Stopped ({c['State']['Status']})", None
-    if setup.inspect("image", name):
+    if setup.inspect("image", demo.get("image", name)):
         return "ready", "Ready to launch", None
     return "none", "Image not built", None
 
