@@ -77,5 +77,3 @@ demos/demo4/ai_weather/data/ROMP_OUT/**
 !demos/demo4/ai_weather/data/ROMP_OUT/**/benchmark_spec.json
 # Demo 5's fetched data and results (demos/demo5/run.sh), next to ForecastCheck's code
 demos/demo5/data/
-# A setup run's progress and logs, wherever spark_setup.py runs from (Demo 4's old copy too)
-demos/demo4/apps/setup/state/
