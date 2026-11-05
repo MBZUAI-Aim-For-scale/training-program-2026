@@ -378,7 +378,34 @@ def step_source(run, sid, log, demo, pull):
         if rc:
             raise Warn(f"{src['path']} has changes or commits of its own, so it wasn't updated: {last_line(out)}")
     r = subprocess.run(["git", "-C", str(dest), "log", "-1", "--format=%h %cs %s"], capture_output=True, text=True)
-    return f"{src['branch']} at {r.stdout.strip()[:120]}" + ("" if pull else " (not updated: --no-pull)")
+    notes = install_shortcuts(demo, log)
+    return (f"{src['branch']} at {r.stdout.strip()[:120]}" + ("" if pull else " (not updated: --no-pull)")
+            + "".join(f"; {n}" for n in notes))
+
+
+LAUNCHER_MARK = "# Installed by training-program-2026's spark_setup.py"
+
+
+def install_shortcuts(demo, log) -> list[str]:
+    """A demo's command in ~/.local/bin (`command`: name, script), which works from any folder.
+    A file of the same name that isn't ours is left alone (and said so)."""
+    notes = []
+    cmd = demo.get("command")
+    if cmd:
+        bin_dir = Path.home() / ".local" / "bin"
+        path = bin_dir / cmd["name"]
+        text = f"#!/bin/sh\n{LAUNCHER_MARK} (demos.toml: {demo['id']})\nexec bash {REPO / cmd['script']} \"$@\"\n"
+        if path.exists() and LAUNCHER_MARK not in path.read_text(errors="replace"):
+            notes.append(f"~/.local/bin/{cmd['name']} is something else, left as it is")
+        else:
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            if not path.exists() or path.read_text() != text:
+                path.write_text(text)
+                path.chmod(0o755)
+                log.write(f"installed {path}\n")
+            if str(bin_dir) not in os.environ.get("PATH", "").split(":"):
+                notes.append(f"`{cmd['name']}` works after logging in again (or: source ~/.profile)")
+    return notes
 
 
 def source_fingerprint(demo: dict) -> str | None:
