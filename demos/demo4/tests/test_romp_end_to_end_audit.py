@@ -24,7 +24,7 @@ PYTHON = str(ROOT / '.venv' / 'bin' / 'python')
 
 
 class ROMPEndToEndAuditTests(unittest.TestCase):
-    def fixture(self, root, probabilistic):
+    def fixture(self, root, probabilistic, *, daily_rates=False, parallel=False):
         external = root / 'external'
         observations = external / 'CHIRPS_regridded_025' / 'Ethiopia'
         model = external / ('aifs_ens' if probabilistic else 'aifs_single')
@@ -59,6 +59,9 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
             rainfall = xr.DataArray(amounts, dims=('init_time', 'step', 'lat', 'lon'),
                                     coords={'init_time': initialization, 'step': steps, **coordinates},
                                     attrs={'units': 'm'})
+        if daily_rates:
+            rainfall = rainfall * 1000
+            rainfall.attrs['units'] = 'mm/day'
         xr.Dataset({'tp': rainfall}).to_netcdf(model / '2023.nc')
         mask = external / 'jjas_100mm_rainfall_mask_0p25.nc'
         xr.Dataset({'mask': xr.DataArray(np.ones((2, 2)), dims=('lat', 'lon'),
@@ -74,7 +77,7 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
         schedule = {'eval_start': '2023-05-15', 'eval_end': '2023-05-18',
                     'baseline_start_year': 2021, 'baseline_end_year': 2022,
                     'initialization_days': list(range(7)), 'init_type': 'daily',
-                    'date_filter_year': 2023, 'run_years_concurrently': False,
+                    'date_filter_year': 2023, 'run_years_concurrently': parallel,
                     'ensemble_forecast': probabilistic, 'max_forecast_day': 15,
                     'verification_window_list': [[1, 15]], 'tolerance_days_list': [3]}
         key = 'AIFS_ENS' if probabilistic else 'AIFS'
@@ -83,8 +86,8 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
                                     'models': [{'exec_key': key, **schedule}]}))
         return key, spec, {**shared, **schedule, 'forecast_window': '1-15'}
 
-    def run_interfaces(self, root, probabilistic):
-        key, spec, settings = self.fixture(root, probabilistic)
+    def run_interfaces(self, root, probabilistic, *, daily_rates=False, parallel=False):
+        key, spec, settings = self.fixture(root, probabilistic, daily_rates=daily_rates, parallel=parallel)
         env = dict(os.environ)
         # A developer's shell overrides must not change this controlled experiment.
         for name in list(env):
@@ -130,6 +133,19 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
                 np.testing.assert_allclose(result.false_alarm_rate, [[0., 0.], [np.nan, .5]], equal_nan=True)
                 np.testing.assert_allclose(result.miss_rate, [[0., 0.], [1., 0.]])
                 np.testing.assert_allclose(result.mean_mae, [[0., 1.], [np.nan, 2.5]], equal_nan=True)
+
+    def test_daily_rates_run_in_parallel_through_cli_and_dashboard(self):
+        for probabilistic in (False, True):
+            with self.subTest(probabilistic=probabilistic), tempfile.TemporaryDirectory(prefix='romp-e2e-rates-') as folder:
+                cli, dashboard = self.run_interfaces(Path(folder), probabilistic=probabilistic,
+                                                      daily_rates=True, parallel=True)
+                self.assert_netcdf_parity(cli, dashboard)
+                model = 'aifs_ens' if probabilistic else 'aifs_single'
+                with xr.open_dataset(cli / f'{model}/spatial_metrics_{model}_1-15.nc') as result:
+                    if probabilistic:
+                        np.testing.assert_allclose(result.mean_mae, 0.)
+                    else:
+                        np.testing.assert_allclose(result.mean_mae, [[0., 1.], [np.nan, 2.5]], equal_nan=True)
 
     def test_probabilistic_cli_and_dashboard_match_with_disjoint_baseline_years(self):
         with tempfile.TemporaryDirectory(prefix='romp-e2e-prob-') as folder:

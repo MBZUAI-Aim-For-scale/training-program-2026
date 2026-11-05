@@ -12,7 +12,6 @@ from functools import lru_cache
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import xarray as xr
 
 # Import config safely across main and worker processes
 try:
@@ -457,7 +456,10 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
 
         p_model = ds[model_var]
 
-        return precipitation_to_mm(p_model, unit_cvt).load()
+        # The formatter marks validated, consecutive one-day leads as "days".
+        # A renamed dimension without that evidence cannot integrate rate units.
+        duration = 1 if ds["step"].attrs.get("units") == "days" else None
+        return precipitation_to_mm(p_model, unit_cvt, sample_duration_days=duration).load()
 
 
 def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_var=None, date_filter_year=None, init_days=None,
@@ -555,4 +557,5 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
 
         p_model = ds[model_var]
 
-        return precipitation_to_mm(p_model, unit_cvt).load()
+        duration = 1 if ds["step"].attrs.get("units") == "days" else None
+        return precipitation_to_mm(p_model, unit_cvt, sample_duration_days=duration).load()

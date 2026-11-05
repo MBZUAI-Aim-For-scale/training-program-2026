@@ -69,7 +69,7 @@ class PrecipitationUnitTests(unittest.TestCase):
                                     sample_duration_days=duration)
 
     def test_ui_small_mm_values_stay_mm_and_conversion_is_idempotent(self):
-        path = Path("ui/pages/short_medium_benchmarking.py")
+        path = Path(__file__).resolve().parents[1] / "ui/pages/short_medium_benchmarking.py"
         tree = ast.parse(path.read_text())
         function = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
                         and n.name == "normalize_aifs_precipitation_dataset")

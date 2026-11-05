@@ -7,7 +7,6 @@ import subprocess
 import tempfile
 import unittest
 
-
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -43,7 +42,7 @@ fi
                 env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}",
                      "DOCKER_TEST_LOG": str(log), "DOCKER_TEST_FAIL_READY": str(int(fail_ready)),
                      "DOCKER_TEST_EXISTING": str(int(existing))},
-                capture_output=True, text=True, timeout=10)
+                capture_output=True, text=True, timeout=10, check=False)
             return result, log.read_text(), str(env_file.resolve())
 
     def test_start_from_relocated_docker_folder_waits_for_health(self):
