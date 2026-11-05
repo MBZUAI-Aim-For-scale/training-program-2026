@@ -4,7 +4,9 @@
   python3 spark_setup.py                      start the dashboard, check the host, then build,
                                               start and health-check a container for every demo
   python3 spark_setup.py --only demo3         host checks + one demo (repeatable)
-  python3 spark_setup.py --rebuild            rebuild demo images even if they exist
+  python3 spark_setup.py --rebuild            rebuild demo images even if they're up to date
+  python3 spark_setup.py --build-only         host checks + build images (if their code changed),
+                                              start nothing: the dashboard's Launch starts a demo
   python3 spark_setup.py --host-only          host checks only
   python3 spark_setup.py --no-dashboard       terminal output only
   python3 spark_setup.py status               print the last run's steps
@@ -14,10 +16,17 @@ Standard library only, so it runs on a fresh Spark before anything is installed;
 dashboard's Streamlit goes into .venv/ here on first use. Progress goes to
 state/status.json and each step's output to state/logs/<step>.log; dashboard.py reads both.
 The demos are listed in demos.toml.
+
+An image is rebuilt when the code it's built from changed: each build is labelled with a
+fingerprint of its committed sources (its `watch` paths in demos.toml, by default its build
+context and Dockerfile), and a later run rebuilds when the checkout's fingerprint differs.
+Uncommitted edits don't count (use --rebuild). An image built before this, or copied from
+another Spark without the label, is kept as it is until --rebuild.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -43,6 +52,7 @@ VENV = HERE / ".venv"
 DASHBOARD_PID = STATE / "dashboard.pid"
 GPU_WAIT = Path.home() / ".config/systemd/user/docker.service.d/wait-for-gpu.conf"
 MIN_FREE_GB = 150  # one demo image (~50 GB) plus model weights (~90 GB)
+SOURCE_LABEL = "ai_weather.source"  # an image's source fingerprint (see source_fingerprint)
 
 # Known failure messages -> what to do. Matched against step output and container errors.
 HINTS = [
@@ -332,11 +342,47 @@ def step_bucket(run, sid, log):
 BUILD_STEP = re.compile(r"^#\d+ \[(?:[\w.-]+ )?\s*(\d+)/(\d+)\] (.*)")
 
 
+def source_fingerprint(demo: dict) -> str | None:
+    """A fingerprint of the committed files the demo's image is built from: git's hashes of
+    its `watch` paths (default: its build context and Dockerfile) at HEAD. None outside a git
+    checkout, or if a path isn't committed (then images are only rebuilt with --rebuild)."""
+    parts = []
+    for path in demo.get("watch") or [demo["context"], demo["dockerfile"]]:
+        rel = os.path.normpath(path)
+        rel = "" if rel == "." else rel
+        try:
+            r = subprocess.run(["git", "-C", str(REPO), "rev-parse", f"HEAD:{rel}"],
+                               capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if r.returncode != 0:
+            return None
+        parts.append(f"{rel or '.'}={r.stdout.strip()}")
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
+
+
+def image_source(image: dict | None) -> str | None:
+    """The source fingerprint an image was built from (its label), if it has one."""
+    return (((image or {}).get("Config") or {}).get("Labels") or {}).get(SOURCE_LABEL)
+
+
 def step_build(run, sid, log, demo, rebuild):
-    image = inspect("image", demo["image"])
+    image, source = inspect("image", demo["image"]), source_fingerprint(demo)
     if image and not rebuild:
-        log.write(f"image {demo['image']} exists; pass --rebuild to rebuild it\n")
-        return f"image present (built {image['Created'][:10]}, {image.get('Size', 0) / 1e9:.0f} GB)"
+        built = f"built {image['Created'][:10]}, {image.get('Size', 0) / 1e9:.0f} GB"
+        have = image_source(image)
+        if source is None:
+            log.write(f"image {demo['image']} exists; its sources aren't in a git checkout: pass --rebuild to rebuild it\n")
+            return f"image present ({built})"
+        if have is None:
+            log.write(f"image {demo['image']} exists but has no {SOURCE_LABEL} label (built before source tracking, "
+                      "or copied from another Spark); kept as it is: pass --rebuild to rebuild it\n")
+            return f"image present ({built}; not tracked yet: --rebuild to refresh it)"
+        if have == source:
+            log.write(f"image {demo['image']} is up to date with its sources ({source})\n")
+            return f"image up to date ({built})"
+        log.write(f"the code {demo['image']} is built from changed ({have} -> {source}); rebuilding\n")
+        run.update(sid, detail="its code changed since the last build; rebuilding")
 
     def on_line(line):
         m = BUILD_STEP.match(line)
@@ -345,11 +391,17 @@ def step_build(run, sid, log, demo, rebuild):
             run.update(sid, throttle=True, progress=(done - 1) / total,
                        detail=f"layer {done}/{total}: {what[:120]}")
 
-    cmd = ["docker", "build", "--progress=plain", "-t", demo["image"], "-f", demo["dockerfile"], demo["context"]]
-    rc, out = sh(cmd, log, on_line=on_line)
+    cmd = ["docker", "build", "--progress=plain", "-t", demo["image"], "-f", demo["dockerfile"]]
+    if source:
+        cmd += ["--label", f"{SOURCE_LABEL}={source}"]
+    rc, out = sh([*cmd, demo["context"]], log, on_line=on_line)
     if rc:
         errors = [l for l in out.splitlines() if re.search(r"error|failed", l, re.I)]
         raise Failed(f"docker build failed: {(errors or [last_line(out)])[-1][:300]}")
+    # A container still running the previous image keeps it until it's recreated.
+    c, new = inspect("container", demo["container"]), inspect("image", demo["image"])
+    if c and c["State"]["Running"] and new and c.get("Image") != new.get("Id"):
+        return "image built (its running container still uses the previous one: Stop and Launch it to switch)"
     return "image built"
 
 
@@ -451,15 +503,17 @@ HOST_STEPS = [
 ]
 
 
-def plan(cfg: dict, only: list[str] | None, host_only: bool) -> tuple[list[dict], list[dict]]:
+def plan(cfg: dict, only: list[str] | None, host_only: bool,
+         build_only: bool = False) -> tuple[list[dict], list[dict]]:
     demos = [] if host_only else [d for d in cfg["demo"] if not only or d["id"] in only]
     if only and not host_only and len(demos) != len(only):
         sys.exit(f"unknown demo id(s): {set(only) - {d['id'] for d in demos}}")
     steps = [{"id": sid, "group": "demo1", "title": title} for sid, title, _ in HOST_STEPS]
     for d in demos:
-        steps += [{"id": f"{d['id']}.build", "group": d["id"], "title": f"Build image `{d['image']}`"},
-                  {"id": f"{d['id']}.start", "group": d["id"], "title": f"Start container `{d['container']}`"},
-                  {"id": f"{d['id']}.health", "group": d["id"], "title": f"Page answers on :{d['port']}"}]
+        steps.append({"id": f"{d['id']}.build", "group": d["id"], "title": f"Build image `{d['image']}`"})
+        if not build_only:  # (--build-only: the dashboard's Launch starts it, one demo at a time)
+            steps += [{"id": f"{d['id']}.start", "group": d["id"], "title": f"Start container `{d['container']}`"},
+                      {"id": f"{d['id']}.health", "group": d["id"], "title": f"Page answers on :{d['port']}"}]
     return demos, steps
 
 
@@ -470,7 +524,7 @@ def cmd_run(args, argv):
         sys.exit(f"setup already running (pid {LOCK.read_text().strip()})")
     LOCK.write_text(str(os.getpid()))
     try:
-        demos, steps = plan(cfg, args.only, args.host_only)
+        demos, steps = plan(cfg, args.only, args.host_only, args.build_only)
         run = Run(steps, argv)
         if not args.no_dashboard:
             try:
@@ -494,6 +548,12 @@ def cmd_run(args, argv):
         for d in demos:
             ids = [f"{d['id']}.{s}" for s in ("build", "start", "health")]
             print(f"\n{d['title']}", flush=True)
+            if args.build_only:
+                if docker_ok:
+                    run.step(ids[0], step_build, d, args.rebuild)
+                else:
+                    run.skip(ids[0], "Docker isn't running")
+                continue
             if not docker_ok:
                 for sid in ids:
                     run.skip(sid, "Docker isn't running")
@@ -540,8 +600,11 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="run the setup (the default)")
     r.add_argument("--only", action="append", metavar="DEMO", help="demo id from demos.toml (repeatable)")
-    r.add_argument("--rebuild", action="store_true", help="rebuild images even if they exist")
-    r.add_argument("--host-only", action="store_true", help="host checks only")
+    r.add_argument("--rebuild", action="store_true", help="rebuild images even if they're up to date")
+    how = r.add_mutually_exclusive_group()
+    how.add_argument("--host-only", action="store_true", help="host checks only")
+    how.add_argument("--build-only", action="store_true",
+                     help="host checks and builds (of images whose code changed); start nothing")
     r.add_argument("--no-dashboard", action="store_true", help="don't start the progress dashboard")
     sub.add_parser("status", help="print the last run's steps")
     dash = sub.add_parser("dashboard", help="start just the progress dashboard")

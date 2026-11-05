@@ -46,15 +46,11 @@ cd training-program-2026
 ```
 
 
-3. **Initialize environment configuration**:
+3. **Environment configuration (optional)**: without a `.env`, `docker/run.sh` uses the
+program's bucket (`DEMO_BUCKET=aim4scale_training_2026`) and, on a Spark, its key at
+`/etc/fleet-gcs-key.json`. To use another bucket:
 ```bash
-cp .env.example .env
-cat <<EOF > .env
-DEMO_BUCKET=<bucket>
-DEMO3_BUCKET=gs://<bucket>/demo3
-DEMO4_BUCKET=<bucket>/demo4
-EOF
-
+cp .env.example .env    # then set DEMO_BUCKET=<bucket> in it
 ```
 
 

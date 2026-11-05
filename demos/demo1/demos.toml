@@ -1,10 +1,17 @@
 # What demo1 sets up on a Spark: host checks first, then one Docker container per demo.
 # Paths are relative to the ai_weather repo root. Add a [[demo]] block to track a new demo.
 #
-# Each demo gets three steps: build its image (skipped if the image exists, unless
-# `spark_setup.py run --rebuild`), start its container with `run`, and wait for its
-# Streamlit health endpoint on 127.0.0.1:<port> (or for the page at `health`, if the
-# container isn't a Streamlit app). Every demo needs its own port.
+# Each demo gets three steps: build its image (skipped while the image is up to date with
+# its code, unless `spark_setup.py run --rebuild`), start its container with `run`, and wait
+# for its Streamlit health endpoint on 127.0.0.1:<port> (or for the page at `health`, if the
+# container isn't a Streamlit app). Every demo needs its own port. `--build-only` does the
+# first step only.
+#
+# "Up to date with its code": the image is labelled with a fingerprint of the committed
+# files it's built from, its `watch` paths (repo-relative; default: `context` and
+# `dockerfile`). When a pull changes any of them, the next run rebuilds it. List the files
+# the Dockerfile copies when the context is bigger than that (as Demo 4's is), so unrelated
+# commits don't rebuild it.
 
 [dashboard]
 port = 8500
@@ -42,5 +49,7 @@ image = "ai_weather"
 container = "ai_weather"
 context = "."
 dockerfile = "demos/demo4/docker/Dockerfile"
+# What that Dockerfile copies (the context is the whole repo)
+watch = ["demos/demo4", "run_momp.py", "setup.py", "setup.cfg", "pyproject.toml"]
 run = ["bash", "demos/demo4/docker/run.sh", "start"]
 port = 8503

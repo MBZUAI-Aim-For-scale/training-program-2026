@@ -18,12 +18,22 @@ progress, flags errors, and suggests fixes.
 
 ```bash
 python3 spark_setup.py --only demo3       # host checks + one demo
-python3 spark_setup.py --rebuild          # rebuild images even if they exist
+python3 spark_setup.py --build-only       # host checks + builds, start nothing (Launch starts a demo)
+python3 spark_setup.py --rebuild          # rebuild images even if they're up to date
 python3 spark_setup.py --host-only        # host checks only
 python3 spark_setup.py status             # last run, with suggested fixes
 python3 spark_setup.py dashboard [--stop] # start or stop just the dashboard
 bash shutdown.sh                          # stop any setup run, the dashboard and all containers
 ```
+
+**Rebuilds:** an image is rebuilt when the code it's built from changed (after a `git pull`,
+say), not on every run. Each build is labelled with a fingerprint of its committed sources,
+its `watch` paths in `demos.toml` (by default its build context and Dockerfile); uncommitted
+edits don't count. An image built before this, or copied from another Spark with
+`docker save`/`load` and no label, is kept as it is until you run `--rebuild` once.
+`--build-only` is for unattended setup, after a pull, for example: it builds what changed and
+starts nothing, since only one demo runs at a time. A demo container that's already running
+keeps its old image until it's stopped and launched again.
 
 **Host checks:** GPU, Docker, GPU access from containers, the after-reboot GPU wait
 (SETUP.md step 1, installed if missing), disk space, read access to the program's Google
