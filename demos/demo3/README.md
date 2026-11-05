@@ -7,7 +7,7 @@ A Streamlit app, running on the DGX Spark, for running AI weather models. Partic
 **Status:**
 - All 7 models run live on the Spark from one Docker image (`docker/`), and saved runs load instantly.
 - The event movie (forecast vs observations) is Panchali's `demo3/event_movie/forecast_event_movie.py`.
-- Results are Panchali's event movie (forecast next to ERA5 observations, day by day) and event-track map, for heat or precipitation; plus how the forecast was made (load, inputs, run, save, with times on the Spark), maps of z500 / 2 m temperature / rainfall, and a NetCDF download.
+- Results are Panchali's event movie (forecast next to observations, day by day: CHIRPS v3 rainfall, CHIRTS daily maximum temperature) and event-track map, for heat or precipitation; plus how the forecast was made (load, inputs, run, save, with times on the Spark), maps of z500 / 2 m temperature / rainfall, and a NetCDF download.
 - Each model card lists what it needs on the Spark: weight size, peak GPU memory, output size, grid and inputs.
 - **Onset** use case: onset maps (forecast vs observed), the rainfall series and an onset movie, by a choice of definitions (ICPAC, Moron–Robertson, Moron–Robertson with MOK filter), each adjustable.
 - **Several models at once:** pick up to 4 models at the start. Saved runs load (or download from the shared bucket) and the rest run one after another. Results: how each forecast was made, event movies (or onset maps and movies) for the models you choose, a time-series comparison of all of them, and forecast maps.
@@ -54,7 +54,7 @@ demo3/movie.py         runs the event movie in the background for the loaded run
 demo3/results.py       pipeline stages, model requirements, forecast maps, NetCDF download
 demo3/onset.py         onset definitions and detection (matches ROMP), observed + forecast series
 demo3/onset_view.py    the onset tab: definition picker, maps, series, onset movie
-demo3/obs.py           CHIRPS daily rainfall (yearly files, downloaded once)
+demo3/obs.py           observations: CHIRPS v3 daily rainfall and CHIRTS daily Tmax (yearly files, downloaded once)
 demo3/runs.py          gets the selected models' forecasts: saved, downloaded, or run one at a time
 demo3/compare.py       the time-series comparison of the loaded models
 demo3/data/            ROMP's MWset: local 5-day wet-spell amounts for Moron–Robertson
@@ -87,10 +87,20 @@ Each run is one NetCDF file covering the whole globe:
 
 The results are Panchali's `demo3/event_movie/forecast_event_movie.py`, kept unchanged
 (drop in new versions as they come). `run_event_movie.py` adapts it to the Spark: it reads
-Demo 3's output files, and fetches ERA5 observations from Google's ARCO copy (cached in
-`outputs/_obs_cache/`) when the cluster's ERA5 folder isn't there. The use case picks the
-movie: **Heat** = daily max 2 m temperature, **Precipitation** = daily rainfall. Each movie is
-rendered once per request and saved under `outputs/_movies/`.
+Demo 3's output files and takes its observations from `demo3/obs.py`. The use case picks the
+movie: **Heat** = daily max 2 m temperature against CHIRTS, **Precipitation** = daily rainfall
+against CHIRPS v3. Both observations cover land only, so the forecast is blanked over the sea
+and outside the observed box, and the maps and regional series compare the same area. Each movie
+is rendered once per request and saved under `outputs/_movies/`.
+
+**Heat observations:** CHIRTS daily Tmax (CHIRTS-ERA5, 0.05°) from the yearly country boxes in
+`gs://aim4scale_training_2026/CHIRTS_Tmax_Country_Boxes`, downloaded once into
+`outputs/_obs/chirts/` (3–100 MB a country-year). Programme countries only; for other regions
+the page falls back to ERA5 from Google's ARCO copy (cached in `outputs/_obs_cache/`). Two
+things to know when reading heat results: the models give a value every 6 hours, so their daily
+maximum misses part of the afternoon peak (0.3–1.3 °C in our cases, measured with hourly ERA5);
+and CHIRTS reads warmer than ERA5 over land (0.4–3.6 °C in our cases), because it is built from
+station temperatures at 5 km. The heat chart can show ERA5 as a second line to make that visible.
 
 ## Results: onset
 
@@ -141,7 +151,8 @@ two at once.
 Results, in order: how each forecast was made (pick the model); event movies, made one at a
 time and only for the models chosen (default: the first); for Onset, onset maps per chosen model
 and onset movies; the time-series comparison of every loaded model (area-mean daily rainfall on
-the CHIRPS grid with CHIRPS, or daily maximum 2 m temperature with ERA5 on request; for Onset,
+the CHIRPS grid with CHIRPS v3, or daily maximum 2 m temperature on the CHIRTS grid with CHIRTS,
+plus ERA5 on request; for Onset,
 each model's onset share next to the observed one); forecast maps and the NetCDF download (pick
 the model).
 

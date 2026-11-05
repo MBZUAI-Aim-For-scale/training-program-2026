@@ -16,7 +16,7 @@ import xarray as xr
 
 from . import catalog, obs, onset, theme
 from .regions import Box
-from .results import crop
+from .results import crop, show_fig
 from .store import OUTPUT_DIR
 
 MOVIES = OUTPUT_DIR / "_movies"
@@ -313,13 +313,13 @@ def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, 
 
     if ens and pick == "chance of onset":
         a, b = st.columns(2)
-        a.pyplot(_prob_figure(f_on, init_day, land, box, n_days))
+        show_fig(a, _prob_figure(f_on, init_day, land, box, n_days))
         if o_on is not None:
-            b.pyplot(_maps_figure((oday.where(oday <= n_days), oposs), None, box, n_days,
+            show_fig(b, _maps_figure((oday.where(oday <= n_days), oposs), None, box, n_days,
                                   ["Observed onset (CHIRPS)"], init_day))
     else:
         right = (oday.where(oday <= n_days), oposs & (oday <= n_days)) if o_on is not None else None
-        st.pyplot(_maps_figure((fday, fposs), right, box, n_days,
+        show_fig(st, _maps_figure((fday, fposs), right, box, n_days,
                                [f"Forecast onset: {m.name}" + (f" ({pick})" if ens else ""),
                                 f"Observed onset (CHIRPS, to {obs_last:%-d %b})"], init_day))
     theme.hint("Grey: before the forecast · Hatched: possible onset · White: no onset yet",

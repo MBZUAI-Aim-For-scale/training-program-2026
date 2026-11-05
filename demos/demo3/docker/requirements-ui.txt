@@ -1,5 +1,6 @@
 # The Streamlit page and the event movie (versions from the image the page was built in)
 streamlit==1.61.0
+starlette==1.7.0   # 1.9 breaks Streamlit 1.61 static files (every image and the favicon return 500)
 altair==6.2.2
 plotly==6.9.0
 matplotlib==3.11.1

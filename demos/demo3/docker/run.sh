@@ -25,6 +25,7 @@ elif [ -f "$ADC" ]; then
   cloud+=(-v "$ADC:/run/gcp-adc.json:ro" -e GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-adc.json)
 fi
 
+docker rm -f demo3 >/dev/null 2>&1 || true   # a stopped container from an earlier run blocks the name
 docker run -d --name demo3 --restart unless-stopped \
   --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
   -p 127.0.0.1:8502:8501 \

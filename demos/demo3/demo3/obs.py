@@ -1,4 +1,7 @@
-"""Daily observed rainfall for onset: CHIRPS v3.0 (IMERG-disaggregated, "sat") at 0.25°.
+"""Observations: daily rainfall from CHIRPS v3.0 (Precipitation and Onset) and daily maximum
+temperature from CHIRTS (Heat), both from UCSB's Climate Hazards Center.
+
+Rainfall: CHIRPS v3.0 (IMERG-disaggregated, "sat") at 0.25°.
 
 CHIRPS is satellite + rain gauge rainfall over land, 60°S–60°N. The "sat" version
 spreads each pentad's total over its days using NASA IMERG, so it starts in 1998.
@@ -13,6 +16,11 @@ Two sources, same data on the same grid:
 The current year is updated by CHC about once a month, so current-year files are
 re-fetched when they are older than 7 days. $DEMO3_DATA/CHIRPSv3 is checked first
 for preloaded country files.
+
+Temperature: CHIRTS daily Tmax (CHIRTS-ERA5) at 0.05°, land only, from yearly country boxes
+in the training bucket (gs://aim4scale_training_2026/CHIRTS_Tmax_Country_Boxes, 3-100 MB a
+year), downloaded once into {OUTPUT_DIR}/_obs/chirts/ ($DEMO3_DATA/CHIRTS checked first).
+Programme countries only: anywhere else the page falls back to ERA5.
 """
 from __future__ import annotations
 
@@ -41,6 +49,13 @@ LAT_LIMIT = 60.0
 FIRST_YEAR = 1998
 NAME = "CHIRPS v3"
 
+TMAX_BUCKET = os.environ.get("DEMO3_CHIRTS_BUCKET",
+                             "gs://aim4scale_training_2026/CHIRTS_Tmax_Country_Boxes").rstrip("/")
+TMAX_CACHE = OUTPUT_DIR / "_obs" / "chirts"
+TMAX_PRELOADED = Path(os.environ.get("DEMO3_DATA", "/data")) / "CHIRTS"
+TMAX_FIRST_YEAR = 1981
+TMAX_NAME = "CHIRTS"
+
 
 def _stale(path: Path, year: int, refresh_days: float = 7) -> bool:
     return (year >= pd.Timestamp.utcnow().year and path.exists()
@@ -49,15 +64,13 @@ def _stale(path: Path, year: int, refresh_days: float = 7) -> bool:
 
 # ── country boxes in the bucket ──────────────────────────────────────────────
 
-def _country_file(country: str, year: int) -> Path:
-    c = country.replace(" ", "_")
-    name = f"CHIRPSv3_{c}_{year}_box025.nc"
-    if (PRELOADED / c / name).exists():
-        return PRELOADED / c / name
-    path = CACHE / c / name
+def _bucket_file(bucket: str, cache: Path, preloaded: Path, c: str, name: str, year: int) -> Path:
+    if (preloaded / c / name).exists():
+        return preloaded / c / name
+    path = cache / c / name
     if not path.exists() or _stale(path, year):
         import fsspec
-        fs, root = fsspec.core.url_to_fs(BUCKET)
+        fs, root = fsspec.core.url_to_fs(bucket)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".part")
         try:
@@ -68,6 +81,11 @@ def _country_file(country: str, year: int) -> Path:
             if not path.exists():
                 raise OSError(f"couldn't get {name} from the bucket: {e}") from e
     return path
+
+
+def _country_file(country: str, year: int) -> Path:
+    c = country.replace(" ", "_")
+    return _bucket_file(BUCKET, CACHE, PRELOADED, c, f"CHIRPSv3_{c}_{year}_box025.nc", year)
 
 
 def _from_bucket(country: str, box: Box, start, end) -> xr.DataArray:
@@ -185,4 +203,72 @@ def daily(box: Box, start, end, region: str | None = None) -> xr.DataArray:
         raise FileNotFoundError(f"no {NAME} data for {start:%Y-%m-%d}..{end:%Y-%m-%d}")
     out = out.where(out >= 0)  # sea and missing are -9999
     out.name, out.attrs = "precip", {"units": "mm/day", "source": NAME}
+    return out.astype(np.float32)
+
+
+# ── CHIRTS daily maximum temperature (Heat) ─────────────────────────────────
+
+def tmax_covers(region: str | None) -> bool:
+    return region in COUNTRIES
+
+
+def _tmax_file(country: str, year: int) -> Path:
+    c = country.replace(" ", "_")
+    return _bucket_file(TMAX_BUCKET, TMAX_CACHE, TMAX_PRELOADED, c, f"CHIRTS_Tmax_{c}_{year}_box.nc", year)
+
+
+def _tmax_year(country: str, year: int, box: Box | None = None, start=None, end=None) -> xr.DataArray:
+    with xr.open_dataset(_tmax_file(country, year)) as ds:
+        da = ds.temp.assign_coords(lon=(ds.lon + 180) % 360 - 180).sortby("lat").sortby("lon")
+        if box is not None:
+            da = da.sel(lat=slice(box.lat_min, box.lat_max), lon=slice(box.lon_min, box.lon_max))
+        if start is not None:
+            da = da.sel(time=slice(start, end))
+        return da.load()
+
+
+_tmax_last: dict = {}
+
+
+def tmax_last_day(region: str) -> pd.Timestamp | None:
+    """Last day the CHIRTS file for a programme country has data for (the newest file is
+    padded to the end of the month with empty days). Remembered for an hour."""
+    hit = _tmax_last.get(region)
+    if hit and time.time() - hit[0] < 3600:
+        return hit[1]
+    day = _tmax_last_day(region)
+    _tmax_last[region] = (time.time(), day)
+    return day
+
+
+def _tmax_last_day(region: str) -> pd.Timestamp | None:
+    year = pd.Timestamp.utcnow().year
+    for y in (year, year - 1):
+        try:
+            with xr.open_dataset(_tmax_file(region, y)) as ds:
+                t = ds.temp
+                some = t.isel(lat=slice(None, None, 10), lon=slice(None, None, 10)).notnull().any(["lat", "lon"])
+                days = t.time.values[some.values]
+                if len(days):
+                    return pd.Timestamp(days[-1])
+        except (OSError, ValueError):
+            pass
+    return None
+
+
+def tmax_daily(box: Box, start, end, region: str) -> xr.DataArray:
+    """Daily maximum 2 m temperature (°C), dims (time, lat, lon), for start..end inclusive,
+    land only. Days CHIRTS doesn't have yet are absent."""
+    start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
+    parts = []
+    for y in range(start.year, end.year + 1):
+        try:
+            parts.append(_tmax_year(region, y, box, start, end))
+        except OSError:
+            if y < pd.Timestamp.utcnow().year:
+                raise
+    out = xr.concat(parts, "time").dropna("time", how="all") if parts else None
+    if out is None or not out.sizes["time"]:
+        raise FileNotFoundError(f"no {TMAX_NAME} data for {start:%Y-%m-%d}..{end:%Y-%m-%d}")
+    out.name, out.attrs = "tmax", {"units": "degC", "source": TMAX_NAME}
     return out.astype(np.float32)
