@@ -10,6 +10,10 @@
 #   `python3 demos/demo1/spark_setup.py` clones and keeps up to date (`--only demo5` for just it).
 # - The port: Demo 5's in demos/demo1/demos.toml (8505), not ForecastCheck's default 8502,
 #   which is Demo 3's. PORT=... overrides it.
+# - The data: ~/demo_data/d5-AI-Forest-test (fetched data and every result), outside the code,
+#   so updating or re-cloning ForecastCheck never touches it; forecastcheck/data is a link to
+#   it, so the lesson's `data/...` paths work there too. DATA=... overrides it. (A checkout
+#   that already has a real data/ folder with data in it keeps using that.)
 # - The Google key: the Spark's read-only key (/etc/fleet-gcs-key.json), unless
 #   GOOGLE_APPLICATION_CREDENTIALS is set.
 # - The country: forecastcheck/.deployment. If there's none yet, the Spark's own country when
@@ -30,6 +34,24 @@ cfg = tomllib.load(open(sys.argv[1], "rb"))
 print(next(d["port"] for d in cfg["demo"] if d["id"] == "demo5"))' "$repo/demos/demo1/demos.toml" 2>/dev/null || echo 8505)"
 fi
 export PORT
+
+if [ -z "${DATA:-}" ]; then
+  if [ -d "$fc/data" ] && [ ! -L "$fc/data" ] && [ -n "$(ls -A "$fc/data" 2>/dev/null)" ]; then
+    DATA="$fc/data"   # (from before: results stay where they are)
+    echo "Data: $DATA (move it to ~/demo_data/d5-AI-Forest-test to use the usual place)" >&2
+  else
+    DATA="$HOME/demo_data/d5-AI-Forest-test"
+    mkdir -p "$DATA"
+    # The link the lesson's paths use (data/ here is missing, a link, or an empty folder);
+    # git leaves it out (this checkout's own exclude list).
+    [ -L "$fc/data" ] || rmdir "$fc/data" 2>/dev/null || true
+    ln -sfn "$DATA" "$fc/data"
+    if [ -d "$fc/.git/info" ] && ! grep -qx '/data' "$fc/.git/info/exclude" 2>/dev/null; then
+      echo '/data' >>"$fc/.git/info/exclude"
+    fi
+  fi
+fi
+export DATA
 
 if [ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ] && [ -r /etc/fleet-gcs-key.json ]; then
   export GOOGLE_APPLICATION_CREDENTIALS=/etc/fleet-gcs-key.json

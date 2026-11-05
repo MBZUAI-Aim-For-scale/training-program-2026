@@ -201,7 +201,7 @@ bash ../run.sh stop
 
 > #### Where ForecastCheck lives on the Spark
 >
-> Its code is in `~/training-program-2026/demos/demo5/forecastcheck`, a copy of [ForecastCheck's repository](https://github.com/africlimate-research/forecastcheck) that Demo 1's setup keeps on its newest `main`, and rebuilds the image for when it changes. `data/` and `.deployment` are in that folder too; they aren't part of the code, so updates never touch them. Open a new terminal there with `cd ~/training-program-2026/demos/demo5/forecastcheck`; from anywhere else, use the wrapper's full path: `bash ~/training-program-2026/demos/demo5/run.sh status`. ForecastCheck's own messages say `bash docker/run.sh …`; on the Spark, type `bash ../run.sh …` instead, which adds the course's port and key.
+> Its code is in `~/training-program-2026/demos/demo5/forecastcheck`, a copy of [ForecastCheck's repository](https://github.com/africlimate-research/forecastcheck) that Demo 1's setup keeps on its newest `main`, and rebuilds the image for when it changes. Your data and every result are in `~/demo_data/d5-AI-Forest-test`, outside the code, so updates never touch them; `data/` in that folder is a link to it, so this lesson's `data/…` paths work there. `.deployment` is in the folder too, and isn't part of the code either. Open a new terminal there with `cd ~/training-program-2026/demos/demo5/forecastcheck`; from anywhere else, use the wrapper's full path: `bash ~/training-program-2026/demos/demo5/run.sh status`. ForecastCheck's own messages say `bash docker/run.sh …`; on the Spark, type `bash ../run.sh …` instead, which adds the course's port and key.
 {: .tip}
 
 > #### Which country am I?
