@@ -2,14 +2,14 @@
 # Demo 5 (ForecastCheck) on a Spark: ForecastCheck's own docker/run.sh, with this program's
 # settings, so every command in the lesson works as it is:
 #
-# Demo 1's setup installs it as the command `forecastcheck` (~/.local/bin), which works the
-# same from any folder; nothing here depends on the current directory.
+# Demo 1's setup installs it as the command `fcstcheck` (~/.local/bin; also `fcstcheck`),
+# which works the same from any folder; nothing here depends on the current directory.
 #
-#   forecastcheck setup senegal     the whole Section 3: country, fetch, pipeline, dashboard
-#   forecastcheck country [NAME]    show or set the country (senegal, sierra-leone, kenya, rwanda)
-#   forecastcheck where             where the code, the data and the settings are
-#   forecastcheck fetch [--apply] | pipeline | start | status | logs [pipeline] | shell |
-#                 stop | help ...   ForecastCheck's own commands (its docker/run.sh), as they are
+#   fcstcheck setup senegal         the whole Section 3: country, fetch, pipeline, dashboard
+#   fcstcheck country [NAME]        show or set the country (senegal, sierra-leone, kenya, rwanda)
+#   fcstcheck where                 where the code, the data and the settings are
+#   fcstcheck fetch [--apply] | pipeline | start | status | logs [pipeline] | shell |
+#             stop | help ...       ForecastCheck's own commands (its docker/run.sh), as they are
 #
 # - The code: demos/demo5/forecastcheck, ForecastCheck's repository, which
 #   `python3 demos/demo1/spark_setup.py` clones and keeps up to date (`--only demo5` for just it).
@@ -65,7 +65,7 @@ if [ ! -f "$fc/.deployment" ] && [ -z "${VERIFICATION_DEPLOYMENT:-}" ]; then
   esac
   if [ -n "$country" ]; then
     echo "$country" >"$fc/.deployment"
-    echo "Country: $country (this Spark's; to change it: forecastcheck country <name>)"
+    echo "Country: $country (this Spark's; to change it: fcstcheck country <name>)"
   fi
 fi
 
@@ -85,7 +85,7 @@ case "${1:-help}" in
       if docker container inspect forecastcheck >/dev/null 2>&1; then exec bash "$fc/docker/run.sh" restart; fi
     else
       echo "Country: ${VERIFICATION_DEPLOYMENT:-$(current_country)}${VERIFICATION_DEPLOYMENT:+ (from VERIFICATION_DEPLOYMENT)}"
-      [ -n "${VERIFICATION_DEPLOYMENT:-}$(current_country)" ] || echo "None yet: forecastcheck country <name>  ($(countries))"
+      [ -n "${VERIFICATION_DEPLOYMENT:-}$(current_country)" ] || echo "None yet: fcstcheck country <name>  ($(countries))"
     fi
     exit 0 ;;
   where)
@@ -101,7 +101,7 @@ case "${1:-help}" in
     shift
     if [ -n "${1:-}" ] && [ "${1#-}" = "$1" ]; then set_country "$1"; shift; fi
     [ -n "${VERIFICATION_DEPLOYMENT:-}$(current_country)" ] ||
-      { echo "Which country? forecastcheck setup <country>  ($(countries))" >&2; exit 1; }
+      { echo "Which country? fcstcheck setup <country>  ($(countries))" >&2; exit 1; }
     bash "$fc/docker/run.sh" fetch --apply
     bash "$fc/docker/run.sh" pipeline "$@" || echo "(no new pipeline started; see above)"
     exec bash "$fc/docker/run.sh" start ;;

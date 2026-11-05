@@ -77,5 +77,6 @@ dockerfile = "demos/demo5/forecastcheck/docker/Dockerfile"
 run = ["bash", "demos/demo5/run.sh", "start"]
 port = 8505
 source = { url = "https://github.com/africlimate-research/forecastcheck.git", branch = "main", path = "demos/demo5/forecastcheck" }
-# The command `forecastcheck` (in ~/.local/bin): demos/demo5/run.sh, from any folder.
-command = { name = "forecastcheck", script = "demos/demo5/run.sh" }
+# The command `fcstcheck` (in ~/.local/bin): demos/demo5/run.sh, from any folder; also
+# installed as `forecastcheck`, its long name.
+command = { name = "fcstcheck", also = ["forecastcheck"], script = "demos/demo5/run.sh" }

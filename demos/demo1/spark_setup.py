@@ -393,18 +393,19 @@ def install_shortcuts(demo, log) -> list[str]:
     cmd = demo.get("command")
     if cmd:
         bin_dir = Path.home() / ".local" / "bin"
-        path = bin_dir / cmd["name"]
         text = f"#!/bin/sh\n{LAUNCHER_MARK} (demos.toml: {demo['id']})\nexec bash {REPO / cmd['script']} \"$@\"\n"
-        if path.exists() and LAUNCHER_MARK not in path.read_text(errors="replace"):
-            notes.append(f"~/.local/bin/{cmd['name']} is something else, left as it is")
-        else:
+        for name in [cmd["name"], *cmd.get("also", [])]:  # (`also`: other names for it)
+            path = bin_dir / name
+            if path.exists() and LAUNCHER_MARK not in path.read_text(errors="replace"):
+                notes.append(f"~/.local/bin/{name} is something else, left as it is")
+                continue
             bin_dir.mkdir(parents=True, exist_ok=True)
             if not path.exists() or path.read_text() != text:
                 path.write_text(text)
                 path.chmod(0o755)
                 log.write(f"installed {path}\n")
-            if str(bin_dir) not in os.environ.get("PATH", "").split(":"):
-                notes.append(f"`{cmd['name']}` works after logging in again (or: source ~/.profile)")
+        if str(bin_dir) not in os.environ.get("PATH", "").split(":"):
+            notes.append(f"`{cmd['name']}` works after logging in again (or: source ~/.profile)")
     return notes
 
 
