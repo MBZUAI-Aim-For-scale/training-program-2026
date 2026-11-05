@@ -9,10 +9,19 @@ The CHIRPS v3 and updated forecast country boxes use these paths directly under
 
 | Dataset | Bucket-relative file path | Supplied years |
 | --- | --- | --- |
-| CHIRPS | `CHIRPSv3_Country_Boxes_025deg/{Country}/CHIRPSv3_{Country}_{year}_box025.nc` | 1998–2025 |
+| CHIRPS | `CHIRPSv3_Country_0p25deg/{Country}/CHIRPSv3_{Country}_{year}_box025.nc` | 2000– |
 | AIFS | `Forecasts_Country_0p25deg/AIFS_v2/tp/{Country}/AIFS_v2_tp_{Country}_{year}_box025.nc` | 2000–2025 |
 | AIFS Ensemble | `Forecasts_Country_0p25deg/AIFS_ENS_v2/tp/{Country}/AIFS_ENS_v2_tp_{Country}_{year}_box025.nc` | 2000–2025 |
 | GraphCast | `Forecasts_Country_0p25deg/graphcast/tp/{Country}/graphcast_tp_{Country}_{year}_box025.nc` | 2000–2025 |
+
+All four are on one 0.25° grid (cells on whole and quarter degrees; longitudes 0..360 for countries
+west of Greenwich, as in the files), so observed and forecast onsets compare point for point. The
+older `CHIRPSv3_Country_Boxes_025deg` files are on CHIRPS's own grid, half a cell off, and aren't used.
+
+On a Spark, these files are read from its country data first (what Demo 1's country-data button
+downloaded, at the bucket's paths; `docker/run.sh` mounts it read-only at `/country_data`), and from
+the bucket otherwise. Listings (which years and models there are) still come from the bucket, so a
+partial download can't hide any; only if the bucket can't be reached does the country data stand in.
 
 Local fallback retains the existing model directories and `{year}.nc` files.
 
