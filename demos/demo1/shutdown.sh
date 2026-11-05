@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Close everything down on the Spark: any setup run (including one started by a dashboard
-# Launch button), the dashboard, and every running container.
+# Launch button), any country data download, the dashboard, and every running container.
 #
 #   bash demos/demo1/shutdown.sh
 #
@@ -10,6 +10,7 @@ set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 
 pkill -f 'python[0-9.]* \S*spark_setup\.py' && echo "setup run stopped"
+pkill -f 'python[0-9.]* \S*country_data\.py' && echo "country data download stopped"
 python3 "$here/spark_setup.py" dashboard --stop
 running=$(docker ps --format '{{.Names}}')
 if [ -n "$running" ]; then
