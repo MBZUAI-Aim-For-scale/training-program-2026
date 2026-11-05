@@ -157,6 +157,10 @@ def open_dataset(path: Any, **kwargs) -> xr.Dataset:
 
     path_str = str(path).strip()
 
+    # A bucket file this Spark has a copy of (its country data) is read from the copy.
+    if is_uri(path_str) and hasattr(config, "local_copy"):
+        path_str = config.local_copy(path_str) or path_str
+
     # Detect GCS URI even if corrupted with local prefix (e.g., /app/gs:/)
     if is_uri(path_str):
         fs = gcs_fs()

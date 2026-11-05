@@ -183,7 +183,7 @@ USE_CASE_NEEDS = {"Heat": "t2m", "Precipitation": "tp", "Onset": "tp"}
 # Models whose rainfall is known to be off on the Spark (checked against observations)
 RAIN_CAVEATS = {"aurora15": "Aurora's rainfall comes out 2–3 times too dry in our runs (still being "
                             "investigated), so it will rarely reach rainfall or onset thresholds."}
-CHIRPS_LAT = 50.0  # observed rainfall for onset covers 50°S–50°N
+CHIRPS_LAT = 60.0  # observed rainfall for onset (CHIRPS v3) covers 60°S–60°N (obs.LAT_LIMIT)
 
 
 def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
@@ -223,8 +223,8 @@ def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
         out.append(("warning", RAIN_CAVEATS[m.key]))
     if use_case == "Onset" and box is not None and box.is_valid():
         if box.lat_min >= CHIRPS_LAT or box.lat_max <= -CHIRPS_LAT:
-            out.append(("error", f"Onset uses observed rainfall from CHIRPS, which covers 50°S–50°N "
-                                 f"only; {region_name} is outside it."))
+            out.append(("error", f"Onset uses observed rainfall from CHIRPS v3, which covers "
+                                 f"{CHIRPS_LAT:.0f}°S–{CHIRPS_LAT:.0f}°N only; {region_name} is outside it."))
     if box is not None and box.is_valid():
         n = min((box.lat_max - box.lat_min), (box.lon_max - box.lon_min)) / m.grid_deg
         km = round(m.grid_deg * 111, -1)

@@ -29,6 +29,7 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/run/gcp-key.json}
       - ROMP_DEMO_OUT_DIR=/app/ai_weather/data/ROMP_OUT
+      - DEMO_COUNTRY_DATA=/country_data
       # (run.sh exports them, from .env or its defaults)
       - DEMO_BUCKET=${DEMO_BUCKET:-aim4scale_training_2026}
       - DEMO3_BUCKET=${DEMO3_BUCKET:-gs://aim4scale_training_2026/demo3}
@@ -42,5 +43,7 @@ services:
       - ${OUTPUTS:-../outputs}:/app/outputs
       - ${ROMP_OUT:-../ai_weather/data/ROMP_OUT}:/app/ai_weather/data/ROMP_OUT
       - ${CACHE:-~/.cache/ai_weather}:/root/.cache
+      # This Spark's country data, read before the bucket (run.sh sets COUNTRY_DATA; /dev/null if none)
+      - ${COUNTRY_DATA:-/dev/null}:/country_data:ro
       # GCP Credentials Mount
       - ${GCP_KEY_PATH:-/dev/null}:${GOOGLE_APPLICATION_CREDENTIALS:-/run/gcp-key.json}:ro

@@ -93,9 +93,10 @@ against CHIRPS v3. Both observations cover land only, so the forecast is blanked
 and outside the observed box, and the maps and regional series compare the same area. Each movie
 is rendered once per request and saved under `outputs/_movies/`.
 
-**Heat observations:** CHIRTS daily Tmax (CHIRTS-ERA5, 0.05°) from the yearly country boxes in
-`gs://aim4scale_training_2026/CHIRTS_Tmax_Country_Boxes`, downloaded once into
-`outputs/_obs/chirts/` (3–100 MB a country-year). Programme countries only; for other regions
+**Heat observations:** CHIRTS daily Tmax (CHIRTS-ERA5) from the yearly country files on the
+models' 0.25° grid in `gs://aim4scale_training_2026/CHIRTS_Country_0p25deg/Tmax` (from 2000), read
+from this Spark's country data first (what Demo 1's country-data button downloaded, mounted at
+`/country_data`), else downloaded once into `outputs/_obs/chirts_0p25/`. Programme countries only; for other regions
 the page falls back to ERA5 from Google's ARCO copy (cached in `outputs/_obs_cache/`). Two
 things to know when reading heat results: the models give a value every 6 hours, so their daily
 maximum misses part of the afternoon peak (0.3–1.3 °C in our cases, measured with hourly ERA5);
@@ -124,11 +125,14 @@ searching from mid-February and mid-August for the Andes' two seasons (`onset.RE
 
 - **Rainfall used:** observed CHIRPS v3.0 at 0.25° (`demo3/obs.py`) from the search start to the
   day before the forecast, then the forecast's daily rainfall put on the CHIRPS grid. This is the
-  "sat" version (days within each pentad split using IMERG), so it starts in 1998. Programme
-  countries read their yearly box from `gs://aim4scale_training_2026/CHIRPSv3_Country_Boxes_025deg`
-  (~3 MB a year); other regions download CHC's global 0.25° daily files (~0.9 MB a day). Both are
-  cached in `outputs/_obs/chirps_v3/`. CHIRPS covers land, 60°S–60°N, and runs about a month
-  behind; days missing before the forecast are flagged on the page.
+  "sat" version (days within each pentad split using IMERG). Programme countries read their yearly
+  file on the models' own 0.25° grid (cells on whole and quarter degrees, as GraphCast's) from
+  `gs://aim4scale_training_2026/CHIRPSv3_Country_0p25deg` (from 2000): this Spark's country data
+  first, else the bucket, cached in `outputs/_obs/chirps_v3_0p25/`. Other regions download CHC's
+  global 0.25° daily files (~0.9 MB a day, CHIRPS's own grid) into `outputs/_obs/chirps_v3/p25/`.
+  Models on another grid (NeuralGCM's) are interpolated onto the observations'. CHIRPS covers
+  land, 60°S–60°N, and runs about a month behind; days missing before the forecast are flagged on
+  the page.
 - **Possible onset:** confirming onset needs the wet spell plus the dry-spell window (24 days for
   ICPAC, 35 for Moron–Robertson), longer than a 10–15 day forecast. A wet spell whose check runs
   past the end of the data is shown as possible onset, not onset.

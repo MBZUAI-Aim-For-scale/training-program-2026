@@ -166,9 +166,18 @@ def _model_uri(key: str) -> str:
     )
 
 
-# Country-box collections live directly under the bucket, outside demo prefixes.
-OBS_URI = (f"gs://{DEMO_BUCKET}/CHIRPSv3_Country_Boxes_025deg/{region}" if obs == "CHIRPS"
+# Country-box collections live directly under the bucket, outside demo prefixes. CHIRPS is the
+# country files on the forecasts' own 0.25° grid (Forecasts_Country_0p25deg: cells centred on
+# whole and quarter degrees), so observed and forecast onsets compare point for point; the
+# CHIRPSv3_Country_Boxes_025deg files are on CHIRPS's own grid, half a cell off, with no point
+# in common.
+OBS_URI = (f"gs://{DEMO_BUCKET}/CHIRPSv3_Country_0p25deg/{region}" if obs == "CHIRPS"
            else f"gs://{DEMO_BUCKET}/demo4/DATA/{region}/{obs}")
+
+# This Spark's country data (Demo 1's country-data button), at the bucket's own paths: a bucket
+# file there is read from there, and from the bucket otherwise. Listings still come from the
+# bucket (so a partial copy can't hide years or models), unless it can't be reached.
+COUNTRY_DATA_DIR = Path(os.getenv("DEMO_COUNTRY_DATA", "/country_data")).expanduser()
 
 # ==============================================================================
 # 3. URI SANITIZATION & GCS STORAGE HELPERS
@@ -289,11 +298,32 @@ def join(base: Any, name: str) -> str:
     return os.path.join(base_str, name)
 
 
+def _country_data_path(path: Any) -> Optional[Path]:
+    """Where a gs://<DEMO_BUCKET>/... object would be in this Spark's country data."""
+    if not path or not is_uri(path) or not COUNTRY_DATA_DIR.is_dir():
+        return None
+    bucket, _, obj = _strip(path).partition("/")
+    if bucket != DEMO_BUCKET or not obj or ".." in obj.split("/"):
+        return None
+    return COUNTRY_DATA_DIR / obj
+
+
+def local_copy(path: Any) -> Optional[str]:
+    """This Spark's copy of a bucket file, if it has one (Demo 1's country-data button puts
+    only finished, checked files there), else None: read the bucket."""
+    p = _country_data_path(path)
+    return str(p) if p is not None and p.is_file() else None
+
+
 def exists(path: Any) -> bool:
     if not path:
         return False
     path_str = str(path).strip()
     if is_uri(path_str):
+        if local_copy(path_str):
+            return True
+        if globals().get("_REMOTE_PROBE_UNAVAILABLE"):  # (the bucket didn't answer at start-up)
+            return False
         try:
             return gcs_fs().exists(_strip(path_str))
         except Exception:
@@ -302,11 +332,23 @@ def exists(path: Any) -> bool:
 
 
 def glob(pattern: str) -> List[str]:
+    """gs:// matches from the bucket's listing; this Spark's country data only if the bucket
+    can't be listed (as gs:// paths too, which open_dataset then reads from the copy)."""
     if is_uri(pattern):
         try:
+            # (The bucket didn't answer at start-up: list the copy at once, instead of a minute of
+            # gcsfs retries per call.)
+            if globals().get("_REMOTE_PROBE_UNAVAILABLE"):
+                raise OSError("the bucket can't be reached")
             return sorted("gs://" + m for m in gcs_fs().glob(_strip(pattern)))
         except Exception:
-            return []
+            local = _country_data_path(pattern)
+            if local is None:
+                return []
+            import glob as _glob
+            bucket = _strip(pattern).partition("/")[0]
+            return sorted(f"gs://{bucket}/" + str(Path(m).relative_to(COUNTRY_DATA_DIR))
+                          for m in _glob.glob(str(local)) if Path(m).is_file())
     import glob as _glob
     return sorted(_glob.glob(str(pattern)))
 
@@ -315,6 +357,9 @@ def open_dataset(path: Any, **kwargs):
     import xarray as xr
     if not is_uri(path):
         return xr.open_dataset(path, **kwargs)
+    local = local_copy(path)
+    if local:
+        return xr.open_dataset(local, **kwargs)
     f = gcs_fs().open(_strip(path), "rb")
     try:
         return xr.open_dataset(f, **{"engine": "h5netcdf", **kwargs})
@@ -411,6 +456,13 @@ def _pick(label: str, local_candidates: List[tuple], remote_uri: str) -> str:
     # 1. First look at Bucket (unless local mode is explicitly specified)
     if DATA_MODE != "local" and BUCKET_OK and _remote_has_data(remote_uri):
         DATA_SOURCES[label] = "bucket"
+        return remote_uri
+
+    # 1b. The bucket can't be reached, but this Spark's country data has that folder: keep the
+    # bucket path (its files are read from the country data; see local_copy).
+    copy = _country_data_path(remote_uri)
+    if DATA_MODE != "local" and BUCKET_OK and copy is not None and _has_nc(copy, recursive=False):
+        DATA_SOURCES[label] = "country data"
         return remote_uri
 
     # 2. Fall back to local candidates

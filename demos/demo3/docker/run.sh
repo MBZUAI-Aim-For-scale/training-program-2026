@@ -27,11 +27,17 @@ elif [ -f "$ADC" ]; then
   cloud+=(-v "$ADC:/run/gcp-adc.json:ro" -e GOOGLE_APPLICATION_CREDENTIALS=/run/gcp-adc.json)
 fi
 
+# This Spark's country data (Demo 1's country-data button), read-only: observations are read
+# there first and from the bucket otherwise (demo3/obs.py). DEMO_COUNTRY_DATA_DIR overrides it.
+countrydata=()
+cd_dir="${DEMO_COUNTRY_DATA_DIR:-$(python3 "$here/../demo1/country_data.py" --path 2>/dev/null || true)}"
+[ -n "$cd_dir" ] && [ -d "$cd_dir" ] && countrydata=(-v "$cd_dir:/country_data:ro")
+
 docker rm -f demo3 >/dev/null 2>&1 || true   # a stopped container from an earlier run blocks the name
 docker run -d --name demo3 --restart unless-stopped \
   --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
   -p "127.0.0.1:$PORT:8501" \
-  "${code[@]}" "${cloud[@]}" -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
+  "${code[@]}" "${cloud[@]}" ${countrydata[@]+"${countrydata[@]}"} -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
   -e DEMO3_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
   demo3
 echo "Demo 3 starting: http://localhost:$PORT"
