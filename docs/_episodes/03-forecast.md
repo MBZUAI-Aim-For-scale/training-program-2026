@@ -12,7 +12,7 @@ objectives:
 - "Interpret model outputs and compare forecasts against observations."
 keypoints:
 - "A streamlined 4-command workflow (build container, run model, get output, generate figure) simplifies local AI forecasting."
-- "Use-case flags in the code allow groups to tailor outputs for onset/cessation, temperature exceedance, or precipitation exceedance."
+- "The use case chosen on the page (Heat, Precipitation or Onset) tailors the outputs: event movies, onset maps and the observations they are compared with."
 - "Streamlit provides an interactive environment for executing and visualizing the AI weather models."
 - "All configuration options are documented in Demo 1."
 ---
@@ -148,7 +148,7 @@ DEMO3_IFS_SOURCE=azure bash docker/run.sh
 
 ### 2.2 Use-Case Group Execution
 
-Organize into your designated use-case groups to begin the hands-on exercises. Ensure your team uses the specific flag in the code that tailors the model output to your assigned challenge:
+Organize into your designated use-case groups to begin the hands-on exercises. Each team picks its assigned challenge as the **Use case** on the page (Heat, Precipitation or Onset):
 
 - **Temperature Exceedance**: Led by Docko, supported by Narayana.
 - **Precipitation Exceedance (Short-run rainfall)**: Led by Koomi, supported by Shruti.
