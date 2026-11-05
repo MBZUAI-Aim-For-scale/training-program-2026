@@ -317,6 +317,7 @@ def launch(demo: dict):
     """Run spark_setup.py for one demo in the background; its progress lands in state/status.json."""
     # (--no-pull: a Launch starts what's here; the setup runs update other repositories' code.)
     args = ["--host-only"] if demo["setup"] == "demo1" else ["--only", demo["setup"], "--no-pull"]
+    setup.STATE.mkdir(parents=True, exist_ok=True)  # (a dashboard started by itself, before any setup run)
     with open(setup.STATE / "launch.log", "a") as log:
         subprocess.Popen([sys.executable, str(setup.HERE / "spark_setup.py"), *args, "--no-dashboard"],
                          cwd=setup.HERE, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -631,4 +632,8 @@ if current["n"] != 1 and st.query_params.get("launch") == "1" and (tool or curre
     starting_page(tool or current)
 else:
     navbar(current["n"])
-    setup_page() if current["n"] == 1 else demo_page(current)
+    # (Statements, not `a() if … else b()`: Streamlit's "magic" would write that expression's None on the page.)
+    if current["n"] == 1:
+        setup_page()
+    else:
+        demo_page(current)
