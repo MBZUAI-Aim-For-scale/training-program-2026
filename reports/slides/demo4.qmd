@@ -1,0 +1,449 @@
+---
+title: "AI Weather Model Validation"
+subtitle: "Dashboard-Based Rainy Season Onset Benchmarking"
+author: "Mesfin D. Chaka (PhD)"
+institute: "EMI / University of Chicago"
+date: "2026-11-03"
+format:
+  revealjs:
+    theme: [default, mytheme.scss]
+    footer: "Led by MBZUAI with University of Chicago AI for Climate"
+    center-title-slide: false
+    background-transition: fade
+    auto-stretch: true
+    embed-resources: true
+    auto-animate-easing: ease-in-out
+    auto-animate-unmatched: false
+    auto-animate-duration: 0.8
+    navigation-mode: linear
+    touch: true
+    controls: true
+    transition: slide
+    slide-number: true
+    show-slide-number: all
+    preview-links: auto
+    progress: true
+    keyboard: true
+    fragments: true
+    rtl: false
+    help: true
+    hash: true
+    embedded: false
+    center: false
+    width: 1440
+    height: 900
+    fig-width: 8
+    fig-height: 9
+    fig-align: center
+    fig-cap-location: bottom
+    tab-cap-location: top
+    number-figures: true
+    chalkboard: false
+    chalkboard-init:
+      theme: whiteboard
+      toggle-chalkboard: "c"
+      toggle-notes: "n"
+      color: [black, black]
+      background: [white, white]
+    menu:
+      side: right
+      width: wide
+      numbers: true
+      keyboard: true
+    csl: ieee.csl
+from: markdown+emoji
+editor:
+  markdown:
+    wrap: 72
+---
+
+## Objectives
+
+By the end of this session, participants will be able to:
+
+1. **Run and inspect** a benchmark through the **Forecast Benchmarking dashboard**; use the CLI as an optional alternative.
+2. **Explain** why ROMP/MOMP compares onset across locations, thresholds, lead times and models.
+3. **Describe** the rainfall-based onset rules and their forecast-horizon limitations.
+4. **Interpret** deterministic and probabilistic metrics against their appropriate references.
+5. **Read** saved maps, composite plots and reliability diagrams without confusing missing values with skill.
+6. **Document** an experiment and distinguish supported findings from extensions needing held-out verification.
+
+---
+
+# Hands-On Benchmarking
+
+## Dashboard Walkthrough: Start Here
+
+Open **Benchmarking → Forecast Benchmarking** and follow the page from top to bottom:
+
+1. **Benchmark Inputs** and **Models** → choose the data and model track.
+2. **Shared settings**, **Model run windows**, **Advanced Temporal & Verification Settings** → define the experiment.
+3. **Data Readiness & Fair Comparison** → resolve availability problems before running.
+4. **Run Benchmark** → monitor, stop if necessary, and inspect the execution log.
+5. **Results** → compare maps and metrics, inspect saved figures, and retain evidence.
+
+::: {.callout-note}
+These instructions follow the implemented [short/medium benchmarking page](../../ui/pages/short_medium_benchmarking.py). The dashboard is the primary workflow; the **CLI section later is optional**.
+:::
+
+---
+
+## Open the Forecast Benchmarking Dashboard
+
+1. Complete **Demo 1**; start the stack from the repository root:
+
+   ```bash
+   cd training-program-2026
+   bash docker/run.sh start
+   ```
+
+2. For a remote server, keep a separate laptop terminal open:
+
+   ```bash
+   ssh -L 8501:localhost:8501 <you>@country-spark
+   ```
+
+3. Open **<http://localhost:8501>**, click **Benchmarking**, and confirm the title **Forecast Benchmarking**.
+4. Open **Parameter guide** for control explanations. The top tiles show **Models**, **Presets**, **Status** and **Output Dir**.
+
+::: {.smaller}
+Benchmark scoring uses CPUs and saved forecasts. Confirm that the container's `/app` checkout and configured input data belong to this experiment.
+:::
+
+---
+
+## Dashboard Step 1: Inputs and Model Selection
+
+| Control | Classroom selection / action |
+|:---|:---|
+| **Ground truth** | Choose **CHIRPS**; ENACTS requires matching configured data |
+| **Benchmark coverage** | Choose **Ethiopia**; unsupported coverage disables Run |
+| **Forecast window** | Start with **1-15 days**; check each model's verification controls below |
+| **Filter by category** | Choose **Deterministic** for the first run |
+| **Models table** | Click only the **AIFS Single** row; check Category, Coverage and Date Range |
+
+- The table supports multiple selected rows; the selection summary counts deterministic, probabilistic and total models.
+- For the ensemble exercise, switch to **Probabilistic** and select **AIFS Ensemble**.
+- Run the lesson tracks separately and read their different metric families independently.
+
+---
+
+## Dashboard Step 2: Shared Event Detection
+
+Under **Shared settings → EVENT DETECTION**, use the lesson baseline:
+
+| Exact dashboard control | Value | Meaning |
+|:---|---:|:---|
+| **Wet-day threshold** | 20 | Strict total-rainfall threshold over the wet spell, in mm |
+| **Minimum wet-day rainfall** | 1 | Minimum daily rainfall, in mm |
+| **Wet spell length** | 3 | Consecutive wet days |
+| **Dry spell limit** | 7 | Consecutive dry days needed for a veto |
+| **Dry spell search extension** | 21 | Requested follow-up search, in days |
+
+::: {.callout-important}
+These settings apply to **every selected model** in the next run. A search extension of **0 disables** the dry-spell check; a positive value shorter than the dry-spell limit is rejected. Record any effective horizon adjustment in the log.
+:::
+
+---
+
+## Dashboard Step 3: Masks, Thresholds and Reference
+
+Under **MASKS AND BASELINE**:
+
+1. **Area mask file:** keep the facilitator's configured mask. Choices include **JJAS 100mm rainfall mask**, **JJAS seasonal 0.25 mask**, **No mask** and **Custom path**.
+2. If using **Custom path**, enter **Area mask file path**. For the lesson JJAS mask, True/1 means keep.
+3. **Onset threshold file → Dataset default** for the baseline. A reference CSV or custom path is a separate documented experiment.
+4. **Baseline forecast → climatology**. Use a custom baseline name only when that reference is configured.
+
+::: {.callout-tip}
+Keep mask, reference and onset definition fixed during model comparisons. Save their selections with the scores; changing them changes the evaluated experiment.
+:::
+
+---
+
+## Dashboard Step 4: Model Run Windows
+
+Expand each selected model under **Model run windows**.
+
+| Control | Practice setting, if available |
+|:---|:---|
+| **Evaluation Start** | **1 May 2020** |
+| **Evaluation End** | **31 July 2020** |
+| **Baseline Start Year** | **2018** |
+| **Baseline End Year** | **2021** |
+
+- Read the **Shared model/observation window** and each model's available dates before editing.
+- The month/day range defines the initialization season repeated in each evaluation year.
+- If the practice period is unavailable, use one available evaluation year and a baseline of at least two available years including it.
+
+::: {.callout-note}
+Repeat these settings for each selected model. Short practice runs differ from the multi-year saved figures; retain your own baseline scores.
+:::
+
+---
+
+## Dashboard Step 5: Initialization and Verification
+
+Under **ADVANCED TEMPORAL & VERIFICATION SETTINGS**, expand the model:
+
+| Control | Baseline selection |
+|:---|:---|
+| **Initialization schedule** | **Weekly** |
+| **Initialization weekdays** | **Monday** and **Thursday** |
+| **Reference calendar year** | **2024**; aligns weekdays, not evaluation years |
+| **Verification windows** | **Days 1–15** to begin; **Both windows** for the lead comparison |
+| **Tolerance: days 1–15** | **3** |
+| **Tolerance: days 16–30** | **5** for the lesson reference; **3** in Exercise 6 |
+
+::: {.smaller}
+**Max Forecast Day (automatic)** becomes 15 or 30; leave it unchanged. **Daily** uses available dates; **Monthly** exposes **Initialization days of month**, skipping days absent from a month. These per-model settings apply to the next run.
+:::
+
+---
+
+## Dashboard Step 6: Check Readiness Before Running
+
+1. If available, open **Data Readiness & Fair Comparison → Data Readiness Report**. Inspect **Ready**, **Warning**, **No data**, **Error**, and the input inventory.
+2. Read all messages below the configuration controls. A disabled run can mean unsupported coverage, missing observation years, no matching initialization dates or insufficient forecast lead coverage.
+3. Check that dates, baseline years, schedule, verification windows and tolerances define a valid comparison.
+4. Resolve the reported issue with the facilitator; do not interpret an old saved result as the new experiment.
+
+::: {.callout-note}
+The readiness report is an optional module. The page also checks selected model/observation dates, initialization schedules and required forecast horizon before enabling the run.
+:::
+
+---
+
+## Dashboard Step 7: Run, Monitor and Stop
+
+1. Click **Run Benchmark**. Selected model workers run one after another.
+2. Read the live output panel. To cancel, click **Stop Benchmark** and wait for the cancellation status.
+3. After completion or failure, expand **Latest benchmark execution log**; retain the actual command and output for every model.
+4. Confirm the completion message. Changed-settings warnings mean existing files still describe an earlier run.
+5. Click **Refresh saved results** after a completed or externally run benchmark when the display needs reloading.
+
+::: {.callout-warning}
+Cancelled runs may leave incomplete outputs; rerun to obtain a complete result. A shutdown-verification warning requires checking worker cleanup. The optional CLI is not needed for these dashboard actions.
+:::
+
+---
+
+## Dashboard Step 8: Read and Compare Metric Maps
+
+Open **Results → Metric Map**. Select **Metric**, **Lead Time**, **Model**, then **Subregion level / Subregion** if boundaries are configured.
+
+| Map sub-tab | What to do |
+|:---|:---|
+| **Values** | Read the metric map and comparison table; keep the same area across screenshots |
+| **Skill** | Read the pass/fail classification against the metric's displayed threshold |
+| **Difference** | Choose **Compare against model** and **Compare against lead time**; read selected minus comparison |
+| **Swipe Compare** | Choose **Compare by → Model / Lead Time**, set the right-hand model/window, then **Drag to swipe** |
+
+::: {.callout-important}
+The **Skill** sub-tab is a threshold-status map, **not** the relative skill formula against climatology. For a controlled comparison, hold the metric and area fixed; do not compare a map with itself.
+:::
+
+---
+
+## Dashboard Step 9: All Metrics and Distributions
+
+1. Open **Results → All Metrics** and choose **Metric model category**.
+2. Untick **All models** to enable **Models to compare**. For the baseline, select **AIFS Single** and **Traditional Climatology**.
+3. Set **Lead times → Days 1–15**, or both windows after a joint-window run.
+4. Read the category-specific tables and **Detailed Metric Distributions**: Mean, Min, Median, P75, P90 and Max.
+5. For the ensemble exercise, choose **Probabilistic** and record AUC, Fair Brier Skill Score (%) and Fair RPS Skill Score (%).
+
+::: {.callout-tip}
+Record model, window, settings and before/after values. Lower error and higher skill/discrimination have different directions; an unsupported or undefined entry is **N/A**, not zero.
+:::
+
+---
+
+## Dashboard Step 10: Figures, Downloads and NetCDF
+
+Open **Results → Benchmark Outputs**:
+
+1. Choose **Category**, then **Figure Type**, then **Select Figure**. For calibration diagnostics, select **Reliability Diagram**.
+2. Use **Layout View → Grid / Full Width**; **Show All Figures in Selection** opens the selected collection, with **Figure page** when needed.
+3. Use **Download** to retain a PNG, or **Zoom Modal → Download High-Res PNG** for full-resolution inspection.
+4. Tick **Load NetCDF Data Explorer**, then select **Dataset** and **Variable** to inspect the saved arrays.
+
+::: {.callout-note}
+These assets come from `data/ROMP_OUTPUT/` and its `figures/` subfolders. Save the source dataset and configuration with the image; a later rerun can overwrite the model's outputs.
+:::
+
+---
+
+## Dashboard Extensions: Location, Skill and Uncertainty
+
+These tabs appear **only when their supporting modules are available**.
+
+| Optional tab | Dashboard action | Interpretation |
+|:---|:---|:---|
+| **Onset Analysis** | Set **Year**; choose **Location Selection Mode → Coordinates / Woreda**; enter latitude/longitude or filter/select a woreda; click **Run Onset Analysis** | Check the reported snapped grid coordinates and onset time-series figures |
+| **Skill vs Baseline** | Open the tab after a completed benchmark | Read available verification scores relative to climatology |
+| **Uncertainty** | Click **Compute Uncertainty**; inspect Metric Uncertainty and Significance vs Baseline | Record the method and sample support before claiming significance |
+
+::: {.callout-warning}
+Available dashboard diagnostics are not evidence that the saved benchmark results are statistically significant. The lesson's reliability bars are **one standard error**, not bootstrap 95% intervals.
+:::
+
+---
+
+## Dashboard Step 11: Export a Benchmark Report
+
+If **Benchmark Report & Export** is available:
+
+1. Inspect **Provenance Metadata**, when provided by the installed modules.
+2. Check **Report Summary**: Models Evaluated, Ground Truth, Forecast Window and Baseline.
+3. Click **Generate Complete PDF Report**, wait for the success message, then **Download Complete PDF Report**.
+4. Preserve the PDF with the saved PNGs, source datasets, settings and execution log.
+
+::: {.callout-important}
+A generated report packages the outputs available at generation time. Confirm that those files match the selected experiment; exporting does not recompute a benchmark. If PDF support is unavailable, retain the lesson's paper/screenshot scorecard instead.
+:::
+
+---
+
+## Dashboard Workflow Checkpoint
+
+Before moving to the lesson figures and exercises, demonstrate that you can:
+
+- Select **AIFS Single**, CHIRPS/Ethiopia and an available practice period.
+- Set the shared onset rules and per-model weekly schedule/window/tolerance.
+- Explain a readiness message, start a run, locate **Stop Benchmark** and open the execution log.
+- Compare AIFS Single with **Traditional Climatology** in **All Metrics**.
+- Find a saved PNG, inspect its source NetCDF and retain the result before the next run.
+
+::: {.callout-question}
+Which setting will you change in the next experiment, which controls will stay fixed, and where will you record the comparison?
+:::
+
+---
+
+
+# Worksheet for AI Weather Model Benchmarking
+
+## Six Dashboard Exercises: 15 Minutes
+
+Work in pairs; change **one setting at a time** and restore the baseline between experiments. Computation time is additional; use a facilitator's completed run while waiting.
+
+| Exercise | Minutes | Change / question |
+|:---|---:|:---|
+| 1. Establish a baseline | 5 | AIFS Single, Days 1–15 |
+| 2. Rainfall threshold | 5 | Wet-spell total: 20 → 30 mm |
+| 3. Timing tolerance | 5 | Days 1–15: 3 → 5 days |
+| 4. Dry-spell check | 10 | Search extension: 21 → 0 days |
+| 5. Ensemble reference | 5 | Baseline start: 2018 → 2010, if available |
+| 6. Lead windows and a finding | 5 | Both windows with equal 3-day tolerances |
+
+::: {.smaller}
+Practice: evaluation **1 May–31 July 2020**; baseline **2018–2021**, or the facilitator's available equivalent including the evaluation year.
+:::
+
+---
+
+## Exercise 1: Establish the Baseline (5 min)
+
+1. Apply the dashboard baseline and advanced settings just shown; select only **AIFS Single** and run **Days 1–15**, tolerance **3 days**.
+2. In **All Metrics**, choose **Metric model category → All**, untick **All models**, select **AIFS Single** and **Traditional Climatology** in **Models to compare**.
+3. Choose **Lead times → Days 1–15** and retain the scores and settings before the next run.
+
+| Metric | AIFS Single | Traditional Climatology |
+|:---|:---:|:---:|
+| MAE (days) | | |
+| Miss rate (%) | | |
+| False-alarm ratio (%) | | |
+
+::: {.callout-question}
+Which observation years, initializations and reference settings did this run actually use? Record unavailable values as N/A.
+:::
+
+---
+
+## Exercise 2: Raise the Rainfall Threshold (5 min)
+
+1. Starting from Exercise 1, change only **Wet-day threshold: 20 → 30**; keep dates, mask, wet-spell length and all other settings fixed.
+2. Predict how qualification as onset changes, then **Run Benchmark**.
+3. Record MAE, MR and FAR in the same **All Metrics** selection; compare identical **Metric Map** views or screenshots.
+4. Did all three scores improve together? Restore the threshold to **20**.
+
+::: {.callout-important}
+This changes the **wet-spell total** used for observations, model and reference. A changed event definition is not evidence that the rainfall forecast itself improved.
+:::
+
+---
+
+## Exercise 3: Allow More Timing Error (5 min)
+
+1. Restore the Exercise 1 baseline.
+2. Change only **Tolerance: days 1–15: 3 → 5**; retain **Verification windows → Days 1–15**.
+3. Rerun; compare MR, FAR and MAE with the baseline notes.
+4. Did either event-error rate fall or stay the same? Did MAE change? Restore tolerance to **3**.
+
+::: {.callout-question}
+Why can accepting a larger timing error improve event scores without changing rainfall forecasts?
+:::
+
+::: {.fragment}
+Scores can stay unchanged if no cases lie near the changed tolerance boundary. Interpret any changes using the timing-matched event counts.
+:::
+
+---
+
+## Exercise 4: Switch Off the Dry Check (5 min)
+
+1. Restore the baseline; change only **Dry spell search extension: 21 → 0**. Keep **Dry spell limit = 7**.
+2. Predict whether an early wet spell followed by dry weather can qualify; rerun.
+3. Compare MAE, MR and FAR in **All Metrics** and each **Metric Map**, keeping the same model, window and area.
+4. Would this definition be appropriate for planting advice, even if one score improves? Restore the extension to **21**.
+
+::: {.fragment}
+**Check your answer:** zero disables the follow-up veto. Onset dates can change in forecasts, observations and climatology. There is no universal numerical answer: use the recorded before/after results and discuss false planting signals.
+:::
+
+---
+
+## Exercise 5: Change an Ensemble's Reference (5 min)
+
+::: {.smaller}
+1. Restore shared wet/dry settings. Choose **Probabilistic** and select only **AIFS Ensemble**; use the same practice dates/baseline, weekly schedule and **Days 1–15**.
+2. Run. In **All Metrics**, choose **Metric model category → Probabilistic**, untick **All models**, select AIFS Ensemble and Days 1–15. Record **AUC**, **Fair Brier Skill Score (%)**, **Fair RPS Skill Score (%)**.
+3. Change only **Baseline Start Year: 2018 → 2010**, if available; otherwise use the facilitator's earlier available year. Keep baseline end **2021** and the evaluation year unchanged; the baseline must include it.
+4. Rerun and compare the same scores. In **Benchmark Outputs → Figure Type → Reliability Diagram**, read the low-probability curve relative to the diagonal. Restore the original baseline years.
+:::
+
+::: {.callout-question}
+The model rainfall forecasts are unchanged. How did the historical reference and number of usable comparisons affect your results?
+:::
+
+---
+
+## Exercise 6: Compare Leads and Share a Finding (5 min)
+
+1. Select only **AIFS Single** and restore Exercise 1's shared settings, evaluation dates and baseline years.
+2. Choose **Both windows**; set **Tolerance: days 1–15 = 3** and **Tolerance: days 16–30 = 3**. Leave the automatically updated **Max Forecast Day = 30** unchanged.
+3. Run; in **All Metrics**, select AIFS Single and Traditional Climatology with both lead times. Compare MAE, MR and FAR from this completed run; keep map views consistent.
+4. Share one changed setting, the observed score changes and one limitation with another pair.
+
+::: {.callout-warning}
+This exercise holds tolerance equal across leads. Its **3/3-day** setup differs from the reference figures' **3/5-day** setup; use your displayed scores, not the printed numbers.
+:::
+
+---
+
+## Reflection: Read Metrics Together
+
+::: {.callout-question}
+What happens if a model never predicts onset? What if it always predicts onset, but often at the wrong time?
+:::
+
+::: {.fragment}
+- **Never predicts:** all observed events are missed; FAR is **undefined**, because there are no event forecasts.
+- **Always predicts:** timing outside tolerance can still cause misses as well as false alarms.
+- MAE includes known timing errors on false alarms; a smaller MAE may cover fewer cells.
+:::
+
+::: {.callout-tip}
+Share **one artifact-supported conclusion**, **one hypothesis needing a new experiment**, and **one metadata field** needed to distinguish them.
+:::

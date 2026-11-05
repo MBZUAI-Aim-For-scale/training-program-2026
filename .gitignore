@@ -49,6 +49,7 @@ anaconda_projects/db/
 /outputs/
 apps/outputs/
 
+<<<<<<< HEAD
 # Track onset blending source/configuration, but not local data or generated artifacts.
 !apps/onset_blending/
 apps/onset_blending/**
@@ -58,3 +59,9 @@ apps/onset_blending/**
 !apps/onset_blending/**/README.md
 !apps/onset_blending/readme.md
 !apps/onset_blending/requirements.txt
+=======
+#Demo 1 dashboard runtime files
+demos/demo1/state/
+# CDT's working files (mounted at /data in the cdt container)
+demos/demo2/data/
+>>>>>>> 3e0f7a15957d9bbcb53b0d3f64d9ab09dea9db9a

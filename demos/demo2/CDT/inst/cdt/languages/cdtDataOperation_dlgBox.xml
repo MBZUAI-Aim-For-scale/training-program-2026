@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dialog_box>
+    <title>
+        <text lang="en"> Data Operation </text>
+    </title>
+    <widget>
+        <button id="1">
+            <text lang="en"> Set Input Datasets </text>
+        </button>
+        <button id="2">
+            <text lang="en"> CDT dataset/netCDF Variable Information </text>
+        </button>
+        <label id="1">
+            <text lang="en"> Format of input data </text>
+        </label>
+        <label id="2">
+            <text lang="en"> Formula to be used </text>
+        </label>
+        <label id="3">
+            <text lang="en"> File to save the result </text>
+        </label>
+        <label id="4">
+            <text lang="en"> Directory to save the result </text>
+        </label>
+        <label id="5">
+            <text lang="en"> Time step </text>
+        </label>
+        <label id="6">
+            <text lang="en"> Output netCDF filename format </text>
+        </label>
+        <label id="7">
+            <text lang="en"> Dataset name </text>
+        </label>
+    </widget>
+    <help>
+        <content id="1">
+            <status>
+                <text lang="en"> Formula to be used. The number of variables (X) must be \nthe same as of the number of the inputs data </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Formula to be used. The number of variables (X) must be \nthe same as of the number of the inputs data </text>
+            </tooltip>
+        </content>
+        <content id="2">
+            <status>
+                <text lang="en"> Click this button to provide the input datasets </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Click here to provide the input datasets </text>
+            </tooltip>
+        </content>
+        <content id="3">
+            <status>
+                <text lang="en"> Enter the full path to the file to save the result </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Enter the full path to the file to save the result </text>
+            </tooltip>
+        </content>
+        <content id="4">
+            <status>
+                <text lang="en"> Enter the full path to the directory to save the result </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Enter the full path to the directory to save the result </text>
+            </tooltip>
+        </content>
+        <content id="5">
+            <status>
+                <text lang="en"> Or browse here </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Or browse here </text>
+            </tooltip>
+        </content>
+        <content id="6">
+            <status>
+                <text lang="en"> Format of the netCDF file name. For example, \nif you compute the mean temperature from the minimum and maximum, \nyou can put tmean_%S.nc, where %S represent the date tmean_20240101.nc </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Specify here the format of the netCDF file name </text>
+            </tooltip>
+        </content>
+        <content id="7">
+            <status>
+                <text lang="en"> Name of he output CDT Dataset. For example, \nif you compute the mean temperature from the minimum and maximum, \nyou can put TMEAN </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Specify here the name you want to give the output CDT Dataset </text>
+            </tooltip>
+        </content>
+        <content id="8">
+            <status>
+                <text lang="en"> Click this button to define the netCDF variable of the output dataset </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Click here to define the netCDF variable of the output dataset </text>
+            </tooltip>
+        </content>
+    </help>
+    <message>
+        <content id="1">
+            <text lang="en"> Start computation ...... </text>
+        </content>
+        <content id="2">
+            <text lang="en"> Browse or enter the file to save the result </text>
+        </content>
+        <content id="3">
+            <text lang="en"> Browse or enter the path to the folder to save the result </text>
+        </content>
+        <content id="6">
+            <text lang="en"> The number of input data and the number of the variables in the formula do not match </text>
+        </content>
+        <content id="7">
+            <text lang="en"> The variable information for the netCDF or CDT dataset must be edited </text>
+        </content>
+        <content id="8">
+            <text lang="en"> Wrong formula </text>
+        </content>
+        <content id="9-1">
+            <text lang="en"> Unable to import files </text>
+        </content>
+        <content id="9-2">
+            <text lang="en"> Unable to parse files </text>
+        </content>
+        <content id="10">
+            <text lang="en"> Stations data IDs do not match </text>
+        </content>
+        <content id="11">
+            <text lang="en"> Dates do not overlap </text>
+        </content>
+        <content id="12">
+            <text lang="en"> Unable to evaluate the formula </text>
+        </content>
+        <content id="13">
+            <text lang="en"> Computing data finished successfully </text>
+        </content>
+        <content id="14">
+            <text lang="en"> Computing data failed </text>
+        </content>
+        <content id="15">
+            <text lang="en"> Unable to open netCDF sample files </text>
+        </content>
+        <content id="16">
+            <text lang="en"> The netCDF grids do not match </text>
+        </content>
+        <content id="17">
+            <text lang="en"> The netCDF do not find </text>
+        </content>
+        <content id="18">
+            <text lang="en"> Unable to read at least one of those netCDF files </text>
+        </content>
+        <content id="19">
+            <text lang="en"> Provide the dataset name </text>
+        </content>
+        <content id="20">
+            <text lang="en"> The datasets have different temporal resolutions </text>
+        </content>
+        <content id="21">
+            <text lang="en"> The datasets have different chunk sizes </text>
+        </content>
+        <content id="22">
+            <text lang="en"> The datasets have different spatial grid </text>
+        </content>
+        <content id="23">
+            <text lang="en"> Unable to read the datasets index files: </text>
+        </content>
+        <content id="24">
+            <text lang="en"> For constant 2D data, do not include elevation data in the coordinates of CDT station data </text>
+        </content>
+    </message>
+</dialog_box>

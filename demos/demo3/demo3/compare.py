@@ -1,6 +1,7 @@
 """Time-series comparison of the loaded models: one chart of area-mean daily rainfall
-(on the CHIRPS grid, with CHIRPS) or daily maximum 2 m temperature (with ERA5 on
-request), plus each model's onset share for the Onset use case."""
+(on the CHIRPS grid, with CHIRPS v3) or daily maximum 2 m temperature (on the CHIRTS
+grid, with CHIRTS; ERA5 on request outside the programme countries), plus each model's
+onset share for the Onset use case."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -20,7 +21,7 @@ COLORS = ["#2563eb", "#dc2626", "#059669", "#d97706"]
 
 @st.cache_data(max_entries=32, show_spinner=False)
 def _area_series(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead_days: int,
-                 var: str) -> xr.DataArray:
+                 var: str, region: str = "") -> xr.DataArray:
     """Daily area-mean series (ensemble, time): rain (mm/day) over CHIRPS land points, or daily
     maximum 2 m temperature (°C, from the 6-hourly values)."""
     box = Box(*box_t)
@@ -30,35 +31,56 @@ def _area_series(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead
     if var == "tp":
         fc = onset.forecast_daily(sub, init)
         try:
-            last = obs.last_day()
-            like = obs.daily(box, last, last).isel(time=0, drop=True)
+            last = obs.last_day(region)
+            like = obs.daily(box, last, last, region).isel(time=0, drop=True)
             fc = onset.to_grid(fc, like)
         except (OSError, FileNotFoundError):
             fc = fc.sel(lat=slice(box.lat_min, box.lat_max), lon=slice(box.lon_min, box.lon_max))
         return onset.area_mean(fc)
-    t = sub.t2m.sel(lat=slice(box.lat_min, box.lat_max), lon=slice(box.lon_min, box.lon_max)) - 273.15
+    t = sub.t2m - 273.15
     t = t.sel(lead_time=t.lead_time > 0)
     day = init.normalize() + pd.to_timedelta((t.lead_time.values - 1) // 24, unit="D")
     t = t.assign_coords(day=("lead_time", day)).groupby("day").max("lead_time").rename(day="time")
-    return onset.area_mean(t)
+    if obs.tmax_covers(region):
+        try:
+            last = obs.tmax_last_day(region)
+            like = obs.tmax_daily(box, last, last, region).isel(time=0, drop=True)
+            return onset.area_mean(onset.to_grid(t, like))
+        except (OSError, FileNotFoundError, TypeError):
+            pass
+    return onset.area_mean(t.sel(lat=slice(box.lat_min, box.lat_max), lon=slice(box.lon_min, box.lon_max)))
 
 
 @st.cache_data(max_entries=16, show_spinner="Getting observations…")
-def _obs_series(box_t: tuple, init: pd.Timestamp, lead_days: int, var: str) -> xr.DataArray | None:
+def _obs_series(box_t: tuple, init: pd.Timestamp, lead_days: int, var: str,
+                region: str = "", era5: bool = False) -> xr.DataArray | None:
     box = Box(*box_t)
     end = init.normalize() + pd.Timedelta(days=lead_days - 1)
     if var == "tp":
         try:
-            return onset.area_mean(obs.daily(box, init.normalize(), end))
+            return onset.area_mean(obs.daily(box, init.normalize(), end, region))
         except (OSError, FileNotFoundError):
             return None
-    # ERA5 2 m temperature from Google's copy (as in the event movie), daily max of 6-hourly values
+    if obs.tmax_covers(region) and not era5:
+        try:
+            return onset.area_mean(obs.tmax_daily(box, init.normalize(), end, region))
+        except (OSError, FileNotFoundError):
+            return None
+    # elsewhere: ERA5 2 m temperature from Google's copy, daily max of 6-hourly values
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent / "event_movie"))
     import run_event_movie as rem
     da = rem._era5("2m_temperature", init.normalize(), end + pd.Timedelta(hours=18),
                    (box.lon_min, box.lon_max, box.lat_min, box.lat_max))
     da = (da - 273.15).resample(time="1D").max()
+    if obs.tmax_covers(region):  # on the CHIRTS land grid, like the models
+        try:
+            last = obs.tmax_last_day(region)
+            like = obs.tmax_daily(box, last, last, region).isel(time=0, drop=True)
+            da = onset.to_grid(da.rename({k: v for k, v in (("latitude", "lat"), ("longitude", "lon"))
+                                          if k in da.dims}), like)
+        except (OSError, FileNotFoundError, TypeError):
+            pass
     return onset.area_mean(da)
 
 
@@ -68,7 +90,7 @@ def chart(paths, keys, init, lead_days, box, region_name, var):
     unit = "mm/day" if var == "tp" else "°C"
     for i, k in enumerate(k for k in keys if k in paths):
         p = Path(paths[k])
-        ser = _area_series(str(p), p.stat().st_mtime, box_t, init, lead_days, var)
+        ser = _area_series(str(p), p.stat().st_mtime, box_t, init, lead_days, var, region_name)
         name, color = catalog.BY_KEY[k].name, COLORS[i % len(COLORS)]
         mean = ser.mean("ensemble") if "ensemble" in ser.dims else ser
         if "ensemble" in ser.dims and ser.sizes["ensemble"] > 1:
@@ -80,16 +102,30 @@ def chart(paths, keys, init, lead_days, box, region_name, var):
             name += f" (mean of {ser.sizes['ensemble']})"
         fig.add_scatter(x=mean.time.values, y=mean.values, mode="lines+markers", name=name,
                         line=dict(color=color, width=2))
-    obs_name = "CHIRPS" if var == "tp" else "ERA5"
-    want_obs = var == "tp" or st.checkbox("Add ERA5 observations", key="cmp_obs",
-                                          help="Fetched from the cloud: a minute or two the first time.")
+    chirts = var == "t2m" and obs.tmax_covers(region_name)
+    obs_name = obs.NAME if var == "tp" else obs.TMAX_NAME if chirts else "ERA5"
+    want_obs = var == "tp" or chirts or st.checkbox(
+        "Add ERA5 observations", key="cmp_obs",
+        help=f"{obs.TMAX_NAME} covers the programme countries only; elsewhere ERA5 is fetched "
+             "from the cloud (a minute or two the first time).")
     if want_obs:
-        o = _obs_series(box_t, init, lead_days, var)
+        o = _obs_series(box_t, init, lead_days, var, region_name)
         if o is not None and o.sizes.get("time", 0):
             fig.add_scatter(x=o.time.values, y=o.values, mode="lines+markers", name=f"Observed ({obs_name})",
                             line=dict(color="black", width=2, dash="dash"))
-        elif var == "tp":
-            st.caption("No CHIRPS observations for these dates yet.")
+        else:
+            st.caption(f"No {obs_name} observations for these dates yet.")
+    if chirts and st.checkbox("Also show ERA5", key="cmp_era5",
+                              help="ERA5 is the reanalysis most of these models were trained on. Over "
+                                   "land its daily maximum is often 1–4 °C cooler than CHIRTS's, so "
+                                   "the gap between the two shows how much the choice of "
+                                   "observations matters. Fetched from the cloud: a minute or two "
+                                   "the first time."):
+        e = _obs_series(box_t, init, lead_days, var, region_name, era5=True)
+        if e is not None and e.sizes.get("time", 0):
+            fig.add_scatter(x=e.time.values, y=e.values, mode="lines+markers",
+                            name="ERA5 (6-hourly max, as the models)",
+                            line=dict(color="grey", width=2, dash="dot"))
     what = {"tp": "area-mean daily rainfall (land)", "t2m": "area-mean daily maximum 2 m temperature"}[var]
     fig.update_layout(title=f"{region_name}: {what}", yaxis_title=unit, height=420,
                       margin=dict(l=10, r=10, t=50, b=10), legend=dict(orientation="h", y=-0.15))
@@ -97,7 +133,10 @@ def chart(paths, keys, init, lead_days, box, region_name, var):
     theme.hint("Shaded: range across members",
                "Each model's rainfall is put on the CHIRPS grid and averaged over land, so it compares "
                "like for like with the observations." if var == "tp" else
-               "Daily maximum of the 6-hourly values (models and ERA5 alike).")
+               (f"Each model's daily maximum is put on the {obs.TMAX_NAME} grid and averaged over land. "
+                "The models only give a value every 6 hours, so their daily maximum can miss the "
+                f"afternoon peak that {obs.TMAX_NAME} records, and read a little low." if chirts else
+                "Daily maximum of the 6-hourly values (models and ERA5 alike)."))
 
 
 
@@ -108,7 +147,7 @@ def onset_table(paths, keys, init, lead_days, box, region_name, defn, search_fro
         if k not in paths:
             continue
         try:
-            r = result(paths[k], box, init, lead_days, defn, search_from)
+            r = result(paths[k], box, init, lead_days, defn, search_from, region_name)
         except (OSError, FileNotFoundError):
             continue
         land = r["land"]

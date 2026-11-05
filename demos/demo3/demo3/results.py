@@ -6,6 +6,8 @@ maps of z500 / 2 m temperature / rainfall, and saving the forecast as NetCDF.
 """
 from __future__ import annotations
 
+import base64
+import io
 import json
 import shutil
 import tempfile
@@ -171,6 +173,17 @@ def field_maps(ds: xr.Dataset, m: catalog.Model, box: Box, region_name: str) -> 
         ds, m, box, region_name, var, pick, members, which)
 
 
+
+def show_fig(where, fig) -> None:
+    """Draw a matplotlib figure as an inline PNG. st.pyplot serves it from Streamlit's media
+    store, which can drop the file on a fragment rerun before the browser fetches it (broken image)."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=100, bbox_inches="tight")
+    plt.close(fig)
+    where.html(f'<img src="data:image/png;base64,{base64.b64encode(buf.getvalue()).decode()}" '
+               'style="width:100%">')
+
+
 PLAY_S = 1.5  # seconds per frame while playing
 
 
@@ -234,8 +247,7 @@ def _frames(ds, m, box, region_name, var, pick, members, which) -> None:
                                                   for e in members},
                          f"{region_name}: area mean", unit)
     a, c = st.columns([3, 2])
-    a.pyplot(fig)
-    plt.close(fig)
+    show_fig(a, fig)
     c.plotly_chart(series, width="stretch", key="map_series")
     st.caption(f"Shown on {m.name}'s own {m.grid_deg:g}° grid.")
 

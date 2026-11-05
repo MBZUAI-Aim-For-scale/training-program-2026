@@ -1,9 +1,4 @@
 # Demo 4 · Weather model scorecard
-
-Because the AI models and datasets are large, the benchmarking environment is containerized using Docker and hosted on a remote server (the "Spark"). You will launch the backend via Docker and access the interactive Streamlit UI from your local machine using an SSH tunnel. An existing host development environment can also run the CLI outside Docker.
-
----
-
 ## Environment Setup
 
 Use the Docker setup below for the full benchmark. It includes the Python environment needed by the CLI and dashboard.
@@ -41,6 +36,72 @@ or
    ```
 
 
+<<<<<<< HEAD
+=======
+2. **Clone the repository and navigate to the project directory**:
+```bash
+git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
+cd training-program-2026
+
+```
+
+
+3. **Initialize environment configuration**:
+```bash
+cp .env.example .env
+cat <<EOF > .env
+DEMO_BUCKET=<bucket>
+DEMO3_BUCKET=gs://<bucket>/demo3
+DEMO4_BUCKET=<bucket>/demo4
+EOF
+
+```
+
+
+4. **Start the container stack**:
+```bash
+bash demos/demo4/docker/run.sh rebuild
+
+```
+
+
+*(For subsequent runs without rebuilding, use `bash demos/demo4/docker/run.sh start` or `DEV=1 bash demos/demo4/docker/run.sh start` for live code editing).*
+5. **Create the SSH tunnel** (from your local machine):
+```bash
+ssh -L 8503:localhost:8503  <you>@country-spark
+
+```
+
+
+6. **Access dashboards**:
+  * **Streamlit UI**: `http://localhost:8503`
+  * **Jupyter Lab**: `http://localhost:8888`
+
+
+## Command-Line Execution (`run_momp.py`)
+
+The `run_momp.py` script is the execution engine. Execute commands inside the Docker container:
+
+1. **Enter the Docker container**:
+```bash
+docker exec -it ai_weather bash
+
+```
+
+
+2. **Run a Deterministic Model** (e.g., GraphCast, FuXi, AIFS Single v2):
+```bash
+python run_momp.py --mode det --model GraphCast
+
+```
+
+
+3. **Run a Probabilistic (Ensemble) Model** (e.g., AIFS Ensemble v2, GenCast):
+```bash
+python run_momp.py --mode prob --model AIFS_ENS
+
+```
+>>>>>>> 3e0f7a15957d9bbcb53b0d3f64d9ab09dea9db9a
 
    *(Tip: If you are actively editing the code and want changes to reflect live without rebuilding the image, use `DEV=1 bash docker/run.sh` instead).*
 4. **Create the SSH Tunnel** (Local Machine): Open a new terminal window on your local laptop. Set up port forwarding so your local browser can access the remote Streamlit server:
@@ -56,6 +117,7 @@ or
 
 ## Command-Line Execution (`run_momp.py`)
 
+<<<<<<< HEAD
 The `run_momp.py` script is the backend execution engine. It processes one model per run, categorizing them into Deterministic (`det`) or Probabilistic (`prob`) modes. If you are using the Docker setup, you must execute these commands inside the running container.
 
 1. **Enter the Docker Container** (Remote Server Terminal):
@@ -89,6 +151,9 @@ The `run_momp.py` script is the backend execution engine. It processes one model
 The interactive dashboard provides a visual interface to configure, execute, and analyze the benchmark without needing to type CLI commands.
 
 1. **Open Benchmarking**: In your local browser at `http://localhost:8501`, click **Benchmarking** in the top menu. Use that menu rather than Streamlit's hidden sidebar.
+=======
+1. **Navigate to Benchmarking**: Open `http://localhost:8503` and select **Short Medium Benchmarking** in the sidebar.
+>>>>>>> 3e0f7a15957d9bbcb53b0d3f64d9ab09dea9db9a
 2. **Configure Benchmark Inputs**:
    - **Ground Truth**: Select the observational dataset (e.g., CHIRPS or ENACTS).
    - **Benchmark Coverage**: Select the region (e.g., Ethiopia). Note: The run button will be disabled if the region's data or masks are not configured in `config.py`.

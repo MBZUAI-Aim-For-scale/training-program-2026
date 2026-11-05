@@ -12,8 +12,16 @@ This wrapper patches two of its functions, then calls its main():
               (instantaneous 2 m T; 6 h precipitation totals ending at each
               stamp), and cache it under DEMO3_OBS_CACHE.
 
-All of her command-line flags work unchanged. One extra flag:
-    --result FILE   write {"gif": ..., "png": ..., "error": ...} when finished
+  load_obs    observations come from Demo 3's own loaders (demo3/obs.py): rainfall from
+              CHIRPS v3, and daily maximum temperature from CHIRTS for the programme
+              countries (ERA5 elsewhere, through _era5 above).
+  load_fc     CHIRPS and CHIRTS cover land only, so the forecast is blanked where the
+              observations have no data (sea, outside the country box). The maps and
+              the regional series then compare the same area.
+
+All of her command-line flags work unchanged. Two extra flags:
+    --result FILE     write {"gif": ..., "png": ..., "error": ...} when finished
+    --region NAME     the Demo 3 region, so a programme country reads its bucket files
 """
 from __future__ import annotations
 
@@ -30,7 +38,10 @@ import pandas as pd
 import xarray as xr
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import forecast_event_movie as fem  # noqa: E402
+from demo3 import obs as d3obs  # noqa: E402
+from demo3.regions import Box  # noqa: E402
 
 ARCO = "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3"
 OBS_CACHE = Path(os.environ.get(
@@ -38,6 +49,10 @@ OBS_CACHE = Path(os.environ.get(
 
 _orig_open_store = fem.open_store
 _orig_era5 = fem._era5
+_orig_load_obs = fem.load_obs
+_orig_load_fc = fem.load_fc
+REGION = ""
+LAND = None  # where the observations have data, on their grid (set by load_obs)
 
 
 def open_store(path):
@@ -93,13 +108,45 @@ def _load_in_parts(da, parts=10):
     return xr.concat(out, "time") if len(out) > 1 else out[0]
 
 
+def load_obs(kind, source, domain, start, end):
+    lon_min, lon_max, lat_min, lat_max = domain
+    box = Box(lat_min, lat_max, lon_min, lon_max)
+    if kind == "precip":
+        da, label = d3obs.daily(box, start, end, REGION), f"{d3obs.NAME} (obs)"
+    elif d3obs.tmax_covers(REGION):
+        da, label = d3obs.tmax_daily(box, start, end, REGION), f"{d3obs.TMAX_NAME} (obs)"
+    else:
+        return _orig_load_obs(kind, source, domain, start, end)
+    global LAND
+    units = da.attrs["units"]
+    da = fem._subset(da, domain)
+    da.attrs["units"] = units
+    LAND = da.notnull().any("time")
+    return da, label
+
+
+def load_fc(kind, path, spec, domain, start, end):
+    fc, init_t = _orig_load_fc(kind, path, spec, domain, start, end)
+    if LAND is not None:
+        land = LAND.astype("float32").interp(lat=fc.lat, lon=fc.lon, method="nearest") > 0.5
+        fc = fc.where(land)
+    return fc, init_t
+
+
 fem.open_store = open_store
 fem._era5 = _era5
+fem.load_obs = load_obs
+fem.load_fc = load_fc
 
 
 def main() -> int:
+    global REGION
     argv = sys.argv[1:]
     result = None
+    if "--region" in argv:
+        i = argv.index("--region")
+        REGION = argv[i + 1]
+        del argv[i:i + 2]
     if "--result" in argv:
         i = argv.index("--result")
         result = Path(argv[i + 1])

@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<global_wdgt>
+    <widget>
+        <button id="1">
+            <text lang="en"> OK </text>
+            <text lang="fr"> OK </text>
+        </button>
+        <button id="2">
+            <text lang="en"> Cancel </text>
+            <text lang="fr"> Annuler </text>
+        </button>
+        <button id="3">
+            <text lang="en"> PLOT </text>
+            <text lang="fr"> VISUALISER </text>
+        </button>
+        <button id="4">
+            <text lang="en"> Options </text>
+            <text lang="fr"> Options </text>
+        </button>
+        <button id="5">
+            <text lang="en"> Settings </text>
+            <text lang="fr"> Paramètres </text>
+        </button>
+        <button id="6">
+            <text lang="en"> Load Data </text>
+            <text lang="fr"> Charger Données </text>
+        </button>
+        <button id="7">
+            <text lang="en"> Get Displayed Data </text>
+            <text lang="fr"> Obtenir les Données </text>
+        </button>
+        <label id="1">
+            <text lang="en"> Open Files </text>
+            <text lang="fr"> Fichiers Ouverts </text>
+        </label>
+        <label id="2">
+            <text lang="en"> Remove data </text>
+            <text lang="fr"> Supprimer les données </text>
+        </label>
+        <label id="3">
+            <text lang="en"> Open in table </text>
+            <text lang="fr"> Ouvrir dans un tableau </text>
+        </label>
+        <combobox id="1">
+            <option id="1">
+                <text lang="en"> Minutes data </text>
+                <text lang="fr"> Données minutes </text>
+            </option>
+            <option id="2">
+                <text lang="en"> Hourly data </text>
+                <text lang="fr"> Données horaires </text>
+            </option>
+            <option id="3">
+                <text lang="en"> Daily data </text>
+                <text lang="fr"> Données journalières </text>
+            </option>
+            <option id="4">
+                <text lang="en"> Pentad data </text>
+                <text lang="fr"> Données pentadaires </text>
+            </option>
+            <option id="5">
+                <text lang="en"> Dekadal data </text>
+                <text lang="fr"> Données décadaires </text>
+            </option>
+            <option id="6">
+                <text lang="en"> Monthly data </text>
+                <text lang="fr"> Données mensuelles </text>
+            </option>
+            <option id="7">
+                <text lang="en"> Annual data </text>
+                <text lang="fr"> Données annuelles </text>
+            </option>
+            <option id="8">
+                <text lang="en"> Seasonal data </text>
+                <text lang="fr"> Données saisonnières </text>
+            </option>
+            <option id="9">
+                <text lang="en"> Rolling Seasonal data </text>
+                <text lang="fr"> Données saisonnières glissantes </text>
+            </option>
+            <option id="10">
+                <text lang="en"> Others </text>
+                <text lang="fr"> Autres </text>
+            </option>
+            <option id="11">
+                <text lang="en"> Single netCDF file </text>
+                <text lang="fr"> Un seul fichier netCDF </text>
+            </option>
+        </combobox>
+        <combobox id="2">
+            <option id="1">
+                <text lang="en"> CDT stations data format </text>
+                <text lang="fr"> Format de données des stations CDT </text>
+            </option>
+            <option id="2">
+                <text lang="en"> CDT dataset format (gridded) </text>
+                <text lang="fr"> Format de données CDT (gridded) </text>
+            </option>
+            <option id="3">
+                <text lang="en"> netCDF gridded data </text>
+                <text lang="fr"> Données netCDF </text>
+            </option>
+        </combobox>
+    </widget>
+    <message>
+        <content id="1">
+            <text lang="en"> Unable to read file: </text>
+            <text lang="fr"> Le fichier n'a pas pu être ouvert: </text>
+        </content>
+        <content id="2">
+            <text lang="en"> The table could not be saved correctly </text>
+            <text lang="fr"> Le tableau n'a pas pu être enregistré correctement </text>
+        </content>
+        <content id="3">
+            <text lang="en"> Table saved successfully </text>
+            <text lang="fr"> Le tableau est enregistré avec succès </text>
+        </content>
+        <content id="4">
+            <text lang="en"> File already exists </text>
+            <text lang="fr"> Le fichier existe déjà </text>
+        </content>
+        <content id="5">
+            <text lang="en"> This type of data can not be displayed on a table </text>
+            <text lang="fr"> Ce type de données ne peut pas être affiché sur une table </text>
+        </content>
+        <content id="6">
+            <text lang="en"> This type of data can not be saved as a table </text>
+            <text lang="fr"> Ce type de données ne peut pas être enregistré sous forme de tableau </text>
+        </content>
+        <content id="7">
+            <text lang="en"> Coordinates outside of data range </text>
+            <text lang="fr"> Coordonnées hors de la plage de données </text>
+        </content>
+        <content id="8">
+            <text lang="en"> Unable to create tclArrayVar </text>
+            <text lang="fr"> Impossible de créer tclArrayVar </text>
+        </content>
+        <content id="9">
+            <text lang="en"> Unable to display table </text>
+            <text lang="fr"> Le tableau n'a pas pu être affiché </text>
+        </content>
+        <content id="10">
+            <text lang="en"> No data to save </text>
+            <text lang="fr"> Pas des données à enregistrer </text>
+        </content>
+        <content id="11">
+            <text lang="en"> Updating CDT from GitHub ..... </text>
+        </content>
+        <content id="12">
+            <text lang="en"> Updating CDT done! </text>
+        </content>
+        <content id="13">
+            <text lang="en"> You have to start a new R session. </text>
+        </content>
+        <content id="14">
+            <text lang="en"> No Internet connection </text>
+        </content>
+    </message>
+</global_wdgt>

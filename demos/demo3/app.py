@@ -20,7 +20,7 @@ import pandas as pd
 import streamlit as st
 import xarray as xr
 
-from demo3 import catalog, compare, movie, onset_view, results, runs, store, theme
+from demo3 import catalog, compare, movie, obs, onset_view, results, runs, store, theme
 from demo3.regions import COUNTRIES, GROUPS, Box, country_box
 
 st.set_page_config(page_title="Demo 3 · AI Weather Forecast", layout="wide",
@@ -49,17 +49,35 @@ def gif_html(path: Path, alt: str) -> None:
             f'style="width:100%" alt="{alt}">')
 
 
-def obs_window(init: pd.Timestamp, lead_days: int, run_days: int) -> tuple[int, str | None]:
-    """Days of observations (ERA5) available to compare with, and a note if fewer than asked."""
+def obs_source(kind: str, region_name: str) -> str:
+    """Which observations the event movie uses: CHIRPS v3 for rain, CHIRTS for heat in the
+    programme countries, ERA5 for heat elsewhere."""
+    if kind == "precip":
+        return obs.NAME
+    return obs.TMAX_NAME if obs.tmax_covers(region_name) else "ERA5"
+
+
+def obs_window(init: pd.Timestamp, lead_days: int, run_days: int, kind: str,
+               region_name: str) -> tuple[int, str | None]:
+    """Days of observations available to compare with, and a note if fewer than asked."""
     days = min(lead_days, run_days)
-    obs_end = pd.Timestamp(catalog.era5_dates()[1])  # last day of (preliminary) ERA5
+    name = obs_source(kind, region_name)
+    try:
+        obs_end = (obs.last_day(region_name) if kind == "precip" else
+                   obs.tmax_last_day(region_name) if name == obs.TMAX_NAME else None)
+    except OSError:
+        obs_end = None
+    if obs_end is None:
+        obs_end = pd.Timestamp(catalog.era5_dates()[1])  # last day of (preliminary) ERA5
+        name = "ERA5" if kind == "heat" else name
+    obs_end = pd.Timestamp(obs_end) + pd.Timedelta(days=1)  # data cover the whole last day
     if init >= obs_end:
-        return 0, (f"Observations (ERA5) currently end on {obs_end:%-d %b %Y}, so there is nothing "
-                   f"yet to compare a {init:%-d %b %Y} forecast with.")
+        return 0, (f"Observations ({name}) currently end on {obs_end - pd.Timedelta(days=1):%-d %b %Y}, "
+                   f"so there is nothing yet to compare a {init:%-d %b %Y} forecast with.")
     if init + pd.Timedelta(days=days) > obs_end:
         days = max(1, (obs_end - init).days)
-        return days, (f"Observations (ERA5) currently end on {obs_end:%-d %b %Y}, so the movies cover "
-                      f"the first {days} day{'s' if days > 1 else ''} of the forecast.")
+        return days, (f"Observations ({name}) currently end on {obs_end - pd.Timedelta(days=1):%-d %b %Y}, "
+                      f"so the movies cover the first {days} day{'s' if days > 1 else ''} of the forecast.")
     return days, None
 
 
@@ -93,7 +111,7 @@ def event_movies(paths: dict, keys: list, init, lead_days, box, region_name, use
     if not usable:
         return
     run_days = min(int(have[k].lead_time.max()) // 24 for k in usable)
-    days, note = obs_window(init, lead_days, run_days)
+    days, note = obs_window(init, lead_days, run_days, kind, region_name)
     if note:
         st.info(note)
     if days == 0:
@@ -116,8 +134,9 @@ def event_movies(paths: dict, keys: list, init, lead_days, box, region_name, use
         label = (f"Make the event movie for {catalog.BY_KEY[todo[0]].name}" if len(todo) == 1
                  else f"Make {len(todo)} event movies (one after another)")
         if st.button(label, type="primary", key="movie_go",
-                     help="Movies are made one at a time. The first for new dates fetches ERA5 "
-                          "observations from the cloud (a minute or two); later ones reuse them."):
+                     help=f"Movies are made one at a time, against {obs_source(kind, region_name)}. "
+                          "The first for a new country or year downloads the observations; later ones "
+                          "reuse them."):
             queue.extend(k for k in todo if k not in queue)
             st.rerun()
     busy = bool(queue) or any(movie.status(r)["state"] == "running" for r in reqs.values())
@@ -156,7 +175,9 @@ def _movie_panel(picked, reqs):
                     st.download_button("Download movie (GIF)", Path(s["gif"]).read_bytes(),
                                        file_name=Path(s["gif"]).name, mime="image/gif", key=f"movie_dl_{k}")
                 if s.get("png"):
-                    st.image(s["png"], caption="Event footprint and track")
+                    st.html(f'<img src="data:image/png;base64,{base64.b64encode(Path(s["png"]).read_bytes()).decode()}" '
+                            'style="width:100%" alt="Event footprint and track">')
+                    st.caption("Event footprint and track")
                     st.download_button("Download track map (PNG)", Path(s["png"]).read_bytes(),
                                        file_name=Path(s["png"]).name, mime="image/png", key=f"track_dl_{k}")
     was_busy = bool(ss.get("_movies_busy"))
@@ -317,10 +338,12 @@ lead_days = c3.slider("Lead time (days)", 1, max_lead, min(10, max_lead),
                                                        else ""))
 ens_models = [m for m in models if m.kind == "ensemble"]
 if ens_models:
-    members = int(c4.number_input("Ensemble members", 1, max(m.max_members for m in ens_models),
+    members = int(c4.number_input("Ensemble members", 1, None,
                                   max(m.default_members for m in ens_models),
-                                  help="For the ensemble models, each capped at its own limit on the "
-                                       "Spark. Deterministic models give one forecast."))
+                                  help="For the ensemble models; deterministic models give one forecast. "
+                                       "Time and file size grow with the number of members (members run "
+                                       "one after another, so GPU memory doesn't). Per member, 10 days:  \n"
+                                       + "  \n".join(f"{m.name}: {m.member_cost}" for m in ens_models)))
 else:
     members = 1
     c4.text_input("Ensemble members", "1 (deterministic)", disabled=True)
@@ -400,11 +423,19 @@ if loaded:
         st.markdown("#### Onset (vs observations)")
         defn, search_from = onset_results(paths, loaded, init, lead_days, box, region_name)
     else:
+        src = obs_source("heat" if use_case == "Heat" else "precip", region_name)
+        caveat = {obs.NAME: "CHIRPS v3 is satellite and rain-gauge rainfall the models were not "
+                            "trained on.",
+                  obs.TMAX_NAME: "CHIRTS combines station-based temperatures with ERA5's day-to-day "
+                                 "changes, so it is not fully independent of the models' training "
+                                 "data. The models give a value every 6 hours, so their daily "
+                                 "maximum can read a little low against it.",
+                  "ERA5": "AIFS and several other models train on ERA5, so this is not a fully "
+                          "independent check."}[src]
         st.markdown("#### Event movies (vs observations)",
-                    help="An animated map of the observations (ERA5) next to the forecast, with the "
+                    help=f"An animated map of the observations ({src}) next to the forecast, with the "
                          "regional series building up day by day, then a map of the event's footprint "
-                         "and track.  \nAIFS and several other models train on ERA5, so this is not a "
-                         "fully independent check.")
+                         f"and track.  \n{caveat}")
         event_movies(paths, loaded, init, lead_days, box, region_name, use_case)
 
     st.markdown("#### Time-series comparison",
@@ -429,6 +460,9 @@ if loaded:
         st.error(f"{region_name} holds fewer than 2 grid points of {m.name}'s "
                  f"{m.grid_deg:g}° grid; choose a larger region.")
     else:
+        if st.session_state.get("_maps_use_case") != use_case:   # start on the field the use case is about
+            st.session_state["_maps_use_case"] = use_case
+            st.session_state["map_field"] = "2 m temperature" if use_case == "Heat" else "Rainfall (daily total)"
         results.field_maps(ds, m, box, region_name)
     data = results.netcdf_bytes(paths[k], p.stat().st_mtime,
                                 (box.lat_min, box.lat_max, box.lon_min, box.lon_max), lead_days * 24)

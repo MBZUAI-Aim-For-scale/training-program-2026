@@ -1,0 +1,63 @@
+Package: CDT
+Version: 8.0
+Title: Climate Data Tools
+Description: Climate Data Tools (CDT) is a set of utility functions
+    for meteorological data quality control, homogenization
+    and merging station data with satellite and others proxies
+    such as reanalysis, all functions are available in the GUI mode.
+Authors@R: c(
+    person("Rija", "Faniriantsoa", email = "rijaf@iri.columbia.com", role = c("aut", "cre")),
+    person("Tufa", "Dinku", email = "tufa@iri.columbia.com", role = "aut"),
+    person("Bernard", "Minoungou", email = "minoungoubernard@yahoo.fr", role = "ctb", comment = "Translation to french")
+    )
+Author: Rija Faniriantsoa [aut, cre],
+    Tufa Dinku [aut],
+    Bernard Minoungou [ctb] (Translation to french)
+Maintainer: Rija Faniriantsoa <rijaf@iri.columbia.com>
+License: GPL (>= 2)
+Encoding: UTF-8
+NeedsCompilation: yes
+Depends: 
+    R (>= 4.0.0),
+Imports: 
+    ncdf4,
+    sp,
+    sf,
+    raster,
+    gstat,
+    reshape2,
+    foreach,
+    doParallel,
+    doSNOW,
+    R.utils,
+    matrixStats,
+    fields,
+    lmomco,
+    lattice,
+    latticeExtra,
+    RColorBrewer,
+    gridBase,
+    jsonlite (>= 1.2),
+    XML,
+    xml2,
+    urltools,
+    curl,
+    httr,
+    rvest,
+    methods,
+    stringr,
+    stringi,
+    devtools,
+    pkgbuild,
+    fitdistrplus,
+    ADGofTest,
+    qmap,
+    maps,
+    units,
+    hexbin,
+    future,
+    googledrive,
+StagedInstall: no
+URL: https://github.com/rijaf-iri/CDT
+BugReports: https://github.com/rijaf-iri/CDT/issues
+RoxygenNote: 7.3.2

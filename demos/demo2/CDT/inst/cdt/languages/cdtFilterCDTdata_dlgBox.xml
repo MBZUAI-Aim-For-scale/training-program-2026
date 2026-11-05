@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<panel_cmd>
+    <title>
+        <text lang="en"> Filtering CDT Station Data </text>
+        <text lang="fr"> Filtrage de Données Stations CDT </text>
+    </title>
+    <widget>
+        <label id="1">
+            <text lang="en"> Input CDT Station data </text>
+            <text lang="fr"> Données d'entrée CDT </text>
+        </label>
+        <label id="2">
+            <text lang="en"> Filter Stations with non-missing values </text>
+            <text lang="fr"> Filtrer les stations avec des valeurs non manquantes </text>
+        </label>
+        <label id="3">
+            <text lang="en"> File to save filtered data </text>
+            <text lang="fr"> Fichier de sauvegarde des données filtrées </text>
+        </label>
+        <label id="4">
+            <text lang="en"> Include the whole period in the data </text>
+        </label>
+        <label id="5">
+            <text lang="en"> Time step </text>
+        </label>
+        <button id="1">
+            <text lang="en"> Set Date-Time Range </text>
+        </button>
+    </widget>
+    <message>
+        <content id="1">
+            <text lang="en"> Filtering data ........... </text>
+            <text lang="fr"> Filtrage des données en cours..... </text>
+        </content>
+        <content id="2">
+            <text lang="en"> Filtering CDT data finished successfully </text>
+            <text lang="fr"> Filtrage des données CDT terminé avec succès </text>
+        </content>
+        <content id="3">
+            <text lang="en"> Filtering CDT data failed </text>
+            <text lang="fr"> Filtrage des données CDT échoué </text>
+        </content>
+        <content id="4">
+            <text lang="en"> No input CDT data found </text>
+            <text lang="fr"> Aucune donnée d'entrée CDT trouvée </text>
+        </content>
+        <content id="5">
+            <text lang="en"> Station dates and input date range do not overlap </text>
+        </content>
+        <content id="6">
+            <text lang="en"> No input CDT station data found </text>
+            <text lang="fr"> Aucune donnée d'entrée CDT trouvée </text>
+        </content>
+        <content id="7">
+            <text lang="en"> Browse or enter the file to save the filtered data </text>
+            <text lang="fr"> Parcourrir ou entrer le fichier pour enregistrer les données filtrées </text>
+        </content>
+    </message>
+</panel_cmd>

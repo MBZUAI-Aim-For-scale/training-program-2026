@@ -43,16 +43,15 @@ class MovieRequest:
 
     def args(self) -> list[str]:
         out = self.folder()
-        imerg = DATA_DIR / "IMERG"
         a = ["--kind", self.kind, "--fc-path", self.run_path, "--fc-label", self.model_name,
              "--fc-units", "mm", "--domain", *map(str, self.box),
              "--init", self.init, "--end", self.end, "--reduce", self.reduce,
              "--name", self.region_name.replace(" ", "_").lower(),
              "--title", f"{self.region_name}: {self.model_name}",
              "--outdir", str(out), "--no-mp4", "--track",  # track map is opt-in
-             "--result", str(out / "result.json")]
-        if self.kind == "precip" and not imerg.is_dir():
-            a += ["--obs", "era5"]          # IMERG not on this Spark yet
+             "--result", str(out / "result.json"), "--region", self.region_name]
+        if self.kind == "precip":
+            a += ["--obs", "era5"]  # her IMERG reader needs files we don't have; the wrapper reads CHIRPS v3
         if self.threshold is not None:
             a += ["--threshold", str(self.threshold)]
         return a
@@ -109,7 +108,7 @@ def progress(req: MovieRequest, log: str | None = None) -> tuple[float, str]:
     if "fetching ERA5" in log:
         return 0.05, "Fetching ERA5 observations from the cloud (first time for these dates)…"
     if "loading obs" in log:
-        return 0.04, "Loading observations…"
+        return 0.04, "Loading observations (the first time for a country and year downloads them)…"
     return 0.02, "Starting…"
 
 

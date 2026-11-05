@@ -16,7 +16,7 @@ import xarray as xr
 
 from . import catalog, obs, onset, theme
 from .regions import Box
-from .results import crop
+from .results import crop, show_fig
 from .store import OUTPUT_DIR
 
 MOVIES = OUTPUT_DIR / "_movies"
@@ -66,21 +66,21 @@ def pick_definition(region_name: str, key: str = "onset") -> onset.Definition:
 
 @st.cache_data(max_entries=16, show_spinner="Working out onset dates…")
 def compute(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead_days: int,
-            defn: onset.Definition, search_from: pd.Timestamp) -> dict:
+            defn: onset.Definition, search_from: pd.Timestamp, region: str = "") -> dict:
     box = Box(*box_t)
     with xr.open_dataset(path) as ds:
         sub = crop(ds, Box(box.lat_min - 1, box.lat_max + 1, box.lon_min - 1, box.lon_max + 1),
                    lead_days * 24).load()
     fc = onset.forecast_daily(sub, init)
     fc_end = pd.Timestamp(fc.time.values[-1])
-    obs_last = obs.last_day()
+    obs_last = obs.last_day(region)
     # observations: the season so far, the forecast days, and enough after them to confirm onset
     want_end = fc_end + pd.Timedelta(days=defn.needs_after)
     end = min(want_end, obs_last) if obs_last is not None else want_end
     try:
-        o = obs.daily(box, min(search_from, end), end)
+        o = obs.daily(box, min(search_from, end), end, region)
     except FileNotFoundError:
-        o = obs.daily(box, obs_last, obs_last)
+        o = obs.daily(box, obs_last, obs_last, region)
     template = o.isel(time=-1, drop=True)
     fc_g = onset.to_grid(fc, template)
     thresh = onset.threshold_for(defn, o)
@@ -237,7 +237,7 @@ def usable(full, m, box) -> str | None:
     if "tp" in catalog.missing_in_run(full):
         return f"{m.name} does not forecast rainfall, so it can't forecast onset."
     if not obs.covers(box):
-        return "Onset needs observed rainfall from CHIRPS, which covers 50°S–50°N only."
+        return "Onset needs observed rainfall from CHIRPS, which covers 60°S–60°N only."
     return None
 
 
@@ -251,13 +251,15 @@ def controls(region_name: str, init: pd.Timestamp):
     c2.caption(f"ⓘ {'Fixed by the definition' if defn.search_from else f'Start of the main rainy season for {region_name}'}"
                f": {auto_from:%-d %b %Y}. Observed rainfall (CHIRPS) is used from here to the day "
                f"before the forecast starts; the forecast's rainfall after that.")
+    if region_name in onset.REGION_NOTES:
+        st.caption(f"ⓘ {onset.REGION_NOTES[region_name]}")
     return defn, search_from
 
 
-def result(path, box: Box, init, lead_days, defn, search_from):
+def result(path, box: Box, init, lead_days, defn, search_from, region_name: str = ""):
     p = Path(path)
     return compute(path, p.stat().st_mtime, (box.lat_min, box.lat_max, box.lon_min, box.lon_max),
-                   init, lead_days, defn, search_from)
+                   init, lead_days, defn, search_from, region_name)
 
 
 def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, search_from) -> None:
@@ -267,7 +269,7 @@ def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, 
         st.info(why)
         return
     try:
-        r = result(path, box, init, lead_days, defn, search_from)
+        r = result(path, box, init, lead_days, defn, search_from, region_name)
     except (OSError, FileNotFoundError) as e:
         st.error(f"Couldn't get CHIRPS observations: {e}")
         return
@@ -311,13 +313,13 @@ def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, 
 
     if ens and pick == "chance of onset":
         a, b = st.columns(2)
-        a.pyplot(_prob_figure(f_on, init_day, land, box, n_days))
+        show_fig(a, _prob_figure(f_on, init_day, land, box, n_days))
         if o_on is not None:
-            b.pyplot(_maps_figure((oday.where(oday <= n_days), oposs), None, box, n_days,
+            show_fig(b, _maps_figure((oday.where(oday <= n_days), oposs), None, box, n_days,
                                   ["Observed onset (CHIRPS)"], init_day))
     else:
         right = (oday.where(oday <= n_days), oposs & (oday <= n_days)) if o_on is not None else None
-        st.pyplot(_maps_figure((fday, fposs), right, box, n_days,
+        show_fig(st, _maps_figure((fday, fposs), right, box, n_days,
                                [f"Forecast onset: {m.name}" + (f" ({pick})" if ens else ""),
                                 f"Observed onset (CHIRPS, to {obs_last:%-d %b})"], init_day))
     theme.hint("Grey: before the forecast · Hatched: possible onset · White: no onset yet",
@@ -343,7 +345,7 @@ def make_movie(path, m, box, region_name, init, lead_days, defn, search_from, pr
     gif = movie_path(path, box, defn, init, lead_days)
     if gif.exists():
         return gif
-    r = result(path, box, init, lead_days, defn, search_from)
+    r = result(path, box, init, lead_days, defn, search_from, region_name)
     n_days = (r["fc_end"] - r["init_day"]).days + 1
     frames = render_frames(r, m, box, region_name, n_days, progress)
     MOVIES.mkdir(parents=True, exist_ok=True)

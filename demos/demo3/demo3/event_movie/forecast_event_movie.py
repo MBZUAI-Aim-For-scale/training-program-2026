@@ -1156,12 +1156,14 @@ def reduce_series(da, method, point=None):
 
 
 def forecast_line(fc_s, label, color):
-    if ENS_DIM in fc_s.dims:
+    if ENS_DIM in fc_s.dims and fc_s.sizes[ENS_DIM] > 1:
         lo = fc_s.quantile(0.10, ENS_DIM).drop_vars("quantile")
         hi = fc_s.quantile(0.90, ENS_DIM).drop_vars("quantile")
         return {"label": f"{label} (median)", "data": fc_s.median(ENS_DIM),
                 "color": color, "zorder": 3, "band": (lo, hi),
                 "band_label": f"{label} 10-90%"}
+    if ENS_DIM in fc_s.dims:
+        fc_s = fc_s.squeeze(ENS_DIM, drop=True)
     return {"label": label, "data": fc_s, "color": color, "zorder": 3}
 
 

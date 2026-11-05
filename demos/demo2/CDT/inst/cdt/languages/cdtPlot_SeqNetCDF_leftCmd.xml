@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<panel_cmd>
+    <tab_title>
+        <tab id="1">
+            <text lang="en"> Plot netCDF Data </text>
+        </tab>
+        <tab id="2">
+            <text lang="en"> Layers </text>
+        </tab>
+    </tab_title>
+    <widget>
+        <label id="1">
+            <text lang="en"> Directory containing the netCDF data </text>
+        </label>
+        <label id="2">
+            <text lang="en"> netCDF data sample file </text>
+        </label>
+        <label id="3">
+            <text lang="en"> Filename format </text>
+        </label>
+        <label id="4">
+            <text lang="en"> Map </text>
+        </label>
+    </widget>
+    <help>
+        <content id="1">
+            <status>
+                <text lang="en"> Enter the full path to directory containing the netCDF data </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Enter the full path to directory containing the netCDF data </text>
+            </tooltip>
+        </content>
+        <content id="2">
+            <status>
+                <text lang="en"> File containing a sample of the data in netCDF </text>
+            </status>
+            <tooltip>
+                <text lang="en"> File containing a sample of the data in netCDF </text>
+            </tooltip>
+        </content>
+        <content id="3">
+            <status>
+                <text lang="en"> Browse file if not listed </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Browse file if not listed </text>
+            </tooltip>
+        </content>
+        <content id="4">
+            <status>
+                <text lang="en"> Enter the filename format of netCDF data, example: rfe_2017_01-dk2.nc\nReplace the whole string representing the date or sequence by %S\nrfe_2017_01-dk2.nc becomes rfe_%S.nc </text>
+            </status>
+            <tooltip>
+                <text lang="en"> Enter the filename format of netCDF data, example: rfe_2017_01-dk2.nc -&gt; rfe_%S.nc </text>
+            </tooltip>
+        </content>
+    </help>
+    <message>
+        <content id="1">
+            <text lang="en"> No netCDF files found </text>
+        </content>
+        <content id="2">
+            <text lang="en"> No netCDF data sample found </text>
+        </content>
+    </message>
+</panel_cmd>

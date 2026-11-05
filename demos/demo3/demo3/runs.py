@@ -13,7 +13,7 @@ READY, DOWNLOAD, RUN, SKIP = "ready", "download", "run", "skip"
 
 
 def members_for(m: catalog.Model, members: int) -> int:
-    return min(members, m.max_members) if m.kind == "ensemble" else 1
+    return members if m.kind == "ensemble" else 1
 
 
 def plan(keys, init, lead_days, members, box, region_name, use_case) -> dict:
