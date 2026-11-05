@@ -3,11 +3,32 @@ momp/utils/standard.py
 Standardization and dimension formatting utilities for NetCDF datasets.
 """
 
+import numpy as np
 import pandas as pd
 import xarray as xr
 
 # Standard dimension order: time-like dims first, then spatial
 _STANDARD_DIM_ORDER = ["init_time", "time", "member", "step", "lat", "lon"]
+
+
+def align_spatial_grid(data, reference, *, label='data'):
+    """Reorder identical grids; require explicit regridding for different cells."""
+    if np.ndim(data) == 0:
+        return data.item() if hasattr(data, 'item') else data
+    for axis in ('lat', 'lon'):
+        for name, value in ((label, data), ('reference', reference)):
+            if axis not in value.dims or axis not in value.coords or value[axis].dims != (axis,):
+                raise ValueError(f"{name} grid requires a one-dimensional {axis} coordinate")
+            coordinates = np.asarray(value[axis].values)
+            if (not np.issubdtype(coordinates.dtype, np.number) or
+                    not np.isfinite(coordinates).all() or
+                    len(np.unique(coordinates)) != len(coordinates)):
+                raise ValueError(f"{name} grid has invalid or duplicate {axis} coordinates")
+        if not np.array_equal(np.sort(data[axis].values), np.sort(reference[axis].values)):
+            raise ValueError(
+                f"{label} grid {axis} coordinates do not match the reference; "
+                "regrid the inputs explicitly before onset evaluation")
+    return data.sel(lat=reference.lat, lon=reference.lon)
 
 
 def dim_order_fmt(ds: xr.Dataset) -> xr.Dataset:
@@ -48,7 +69,7 @@ def _promote_coords(ds: xr.Dataset) -> xr.Dataset:
         "member", "number", "sample", "adm3_name", "woreda", "district"
     ]
     for dv in list(ds.data_vars):
-        if dv.lower() in coord_candidates or any(c in dv.lower() for c in ["lat", "lon", "time", "step", "member"]):
+        if dv.lower() in coord_candidates or (ds[dv].ndim == 1 and ds[dv].dims == (dv,)):
             ds = ds.set_coords(dv)
     return ds
 
@@ -58,12 +79,14 @@ def dim_fmt(ds: xr.Dataset) -> xr.Dataset:
     ds = _promote_coords(ds)
     coord_list = list(ds.coords.keys())
 
-    if "lon" not in coord_list:
-        lat_coords = [variable for variable in coord_list if "lat" in variable.lower()]
-        lon_coords = [variable for variable in coord_list if "lon" in variable.lower()]
-
-        if lat_coords and lon_coords:
-            ds = ds.rename({lat_coords[0]: "lat", lon_coords[0]: "lon"})
+    rename = {}
+    for target in ("lat", "lon"):
+        if target not in coord_list:
+            aliases = [name for name in coord_list if target in name.lower()]
+            if aliases:
+                rename[aliases[0]] = target
+    if rename:
+        ds = ds.rename(rename)
 
     coord_list = list(ds.coords.keys())
 
@@ -88,22 +111,25 @@ def dim_fmt_model(ds: xr.Dataset, preserve_admin=False) -> xr.Dataset:
     ds = _promote_coords(ds)
     coord_list = list(ds.coords.keys())
 
-    if "lon" not in coord_list:
-        lat_coords = [variable for variable in coord_list if "lat" in variable.lower()]
-        lon_coords = [variable for variable in coord_list if "lon" in variable.lower()]
+    rename = {}
+    for target in ("lat", "lon"):
+        if target not in coord_list:
+            aliases = [name for name in coord_list if target in name.lower()]
+            if aliases:
+                rename[aliases[0]] = target
+    if rename:
+        ds = ds.rename(rename)
+    if "lon" not in ds.coords and "lat" not in ds.coords and not preserve_admin:
+        # Support regional/tabular datasets indexed by administrative area (e.g., adm3_name)
+        spatial_candidates = ["adm3_name", "adm2_name", "adm1_name", "woreda", "district", "station", "location"]
+        for cand in spatial_candidates:
+            if cand in ds.coords or cand in ds.dims or cand in ds.data_vars:
+                if cand in ds.data_vars:
+                    ds = ds.set_coords(cand)
+                ds = ds.rename({cand: "lat"})
+                ds = ds.expand_dims(lon=[0])
+                break
 
-        if lat_coords and lon_coords:
-            ds = ds.rename({lat_coords[0]: "lat", lon_coords[0]: "lon"})
-        elif not preserve_admin:
-            # Support regional/tabular datasets indexed by administrative area (e.g., adm3_name)
-            spatial_candidates = ["adm3_name", "adm2_name", "adm1_name", "woreda", "district", "station", "location"]
-            for cand in spatial_candidates:
-                if cand in ds.coords or cand in ds.dims or cand in ds.data_vars:
-                    if cand in ds.data_vars:
-                        ds = ds.set_coords(cand)
-                    ds = ds.rename({cand: "lat"})
-                    ds = ds.expand_dims(lon=[0])
-                    break
 
     coord_list = list(ds.coords.keys())
 
@@ -124,9 +150,24 @@ def dim_fmt_model(ds: xr.Dataset, preserve_admin=False) -> xr.Dataset:
         if step_coords:
             ds = ds.rename({step_coords[0]: "step"})
 
-    # Convert TimedeltaIndex to integer days
-    if "step" in ds.indexes and isinstance(ds.indexes["step"], pd.TimedeltaIndex):
-        ds = ds.assign_coords(step=ds.step.dt.days)
+    if "step" in ds.coords:
+        step = ds["step"]
+        if np.issubdtype(step.dtype, np.timedelta64):
+            days = np.asarray(step.values / np.timedelta64(1, "D"), dtype=float)
+        else:
+            units = str(step.attrs.get("units", "days")).strip().lower()
+            factors = {"day": 1, "days": 1, "d": 1, "hour": 24, "hours": 24, "h": 24,
+                       "minute": 1440, "minutes": 1440, "second": 86400, "seconds": 86400}
+            if units not in factors:
+                raise ValueError(f"Unsupported forecast lead units {units!r}; daily amounts are required.")
+            days = np.asarray(step.values, dtype=float) / factors[units]
+        if (days.ndim != 1 or not np.isfinite(days).all() or
+                not np.allclose(days, np.rint(days), rtol=0, atol=1e-8)):
+            raise ValueError("Forecast leads must identify whole daily rainfall amounts; subdaily data require aggregation.")
+        days = np.rint(days).astype(int)
+        if days.size and (days[0] not in (0, 1) or not np.all(np.diff(days) == 1)):
+            raise ValueError("Forecast leads must be consecutive daily steps beginning at day 0 or 1.")
+        ds = ds.assign_coords(step=xr.DataArray(days, dims=step.dims, attrs={"units": "days"}))
 
     return dim_order_fmt(ds)
 

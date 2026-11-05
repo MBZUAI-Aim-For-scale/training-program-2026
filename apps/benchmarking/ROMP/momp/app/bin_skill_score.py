@@ -7,12 +7,12 @@ from momp.graphics.reliability import plot_reliability_diagram
 from momp.graphics.panel_portrait_skill import panel_portrait_bss_auc
 from momp.graphics.panel_bar_skill import panel_bar_bss_rpss_auc
 from momp.io.output import save_score_results
+from momp.stats.spatial_probability import save_spatial_probability_scores
 from momp.lib.control import iter_list, make_case
 from momp.lib.convention import Case
 #from momp.lib.loader import cfg, setting
 from momp.lib.loader import get_cfg, get_setting
 #from momp.io.output import set_nested
-from momp.app.ens_spatial_far_mr_mae import ens_spatial_far_mr_mae_map
 from momp.utils.printing import tuple_to_str
 from momp.io.dict import select_key_at_level
 from momp.lib.control import filter_bins_in_window
@@ -96,6 +96,8 @@ def skill_score_in_bins(cfg=cfg, setting=setting):
             window_str = tuple_to_str(case.verification_window)
             result_binned[case.model][window_str] = binned_data
             result_overall[case.model][window_str] = overall_scores
+        if case_cfg['save_csv_score']:
+            save_spatial_probability_scores(score_results, **case_cfg)
         
 
         # heatmap plot

@@ -67,18 +67,19 @@ class OnsetContingencyTests(unittest.TestCase):
         self.assertEqual(summary["overall_num_onset"], 2)
         self.assertEqual(metrics.iloc[0].mae_combined, 0)
 
-    def test_wrong_timing_is_both_a_false_alarm_and_a_missed_observed_event(self):
+    def test_wrong_timing_uses_the_reference_single_false_alarm_outcome(self):
         metrics, summary = self.compute(pd.DataFrame([self.row(5, 14)]),
                                         verification_window=(1, 15), tolerance_days=3)
         result = metrics.iloc[0]
         self.assertEqual(result.true_positive, 0)
         self.assertEqual(result.false_positive, 1)
-        self.assertEqual(result.false_negative, 1)
-        self.assertEqual(result.true_positive + result.false_negative, result.num_onset)
-        self.assertEqual(summary["overall_false_negative"], 1)
+        self.assertEqual(result.false_negative, 0)
+        self.assertEqual(sum(result[key] for key in ('true_positive', 'false_positive',
+                                                    'false_negative', 'true_negative')), 1)
+        self.assertEqual(summary["overall_false_negative"], 0)
         self.assertEqual(result.mae_combined, 9)
 
-    def test_spatial_rates_include_missed_events_with_wrong_timing(self):
+    def test_spatial_rates_follow_reference_exclusive_contingency(self):
         path = Path("apps/benchmarking/ROMP/momp/metrics/error.py")
         tree = ast.parse(path.read_text())
         function = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
@@ -89,7 +90,7 @@ class OnsetContingencyTests(unittest.TestCase):
                                   verification_window=(1, 15), tolerance_days=3)
         grid = xr.DataArray([[1]], dims=("lat", "lon"), coords={"lat": [10.], "lon": [38.]})
         spatial = ns["create_spatial_far_mr_mae"]({2004: metrics}, {2004: grid})
-        self.assertEqual(spatial["miss_rate"].item(), .5)
+        self.assertEqual(spatial["miss_rate"].item(), 0.)
         self.assertEqual(spatial["false_alarm_rate"].item(), .5)
         self.assertEqual(spatial["mean_mae"].item(), 4.5)
 

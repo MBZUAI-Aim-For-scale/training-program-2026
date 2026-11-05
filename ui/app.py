@@ -2,7 +2,6 @@
 import os
 import sys
 os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import importlib
 from pathlib import Path
@@ -78,7 +77,8 @@ PAGE_MODULE_MAPPING = {
     # "AI_Setup": "ui.pages.ai_setup", 
     "AI Forecast": "ui.pages.ai_forecasting", 
     "SM_Benchmarking": "ui.pages.short_medium_benchmarking",
-    "Onset Message": "ui.pages.onset_message",
+    #"Onset Blending": "ui.pages.ai_onset_blending",
+    #"Onset Message": "ui.pages.onset_message",
 
 }
 
@@ -87,7 +87,8 @@ PRIMARY_MENU_CONFIG = {
     # "AI Lab Setup": {"target": "AI_Setup", "label": "Demo1"},
     #"AI Forecast": {"target": "AI Forecast", "label": "Forecasting"},
     "AI Benchmarking": {"target": "SM_Benchmarking", "label": "Benchmarking"},
-    # "Onset Message": {"target": "Onset Message", "label": "Message"},
+    #"Onset Blending": {"target": "Onset Blending", "label": "Blending"},
+    #"Onset Message": {"target": "Onset Message", "label": "Message"},
 }
 
 COMING_SOON = {
@@ -96,30 +97,10 @@ COMING_SOON = {
     "Seasonal_Benchmarking": True,
 }
 
-MAX_WORKERS = min(4, os.cpu_count() or 1)
-
-@st.cache_resource
-def pre_import_modules():
-    """Load page modules sequentially to avoid concurrent native-library imports."""
-    for module_path in PAGE_MODULE_MAPPING.values():
-        try:
-            importlib.import_module(module_path)
-        except Exception as exc:
-            print(
-                f"[WARMUP ERROR] Failed to pre-import {module_path}: "
-                f"{type(exc).__name__}: {exc}",
-                file=sys.stderr,
-                flush=True,
-            )
-            # Continue loading other pages. The active page can report
-            # its own import error when Streamlit attempts to render it.
-    return True
-
-@st.cache_data(ttl=30, show_spinner=False)
 def collect_config_problems():
-    """Cheap, read-only sanity check of what config.py / run_momp.py will need."""
+    """Explicit background check, including potentially slow remote paths."""
     try:
-        import config
+        from ai_weather import config
     except Exception as exc:  # noqa: BLE001
         return [f"config.py could not be imported: {type(exc).__name__}: {exc}"]
 
@@ -341,6 +322,76 @@ AI4AG_LOGO_HTML = (
 )
 
 
+@st.fragment(run_every=2)
+def render_config_check():
+    job = st.session_state.get("config_check_job")
+    if job is not None:
+        snapshot = job.snapshot()
+        if not snapshot["done"]:
+            st.info("Checking benchmark configuration in the background…")
+            return
+        st.session_state["config_check_result"] = snapshot
+        del st.session_state["config_check_job"]
+        st.rerun()
+    snapshot = st.session_state.get("config_check_result")
+    if snapshot:
+        if snapshot["error"]:
+            st.error(snapshot["error"])
+        elif snapshot["result"]:
+            with st.expander(f"Configuration issues ({len(snapshot['result'])})"):
+                for item in snapshot["result"]:
+                    st.write(f"- {item}")
+        else:
+            st.success("Benchmark configuration check completed.")
+
+
+@st.fragment(run_every=2)
+def render_background_status():
+    # Only read existing task snapshots. Never import or execute another page.
+    for key, label in (
+        ("benchmark_active_job", "Benchmark"),
+        ("blending_active_job", "Onset blending"),
+        ("onset_active_task", "Onset analysis"),
+        ("benchmark_inventory_task", "Benchmark model discovery"),
+        ("benchmark_coverage_task", "Forecast metadata validation"),
+        ("onset_years_task", "Onset calendar discovery"),
+        ("config_check_job", "Benchmark configuration check"),
+        ("blending_input_job", "Blending input inspection"),
+        ("onset_connection_job", "Message API connection"),
+        ("onset_forecast_job", "Forecast message"),
+    ):
+        job = st.session_state.get(key)
+        if job is not None:
+            snapshot = job.snapshot()
+            if snapshot["done"]:
+                st.caption(f"{label}: {snapshot['status']}. Open its menu for results.")
+            else:
+                st.info(f"Task running in background: {label}. You can keep using the dashboard.")
+
+    for key in ("forecast_metadata_task", "forecast_plan_task"):
+        discovery = st.session_state.get(key)
+        if discovery and not discovery["task"].done.is_set():
+            st.info("Task running in background: forecast data discovery.")
+
+    forecast = st.session_state.get("runs")
+    if forecast and (forecast.get("running") or forecast.get("queue")):
+        st.info("Task running in background: AI forecast. Open Forecasting for progress.")
+    movie = st.session_state.get("forecast_onset_movie_job")
+    if movie is not None:
+        if movie["process"].poll() is None:
+            st.info("Task running in background: onset movies.")
+        else:
+            st.caption("Onset movies finished. Open Forecasting for results.")
+
+
+@st.fragment(run_every=1)
+def render_benchmark_page_loading():
+    task = st.session_state.get("benchmark_page_import_task")
+    if task is not None and task.snapshot()["done"]:
+        st.rerun()
+    st.info("Loading Benchmarking in the background. You can keep using the navigation.")
+
+
 def main():
     st.set_page_config(
         page_title="Benchmarking",
@@ -350,7 +401,9 @@ def main():
         menu_items={"Get Help": None, "Report a bug": None, "About": None},
     )
     load_css()
-    pre_import_modules()
+    if st.query_params.get('benchmark_job') or st.session_state.get('benchmark_active_job') is not None:
+        from ui.utils.benchmark_session import reconnect_benchmark
+        reconnect_benchmark(st.session_state, st.query_params)
 
     if "uploaded_df" not in st.session_state:
         st.session_state["uploaded_df"] = None
@@ -471,16 +524,39 @@ def main():
     
     st.markdown("<br>", unsafe_allow_html=True)
 
-    config_problems = collect_config_problems()
-    if config_problems:
-        with st.expander(f"Configuration issues ({len(config_problems)})"):
-            for item in config_problems:
-                st.write(f"- {item}")
+    render_background_status()
+    if query_page == "SM_Benchmarking":
+        # Remote checks are an explicit task, never a prerequisite for navigation.
+        if st.button("Check benchmark configuration", key="check_benchmark_config",
+                     disabled="config_check_job" in st.session_state):
+            from ai_weather.background_task import BackgroundTask
+            st.session_state["config_check_job"] = BackgroundTask(collect_config_problems).start()
+        render_config_check()
 
     # ─── PAGE RENDERING ──────────────────────────────────────────────────────
     active_module_path = PAGE_MODULE_MAPPING[query_page]
     try:
-        target_module = importlib.import_module(active_module_path)
+        existing_module = sys.modules.get(active_module_path)
+        initializing = getattr(getattr(existing_module, "__spec__", None), "_initializing", False)
+        if query_page == "SM_Benchmarking" and (existing_module is None or initializing):
+            from ai_weather.background_task import BackgroundTask
+            task = st.session_state.get("benchmark_page_import_task")
+            if task is None:
+                task = BackgroundTask(importlib.import_module, active_module_path).start()
+                st.session_state["benchmark_page_import_task"] = task
+            snapshot = task.snapshot()
+            if not snapshot["done"]:
+                render_benchmark_page_loading()
+                return
+            if snapshot["error"]:
+                st.error(f"Could not load Benchmarking: {snapshot['error']}")
+                if st.button("Retry loading Benchmarking", key="retry_benchmark_page_import"):
+                    st.session_state.pop("benchmark_page_import_task", None)
+                    st.rerun()
+                return
+            target_module = snapshot["result"]
+        else:
+            target_module = importlib.import_module(active_module_path)
         if hasattr(target_module, "render"):
             target_module.render()
         elif hasattr(target_module, "page"):

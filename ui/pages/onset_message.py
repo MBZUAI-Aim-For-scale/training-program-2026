@@ -10,6 +10,8 @@ from datetime import datetime
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
 
+from ai_weather.background_task import BackgroundTask
+
 load_dotenv()
 
 # ==============================================================================
@@ -19,97 +21,102 @@ API_BASE_URL = os.environ.get("ONSET_API_URL", "http://localhost:8000")
 SHARED_API_KEY = os.environ.get("ONSET_API_KEY", "")
 
 
-def get_jwt_token(api_key: str) -> Optional[str]:
-    if not api_key:
-        return None
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/token",
-            headers={"X-API-Key": api_key},
-            timeout=10,
-        )
-        if response.status_code == 200:
-            return response.json()["access_token"]
-        return None
-    except Exception as e:
-        st.error(f"Authentication failed: {e}")
-        return None
-
-
-def ensure_authenticated():
-    if "onset_token" not in st.session_state or not st.session_state.onset_token:
-        if not SHARED_API_KEY:
-            st.markdown(
-                """
-                <div class="ibox rose">
-                    <b>Configuration Error</b><br>
-                    The <code>ONSET_API_KEY</code> environment variable is not set.
-                    Please add it to your <code>.env</code> file to enable passwordless communication.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.stop()
-
-        with st.spinner("Authenticating with Forecast API..."):
-            token = get_jwt_token(SHARED_API_KEY)
-            if token:
-                st.session_state.onset_token = token
-            else:
-                st.markdown(
-                    """
-                    <div class="ibox rose">
-                        <b>Authentication Failed</b><br>
-                        The provided <code>ONSET_API_KEY</code> is invalid, or its hash does not match the backend.
-                        Please verify your environment variables.
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                st.stop()
+def get_jwt_token(api_key: str) -> str:
+    response = requests.post(
+        f"{API_BASE_URL}/token", headers={"X-API-Key": api_key}, timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
 
 
 def get_districts(token: str) -> List[str]:
-    try:
-        response = requests.get(
-            f"{API_BASE_URL}/districts",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        if response.status_code == 200:
-            return response.json()["districts"]
-        return []
-    except Exception as e:
-        st.error(f"Failed to fetch districts: {e}")
-        return []
+    response = requests.get(
+        f"{API_BASE_URL}/districts",
+        headers={"Authorization": f"Bearer {token}"}, timeout=10,
+    )
+    response.raise_for_status()
+    districts = response.json()["districts"]
+    if not districts:
+        raise ValueError("No districts available from API. Please check backend connection.")
+    return districts
 
 
 def get_forecast(
-    token: str,
-    district: Optional[str],
-    all_districts: bool,
-    thresholds: List[float],
-    season: str,
+    token: str, district: Optional[str], all_districts: bool,
+    thresholds: List[float], season: str,
 ) -> List[Dict]:
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/forecast",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "district": district,
-                "all_districts": all_districts,
-                "thresholds": thresholds,
-                "season": season,
-            },
-            timeout=60,
-        )
-        if response.status_code == 200:
-            return response.json()
-        st.error(f"Forecast API Error [{response.status_code}]: {response.text}")
-        return []
-    except Exception as e:
-        st.error(f"Forecast request failed: {e}")
-        return []
+    response = requests.post(
+        f"{API_BASE_URL}/forecast",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"district": district, "all_districts": all_districts,
+              "thresholds": thresholds, "season": season},
+        timeout=60,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _connect(token):
+    """Network work only; workers never access Streamlit or session state."""
+    token = token or get_jwt_token(SHARED_API_KEY)
+    return {"token": token, "districts": get_districts(token)}
+
+
+def _fetch_forecasts(token, districts, all_districts, thresholds, season):
+    # Keep API requests ordered, as before: the backend may share model resources.
+    results, errors = [], []
+    for district in ([None] if all_districts else districts):
+        try:
+            results.extend(get_forecast(token, district, all_districts, thresholds, season))
+        except Exception as exc:
+            errors.append(f"{district or 'All districts'}: {type(exc).__name__}: {exc}")
+    return {"results": results, "errors": errors}
+
+
+@st.fragment(run_every=1)
+def render_message_job(key, label):
+    job = st.session_state.get(key)
+    if job is None:
+        return
+    snapshot = job.snapshot()
+    if not snapshot["done"]:
+        st.info(f"{label} Task running in the background… You can use other menus.")
+        return
+    st.session_state.pop(key)
+    if key == "onset_connection_job":
+        if snapshot["error"]:
+            st.session_state["onset_connection_error"] = snapshot["error"]
+        else:
+            result = snapshot["result"]
+            st.session_state["onset_token"] = result["token"]
+            st.session_state["onset_districts"] = result["districts"]
+    else:
+        result = snapshot["result"] or {"results": [], "errors": [snapshot["error"]]}
+        st.session_state["forecast_results"] = result["results"]
+        st.session_state["onset_forecast_errors"] = result["errors"]
+        st.session_state["onset_forecast_finished"] = True
+    st.rerun()
+
+
+def ensure_authenticated():
+    if st.session_state.get("onset_token") and st.session_state.get("onset_districts"):
+        return True
+    if not SHARED_API_KEY and not st.session_state.get("onset_token"):
+        st.error("ONSET_API_KEY is not set. Add it to your .env file to enable Forecast API access.")
+        return False
+    error = st.session_state.get("onset_connection_error")
+    if error:
+        st.error(f"Forecast API connection failed: {error}")
+        if st.button("Retry API connection", key="onset_connection_retry"):
+            st.session_state.pop("onset_connection_error")
+            st.rerun()
+        return False
+    if "onset_connection_job" not in st.session_state:
+        st.session_state["onset_connection_job"] = BackgroundTask(
+            _connect, st.session_state.get("onset_token")
+        ).start()
+    render_message_job("onset_connection_job", "Connecting to Forecast API.")
+    return False
 
 
 def normalize_chance(record: Dict) -> str:
@@ -168,7 +175,8 @@ def page():
         unsafe_allow_html=True,
     )
 
-    ensure_authenticated()
+    if not ensure_authenticated():
+        return
 
     st.markdown(
         '<div class="sec-hd teal"><span class="sec-hd-accent"></span>Configuration</div>',
@@ -180,7 +188,7 @@ def page():
     with col1:
         st.markdown("### Dispatch Settings")
 
-        districts = get_districts(st.session_state.onset_token)
+        districts = st.session_state["onset_districts"]
         if not districts:
             st.error("No districts available from API. Please check backend connection.")
             return
@@ -217,43 +225,28 @@ def page():
 
         season = st.selectbox("Season", ["Kiremt Geba"], key="season_select")
 
-        if st.button("Generate Forecast", type="primary", width="stretch"):
-            if "forecast_results" in st.session_state:
-                del st.session_state["forecast_results"]
-
-            if selection_mode == "All Districts":
-                with st.spinner("Fetching forecast data for all districts..."):
-                    results = get_forecast(
-                        st.session_state.onset_token,
-                        district=None,
-                        all_districts=True,
-                        thresholds=thresholds,
-                        season=season,
-                    )
+        active = "onset_forecast_job" in st.session_state
+        if st.button("Generate Forecast", type="primary", width="stretch", disabled=active):
+            if selection_mode != "All Districts" and not selected_districts:
+                st.warning("Please select at least one district.")
+            elif "onset_forecast_job" not in st.session_state:
+                st.session_state.pop("forecast_results", None)
+                st.session_state.pop("onset_forecast_errors", None)
+                st.session_state.pop("onset_forecast_finished", None)
+                st.session_state["onset_forecast_job"] = BackgroundTask(
+                    _fetch_forecasts, st.session_state.onset_token, selected_districts,
+                    selection_mode == "All Districts", thresholds, season,
+                ).start()
+                st.rerun()
+        if "onset_forecast_job" in st.session_state:
+            render_message_job("onset_forecast_job", "Generating forecast messages.")
+        elif st.session_state.get("onset_forecast_finished"):
+            for error in st.session_state.get("onset_forecast_errors", []):
+                st.error(f"Forecast request failed: {error}")
+            if st.session_state.get("forecast_results"):
+                st.success("Forecast task finished.")
             else:
-                if not selected_districts:
-                    st.warning("Please select at least one district.")
-                    results = []
-                else:
-                    with st.spinner(
-                        f"Fetching forecast data for {len(selected_districts)} district(s)..."
-                    ):
-                        results = []
-                        for dist in selected_districts:
-                            res = get_forecast(
-                                st.session_state.onset_token,
-                                district=dist,
-                                all_districts=False,
-                                thresholds=thresholds,
-                                season=season,
-                            )
-                            if res:
-                                results.extend(res)
-
-            if results:
-                st.session_state.forecast_results = results
-            else:
-                st.warning("No forecast results returned.")
+                st.warning("Forecast task finished. No forecast results returned.")
 
     with col2:
         if "forecast_results" in st.session_state and st.session_state.forecast_results:
@@ -362,10 +355,10 @@ def page():
             )
 
     st.markdown("---")
-    if st.button("Reset Session", width="stretch"):
-        st.session_state.onset_token = None
-        if "forecast_results" in st.session_state:
-            del st.session_state["forecast_results"]
+    if st.button("Reset Session", width="stretch", disabled="onset_forecast_job" in st.session_state):
+        for key in ("onset_token", "onset_districts", "onset_connection_error", "forecast_results",
+                    "onset_forecast_errors", "onset_forecast_finished"):
+            st.session_state.pop(key, None)
         st.rerun()
 
 

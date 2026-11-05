@@ -20,6 +20,20 @@ def plot_reliability_diagram(combined_forecast_obs, *, model, verification_windo
     if combined_forecast_obs.empty:
         raise ValueError(f"No full-window forecast/observation pairs for {verification_window}; regenerate benchmark results.")
 
+    # A missing outcome is not a non-event and must not increase sample size.
+    combined_forecast_obs = combined_forecast_obs.dropna(
+        subset=["predicted_prob", "observed_onset"]).copy()
+    if combined_forecast_obs.empty:
+        raise ValueError("No valid forecast/observation pairs for the reliability diagram.")
+    probabilities = pd.to_numeric(combined_forecast_obs["predicted_prob"], errors="raise")
+    outcomes = pd.to_numeric(combined_forecast_obs["observed_onset"], errors="raise")
+    if not (np.isfinite(probabilities) & probabilities.between(0, 1)).all():
+        raise ValueError("Forecast probabilities must be finite and within [0, 1].")
+    if not outcomes.isin([0, 1]).all():
+        raise ValueError("Observed onset must be a binary event indicator (0 or 1).")
+    combined_forecast_obs["predicted_prob"] = probabilities
+    combined_forecast_obs["observed_onset"] = outcomes
+
     n_bins = 10
     bin_edges = np.linspace(0, 1, n_bins + 1)
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2

@@ -21,17 +21,13 @@ keypoints:
 
 # Observational Data Readiness
 
-## ENACTS Construction and Rain Gauge Analysis
+# CDT Exercise
+
+##  Download Data
+
+## Download Country Administrative Boundaries
 
 
-### 1. ENACTS Construction Process
-- Share the step-by-step methodology for constructing ENACTS.
-- Demonstrate how to effectively merge and calibrate ground-based rain gauge data with satellite products.
+The menu Data Preparation ‣ Download Country boundary   allows to download the country outlines and administrative subdivisions for countries in Africa from [GADM data](https://gadm.org/index.html).
 
-### 2. Gridding and Case Studies
-- Showcase how to grid different levels of station density with satellite data.
-- Walk through relevant case studies to illustrate the practical application of this gridding process.
 
-### 3. Rain Gauge Analyses
-- Dedicate a focused segment to running and interpreting rain gauge analyses.
-- Discuss how these local analyses inform broader observational data readiness and model validation.

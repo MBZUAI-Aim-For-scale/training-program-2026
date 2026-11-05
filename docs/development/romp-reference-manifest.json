@@ -1,0 +1,104 @@
+{
+  "reference": "/Users/mesfind/opt/Research/uchicago/ETAgroMetAIx/HCWF/ETAgroMetAIx/ROMP/momp",
+  "dashboard_package": "/Users/mesfind/opt/Research/uchicago/ETAgroMetAIx/HCWF/ETAgroMetAIx/Training/ai-weather/training-program-2026/apps/benchmarking/ROMP/momp",
+  "captured_at": "2026-11-05T13:38:06.997782+00:00",
+  "purpose": "Scientific audit provenance; differences are classified in romp-scientific-reference.md. Hashes do not establish scientific correctness.",
+  "files": [
+    {
+      "file": "params/config.in",
+      "reference_sha256": "210b110a95a050511ba91d34ae33b0a536077dcd41221087f70117a9bcfa5df1",
+      "dashboard_sha256": "acf500789a8cfaaebd7c3c5a273f53ccbfd5c1ebd29366e52881a33ef53ca115",
+      "identical": false
+    },
+    {
+      "file": "lib/convention.py",
+      "reference_sha256": "29a1b67eb06541fc4f317554a576b6160fde538083a66b025b7d8e5225c2dab3",
+      "dashboard_sha256": "ccdb2cf12ef5eaac51ecde227b2e3938e88d722b1f1b2f3a5b2c6d8078c3e749",
+      "identical": false
+    },
+    {
+      "file": "lib/control.py",
+      "reference_sha256": "09ec086a13e158694a949f40e615fc68114a0d450e85f7ce3f13fcb11380e058",
+      "dashboard_sha256": "cedf3fd2acca6d85973892171bc8fe588fb1ddbf10420c33f88fef69d688994e",
+      "identical": false
+    },
+    {
+      "file": "stats/detect.py",
+      "reference_sha256": "f65328a7f742bee71bb7d70d83325c5b22935c837f303a935cf7e4899ae20901",
+      "dashboard_sha256": "4394e7f1626d17a0299017ea57242f109b97be710f3ae6a920a29b42cce722ed",
+      "identical": false
+    },
+    {
+      "file": "stats/benchmark.py",
+      "reference_sha256": "4e2a2e6afd7940c3d34dad25d16b072130db76acb7d8c8fa1b6f517ed750c8d3",
+      "dashboard_sha256": "f5275f9dfd8a4bb5c81dc1e9f7f9790c10778b5055e9b0ae90396893e5b99e10",
+      "identical": false
+    },
+    {
+      "file": "stats/climatology.py",
+      "reference_sha256": "3b41fcb7278930373790e22d197cf4f22a2979f63490169b4013c700277153fa",
+      "dashboard_sha256": "e2604b53fc380ad38ff5f936cdb423b71223f5fdac4560d5f542eb13be34eb9b",
+      "identical": false
+    },
+    {
+      "file": "stats/bins.py",
+      "reference_sha256": "71bbe48846328bdc857799fc382108fb83a6e761a22fa85ec87296f4c0c80400",
+      "dashboard_sha256": "d69a8bffd99c016a9105d006b5c24e0391cda791428c84c5d5eceaf2d85b04a1",
+      "identical": false
+    },
+    {
+      "file": "stats/score.py",
+      "reference_sha256": "54a23bbf5e05c569f5512f22983ba6f39fd833859bbe67262304d46b6fa35396",
+      "dashboard_sha256": "1103f8ead22b522e3cc53209042433d700e14f211f9a78f7a1e72c55a06611bb",
+      "identical": false
+    },
+    {
+      "file": "stats/parallel.py",
+      "reference_sha256": "ed434d45a3f888dee422b612725181f82e2955282c529ef8dd01140317d5c1f7",
+      "dashboard_sha256": "f6549233a1dd1a9fe03b8091222781f251e20bdfcfb79946490e68ed5f3a1d0f",
+      "identical": false
+    },
+    {
+      "file": "metrics/skill.py",
+      "reference_sha256": "547f8da72186e7162e8cd636bfe3939616030a9f0285c6331b6cd4a3ff1f55be",
+      "dashboard_sha256": "437643a98db450795fbc7046fc912f0df8cc8a4ccabc13174f9d65be8d860a3d",
+      "identical": false
+    },
+    {
+      "file": "metrics/error.py",
+      "reference_sha256": "da92155fae767448805fb3e308d421f78dfc35463c5ffcc15f3ebe2ee8795603",
+      "dashboard_sha256": "1af0f3a5850eef29dbede4a6c93a1b3708cdad39a8085bd34f224cb924b4b211",
+      "identical": false
+    },
+    {
+      "file": "io/input.py",
+      "reference_sha256": "390eb05ad8881aaa692b7eb1dc96155756d1b0c7190668941ff14ffd31426810",
+      "dashboard_sha256": "3897cf90a90f15d45dd6c37a89d349efd644d6b8e59fb4099bbc5842e2ffa396",
+      "identical": false
+    },
+    {
+      "file": "io/output.py",
+      "reference_sha256": "574fbc077ed250d15d57a9316f542b6cafc9235dc06d2a8036e10dac6291e956",
+      "dashboard_sha256": "77327c551315acfb73c38a86fb7a9e3caa1de351f1313580cf7fb7e203a31e46",
+      "identical": false
+    },
+    {
+      "file": "utils/standard.py",
+      "reference_sha256": "20c21ece233661d804738dc59bafe9e0124c6501d6db29c6c8567e51284c1116",
+      "dashboard_sha256": "3e4a017f11672fe1daa74f5f7bfdd29a3ef4a60bd2a2c618ce628f7693e62cb8",
+      "identical": false
+    },
+    {
+      "file": "utils/region.py",
+      "reference_sha256": "d48368dbd4b1b74f5f2840c97f6057be4d8a226ec031a583e75b97e10e4cfb59",
+      "dashboard_sha256": "a1cb081ba06551adb85daccaf47ade36af20e4377acd53824a43d0442cbe318f",
+      "identical": false
+    },
+    {
+      "file": "utils/land_mask.py",
+      "reference_sha256": "25b8bcc15869811e3ae87797bf83981a138df018845ea1277c354aab25a7386b",
+      "dashboard_sha256": "0da88e1c8235c86db80b5758e179062e3f8c141a6e3c9b64ce0894fc116ac7ac",
+      "identical": false
+    }
+  ]
+}

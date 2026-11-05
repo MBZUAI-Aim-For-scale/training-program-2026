@@ -33,14 +33,36 @@ def save_score_results(score_results, *, model, verification_window, dir_out, sa
     overall_scores_nested = dict(zip(overall_scores['Metric'], overall_scores['Score']))
     # Retain the RPSS denominator and sample coverage so undefined scores can be diagnosed.
     reference_rps = score_results.get('RPS_ref') or {}
+    reference_pairs = score_results.get('climatology_obs_df')
+    reference_membership = 'not_applicable'
+    if reference_pairs is not None:
+        reference_membership = (';'.join(sorted(reference_pairs['reference_membership'].unique()))
+                                if 'reference_membership' in reference_pairs else 'not_recorded')
+    forecast_pairs = score_results.get('forecast_obs_df')
+    actual_evaluation_years = None
+    if forecast_pairs is not None:
+        if 'year' in forecast_pairs:
+            actual_evaluation_years = pd.to_numeric(forecast_pairs['year'], errors='raise')
+        elif 'init_time' in forecast_pairs:
+            actual_evaluation_years = pd.to_datetime(forecast_pairs['init_time'], utc=True).dt.year
+    actual_evaluation_years = (str(tuple(sorted(int(year) for year in actual_evaluation_years.unique())))
+                               if actual_evaluation_years is not None else 'not_recorded')
     overall_scores_nested.update({
         'Score_Definition': 'paired_fair_rps_v2',
         'Evaluation_Years': str(kwargs.get('years', '')),
         'Reference_Years': str(kwargs.get('years_clim', '')),
+        'Actual_Evaluation_Years': actual_evaluation_years,
+        'Requested_Reference_Years': str(kwargs.get('years_clim', '')),
         'Reference_Fair_RPS': reference_rps.get('fair_rps', np.nan),
         'RPS_N_Forecasts': score_results['RPS'].get('n_forecasts', np.nan),
         'RPS_N_Excluded_Forecasts': score_results['RPS'].get('n_excluded_forecasts', 0),
         'Reference_RPS_N_Excluded_Forecasts': reference_rps.get('n_excluded_forecasts', 0),
+        'Reference_Membership': reference_membership,
+        'Reference_Probability_Conditioning': ('finite_climatological_onsets'
+                                             if reference_pairs is not None else
+                                             'all_usable_members_including_no_onset'),
+        'Forecast_Probability_Conditioning': 'all_usable_members_including_no_onset',
+        'RPS_Category_Order': 'chronological_complete_partition',
     })
 
     #overall_df = pd.DataFrame(overall_scores)
@@ -121,8 +143,14 @@ def load_ref_score_results(ref_score_file, results_dict):
 
 
 def save_metrics_to_netcdf(spatial_metrics, attrs_dict, desc_dict=None, fname='spatial_metrics',
-                           allowed_attrs = ['model', 'years', 'tolerance_days', 'verification_window', 
-                                            'max_forecast_day', 'mok']):
+                           allowed_attrs=('model', 'years', 'tolerance_days', 'verification_window',
+                                          'max_forecast_day', 'mok', 'wet_init', 'wet_threshold',
+                                          'wet_spell', 'dry_threshold', 'dry_spell', 'dry_extent',
+                                          'onset_percentage_threshold', 'members', 'years_clim',
+                                          'date_filter_year', 'init_days', 'init_type', 'start_date',
+                                          'end_date', 'probabilistic', 'obs_dir', 'obs_var',
+                                          'obs_file_pattern', 'obs_unit_cvt', 'thresh_file',
+                                          'thresh_var', 'nc_mask')):
     """
     Create an xarray Dataset from spatial_metrics, attach global attributes,
     and save to a NetCDF file.
@@ -165,6 +193,10 @@ def save_metrics_to_netcdf(spatial_metrics, attrs_dict, desc_dict=None, fname='s
             clean_attrs[key] = val
 
     ds.attrs.update(clean_attrs)
+    ds.attrs['contingency_definition'] = 'romp_reference_exclusive_window_v1'
+    ds.attrs['ensemble_aggregation'] = ('reference_mean_if_consensus'
+                                      if attrs_dict.get('probabilistic', False)
+                                      else 'deterministic')
 
     if desc_dict is not None:
         ds.attrs.update(desc_dict)
@@ -186,10 +218,18 @@ def set_nested(result_dict, keys, value):
 
 
 def analyze_nested_dict(d):
-    """ inquire number of dimension and dimension names of a nested dict"""
-    depth = dict_depth(d)
-    dims = dict_dims(d)
-    return depth, dims
+    """Return nesting depth and ordered unique keys at each dictionary level."""
+    if not isinstance(d, dict):
+        raise TypeError("Expected a nested dictionary")
+    dims = []
+    level = [d]
+    while level:
+        keys = list(dict.fromkeys(key for node in level for key in node))
+        if keys:
+            dims.append(keys)
+        level = [value for node in level for value in node.values()
+                 if isinstance(value, dict) and value]
+    return len(dims), dims
 
 
 def nested_dict_to_array(nested_dict, metric_key):

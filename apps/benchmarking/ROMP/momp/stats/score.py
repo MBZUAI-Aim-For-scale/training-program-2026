@@ -6,42 +6,6 @@ from momp.stats.bins import extract_day_range
 
 
 def match_samples(forecast_df, reference_df):
-    """Match forecast/reference pairs by initialization, grid point, and event bin."""
-    keys = ("init_time", "lat", "lon", "bin_label")
-
-    def sample_index(frame, label):
-        missing = set(keys).difference(frame.columns)
-        if missing:
-            raise KeyError(f"{label} pairs missing match columns: {sorted(missing)}")
-        normalized = frame.loc[:, keys].copy()
-        normalized["init_time"] = pd.to_datetime(normalized["init_time"], utc=True, errors="raise")
-        for column in ("lat", "lon"):
-            normalized[column] = pd.to_numeric(normalized[column], errors="raise").round(8)
-        normalized["bin_label"] = normalized["bin_label"].astype(str)
-        if normalized.duplicated().any():
-            raise ValueError(f"Duplicate {label} sample keys prevent one-to-one matching")
-        return pd.MultiIndex.from_frame(normalized)
-
-    forecast_keys = sample_index(forecast_df, "forecast")
-    reference_keys = sample_index(reference_df, "reference")
-    common = forecast_keys.intersection(reference_keys, sort=False)
-    if common.empty:
-        raise ValueError(
-            "Forecast and reference pairs have no common samples on "
-            "(init_time, lat, lon, bin_label)"
-        )
-
-    forecast_matched = forecast_df.loc[forecast_keys.isin(common)].copy()
-    reference_matched = reference_df.loc[reference_keys.isin(common)].copy()
-    print(
-        f"Matched {len(common):,} forecast samples; retained "
-        f"{len(forecast_matched):,}/{len(forecast_df):,} forecast rows and "
-        f"{len(reference_matched):,}/{len(reference_df):,} reference rows"
-    )
-    return forecast_matched, reference_matched
-
-
-def match_samples(forecast_df, reference_df):
     """Return forecast/reference rows for the same initialization, grid cell, and event bin."""
     keys = ("init_time", "lat", "lon", "bin_label")
     for name, frame in (("forecast", forecast_df), ("reference", reference_df)):
@@ -54,6 +18,10 @@ def match_samples(forecast_df, reference_df):
         key_frame["init_time"] = pd.to_datetime(key_frame["init_time"], utc=True, errors="raise")
         for column in ("lat", "lon"):
             key_frame[column] = pd.to_numeric(key_frame[column], errors="raise").round(8)
+        if key_frame.isna().any().any():
+            raise ValueError(f"Missing {name} sample keys prevent reliable forecast matching")
+        if not np.isfinite(key_frame[["lat", "lon"]].to_numpy()).all():
+            raise ValueError(f"Nonfinite {name} spatial sample keys")
         key_frame["bin_label"] = key_frame["bin_label"].astype(str)
         duplicate = key_frame.duplicated(keep=False)
         if duplicate.any():
@@ -73,8 +41,13 @@ def match_samples(forecast_df, reference_df):
             f"forecast={len(forecast_df):,}, reference={len(reference_df):,} rows"
         )
 
-    matched_forecast = forecast_df.loc[forecast_index.isin(common)].copy()
-    matched_reference = reference_df.loc[reference_index.isin(common)].copy()
+    matched_forecast = forecast_df.iloc[forecast_index.get_indexer(common)].copy()
+    matched_reference = reference_df.iloc[reference_index.get_indexer(common)].copy()
+    if 'observed_onset' in matched_forecast and 'observed_onset' in matched_reference:
+        observed_forecast = pd.to_numeric(matched_forecast['observed_onset'], errors='coerce').to_numpy()
+        observed_reference = pd.to_numeric(matched_reference['observed_onset'], errors='coerce').to_numpy()
+        if not np.array_equal(observed_forecast, observed_reference):
+            raise ValueError("Matched forecast and reference samples have inconsistent observations")
     print(
         "Matched forecast/reference samples: "
         f"{len(common):,} keys ({len(matched_forecast):,} forecast rows, "
@@ -83,6 +56,47 @@ def match_samples(forecast_df, reference_df):
         f"{len(reference_df) - len(matched_reference):,} unmatched rows"
     )
     return matched_forecast, matched_reference
+
+
+def _validated_probability_pairs(frame):
+    """Reject malformed score inputs instead of silently averaging partial rows."""
+    result = frame.copy()
+    for column, label in (("predicted_prob", "probability"), ("observed_onset", "observation")):
+        try:
+            values = pd.to_numeric(result[column], errors="raise").astype(float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid {label} values in {column}") from exc
+        if not np.isfinite(values).all():
+            raise ValueError(f"Nonfinite {label} values in {column}")
+        valid = values.between(0, 1) if column == "predicted_prob" else values.isin((0, 1))
+        if not valid.all():
+            raise ValueError(f"Invalid {label}: expected {'[0, 1]' if column == 'predicted_prob' else 'binary 0/1'}")
+        result[column] = values
+    return result
+
+
+def _effective_members(frame):
+    column = "total_members_with_onset" if "total_members_with_onset" in frame else "total_members"
+    members = pd.to_numeric(frame[column], errors="coerce")
+    if not (np.isfinite(members) & (members >= 1) & (members == np.floor(members))).all():
+        raise ValueError("Effective ensemble member counts must be finite positive integers")
+    return members
+
+
+def calculate_paired_brier(forecast_pairs, reference_pairs):
+    """Compare Fair BS on common rows supported by both ensemble estimators."""
+    counts = [len(forecast_pairs), len(reference_pairs)]
+    forecast_pairs, reference_pairs = match_samples(forecast_pairs, reference_pairs)
+    supported = ((_effective_members(forecast_pairs).to_numpy() >= 2) &
+                 (_effective_members(reference_pairs).to_numpy() >= 2))
+    if not supported.all():
+        warnings.warn("Fair Brier comparison excludes paired samples with fewer than two usable members",
+                      RuntimeWarning, stacklevel=2)
+    scores = [calculate_brier_score(frame.iloc[np.flatnonzero(supported)])
+              for frame in (forecast_pairs, reference_pairs)]
+    for score, count in zip(scores, counts):
+        score["n_excluded_samples"] = count - int(supported.sum())
+    return tuple(scores)
 
 
 # Function to calculate Brier Score and Fair Brier Score for the model forecasts (both overall and bin-wise)
@@ -111,6 +125,12 @@ def calculate_brier_score(forecast_obs_df):
     dict with Brier score metrics
     """
     
+    forecast_obs_df = _validated_probability_pairs(forecast_obs_df)
+    members = _effective_members(forecast_obs_df)
+    if (members < 2).any():
+        warnings.warn("Fair Brier score is undefined for fewer than two effective members",
+                      RuntimeWarning, stacklevel=2)
+
     # Calculate squared differences
     squared_diffs = (forecast_obs_df['observed_onset'] - forecast_obs_df['predicted_prob'])**2
     
@@ -119,7 +139,7 @@ def calculate_brier_score(forecast_obs_df):
     
     # Calculate Fair Brier Score correction term
     # ens-1 where ens is the number of ensemble members
-    correction_term = (forecast_obs_df['predicted_prob'] * (1 - forecast_obs_df['predicted_prob'])) / (forecast_obs_df['total_members'] - 1)
+    correction_term = (forecast_obs_df['predicted_prob'] * (1 - forecast_obs_df['predicted_prob'])) / (members.where(members >= 2) - 1)
     
     # Fair Brier Score
     fair_brier_components = squared_diffs - correction_term
@@ -168,6 +188,8 @@ def calculate_auc(forecast_obs_df):
     dict with AUC metrics
     """
     
+    forecast_obs_df = _validated_probability_pairs(forecast_obs_df)
+
     # Extract probabilities and observations
     p_ij = forecast_obs_df['predicted_prob'].values
     y_ij = forecast_obs_df['observed_onset'].values
@@ -406,6 +428,14 @@ def calculate_rps(forecast_obs_df):
     dict with RPS metrics
     """
     
+    forecast_obs_df = _validated_probability_pairs(forecast_obs_df)
+    member_column = 'total_members_with_onset' if 'total_members_with_onset' in forecast_obs_df else 'total_members'
+    forecast_obs_df[member_column] = _effective_members(forecast_obs_df)
+    indices = pd.to_numeric(forecast_obs_df['bin_index'], errors='coerce')
+    if not (np.isfinite(indices) & (indices >= 0) & (indices == np.floor(indices))).all():
+        raise ValueError("RPS category indices must be finite nonnegative integers")
+    forecast_obs_df['bin_index'] = indices
+
     # Group by forecast (init_time, lat, lon) to get all bins for each forecast
     forecast_groups = forecast_obs_df.groupby(['init_time', 'lat', 'lon'])
     
@@ -422,6 +452,22 @@ def calculate_rps(forecast_obs_df):
         member_column = 'total_members_with_onset' if 'total_members_with_onset' in group_sorted else 'total_members'
         total_members = group_sorted[member_column].iloc[0]
         
+        if group_sorted['bin_index'].duplicated().any():
+            raise ValueError("RPS categories must have unique bin indices")
+        if {'bin_start', 'bin_end'}.issubset(group_sorted.columns):
+            starts = pd.to_numeric(group_sorted['bin_start'], errors='coerce').to_numpy()
+            ends = pd.to_numeric(group_sorted['bin_end'], errors='coerce').to_numpy()
+            if (np.isnan(starts).any() or np.isnan(ends).any() or (starts > ends).any()):
+                raise ValueError("RPS categories require valid inclusive day bounds")
+            if np.any(starts[1:] <= ends[:-1]):
+                raise ValueError("RPS category indices must be chronological and nonoverlapping")
+            if not np.all(starts[1:] == ends[:-1] + 1):
+                raise ValueError("RPS requires a contiguous categorical partition without missing day bins")
+        if not np.isclose(p_ij.sum(), 1., atol=1e-8, rtol=0) or y_ij.sum() != 1:
+            raise ValueError("RPS requires a complete categorical partition: probabilities and observations must sum to one")
+        if group_sorted[member_column].nunique() != 1:
+            raise ValueError("RPS requires one consistent effective member count per forecast")
+
         m = len(p_ij)  # Number of bins
         
         # Calculate RPS for this forecast
@@ -476,6 +522,14 @@ def calculate_paired_rps(forecast_pairs, reference_pairs):
     supported = []
     input_counts = []
     for label, pairs in (("forecast", forecast_pairs), ("reference", reference_pairs)):
+        # Category coverage and row matching must use the same canonical keys.
+        pairs = pairs.copy()
+        pairs['init_time'] = pd.to_datetime(pairs['init_time'], utc=True, errors='raise')
+        for column in ('lat', 'lon'):
+            pairs[column] = pd.to_numeric(pairs[column], errors='raise').round(8)
+        if (pairs[keys].isna().any().any() or
+                not np.isfinite(pairs[['lat', 'lon']].to_numpy()).all()):
+            raise ValueError(f"Missing or nonfinite {label} sample keys")
         input_counts.append(pairs.groupby(keys).ngroups)
         member_column = ('total_members_with_onset' if 'total_members_with_onset' in pairs
                          else 'total_members')
@@ -494,6 +548,13 @@ def calculate_paired_rps(forecast_pairs, reference_pairs):
         supported.append(filtered)
 
     if all(not frame.empty for frame in supported):
+        # Intersect whole forecasts, never truncate one categorical distribution
+        # to the subset of labels present in the other forecast.
+        categories = [frame.groupby(keys)['bin_label'].agg(frozenset) for frame in supported]
+        common_cases = categories[0].index.intersection(categories[1].index)
+        for case in common_cases:
+            if categories[0].loc[case] != categories[1].loc[case]:
+                raise ValueError("Paired RPS requires the same complete categories on both sides")
         supported = match_samples(*supported)
     else:
         supported = [frame.iloc[:0] for frame in supported]
@@ -505,185 +566,18 @@ def calculate_paired_rps(forecast_pairs, reference_pairs):
 
 
 def calculate_brier_score_climatology(forecast_obs_df):
-    """
-    Calculate Brier Score and Fair Brier Score for probabilistic forecasts.
-    
-    Brier Score = (1/n*m) * Σ(Y_ij - p_ij)²
-    Fair Brier Score = (1/n*m) * Σ[(Y_ij - p_ij)² - p_ij(1-p_ij)/(ens-1)]
-    
-    where:
-    - n = number of forecasts
-    - m = number of bins per forecast  
-    - Y_ij = 1 if onset occurred in bin j for forecast i, 0 otherwise
-    - p_ij = predicted probability for bin j in forecast i
-    - ens = number of ensemble members
-    
-    Note: Excludes "Before initialization" bin from calculations
-    
-    Parameters:
-    -----------
-    forecast_obs_df : DataFrame
-        Output from create_forecast_observation_pairs_with_bins()
-        Must contain columns: 'predicted_prob', 'observed_onset', 'total_members', 'bin_label'
-    
-    Returns:
-    --------
-    dict with Brier score metrics
-    """
-    
-    # Filter out "Before initialization" bin
-    #filtered_df = forecast_obs_df[forecast_obs_df['bin_label'] != 'Before initialization'].copy()
-    filtered_df = forecast_obs_df[~forecast_obs_df['bin_label'].str.contains('Before', na=False)].copy()
-    
-    if len(filtered_df) == 0:
-        print("Warning: No data remaining after filtering out 'Before initialization' bin")
-        return {
-            'brier_score': np.nan,
-            'fair_brier_score': np.nan,
-            'bin_brier_scores': {},
-            'bin_fair_brier_scores': {},
-            'n_samples': 0,
-            'filtered_bins': []
-        }
-    
-    print(f"Calculating Brier Score excluding 'Before initialization' bin")
-    print(f"Original samples: {len(forecast_obs_df)}, After filtering: {len(filtered_df)}")
-    
-    # Calculate squared differences
-    squared_diffs = (filtered_df['observed_onset'] - filtered_df['predicted_prob'])**2
-    
-    # Calculate overall Brier Score
-    brier_score = squared_diffs.mean()
-    
-    # Calculate Fair Brier Score correction term
-    # ens-1 where ens is the number of ensemble members
-    correction_term = (filtered_df['predicted_prob'] * (1 - filtered_df['predicted_prob'])) / (filtered_df['total_members_with_onset'] - 1)
-    
-    # Fair Brier Score
-    fair_brier_components = squared_diffs - correction_term
-    fair_brier_score = fair_brier_components.mean()
-    
-    # Calculate squared differences for bin-wise analysis
-    filtered_df['squared_diff'] = squared_diffs
-    filtered_df['fair_brier_component'] = fair_brier_components
-    
-    # Bin-wise Brier scores (excluding "Before initialization")
-    bin_brier_scores = filtered_df.groupby('bin_label')['squared_diff'].mean()
-    bin_fair_brier_scores = filtered_df.groupby('bin_label')['fair_brier_component'].mean()
-    
-    brier_results = {
-        'brier_score': brier_score,
-        'fair_brier_score': fair_brier_score,
-        'bin_brier_scores': bin_brier_scores.to_dict(),
-        'bin_fair_brier_scores': bin_fair_brier_scores.to_dict(),
-        'n_samples': len(filtered_df),
-        'filtered_bins': sorted(filtered_df['bin_label'].unique()),
-        'excluded_bins': ['Before initialization']
-    }
-    
-    print(f"Brier Score (excluding 'Before initialization'): {brier_results['brier_score']:.4f}")
-    print(f"Fair Brier Score (excluding 'Before initialization'): {brier_results['fair_brier_score']:.4f}")
-    print(f"Bins included in calculation: {brier_results['filtered_bins']}")
+    """Score climatology using its effective ensemble, excluding before-window bins."""
+    filtered = forecast_obs_df.loc[~forecast_obs_df['bin_label'].str.contains('Before', na=False)].copy()
+    result = calculate_brier_score(filtered)
+    result.update(n_samples=len(filtered), filtered_bins=sorted(filtered['bin_label'].unique()),
+                  excluded_bins=['Before initialization'])
+    return result
 
-    return brier_results
 
 def calculate_auc_climatology(forecast_obs_df):
-    """
-    Calculate Area Under the Curve (AUC) for probabilistic forecasts.
-    
-    AUC = Σ_{i,j,i',j'} Y_{ij}(1-Y_{i'j'}) · 1[p_{ij} > p_{i'j'}] / 
-          [(Σ_{i,j} Y_{ij})(Σ_{i,j} (1-Y_{ij}))]
-    
-    where:
-    - Y_{ij} = 1 if onset occurred in bin j for forecast i, 0 otherwise
-    - p_{ij} = predicted probability for bin j in forecast i
-    - 1[p_{ij} > p_{i'j'}] = indicator function (1 if true, 0 if false)
-    
-    Parameters:
-    -----------
-    forecast_obs_df : DataFrame
-        Output from create_forecast_observation_pairs_with_bins()
-        Must contain columns: 'predicted_prob', 'observed_onset'
-    
-    Returns:
-    --------
-    dict with AUC metrics
-    """
-    #forecast_obs_df = forecast_obs_df[forecast_obs_df['bin_label'] != 'Before initialization'].copy()
-    forecast_obs_df = forecast_obs_df[~forecast_obs_df['bin_label'].str.contains('Before', na=False)].copy()
-    # Extract probabilities and observations
-    p_ij = forecast_obs_df['predicted_prob'].values
-    y_ij = forecast_obs_df['observed_onset'].values
-    
-    # Count total positive and negative cases
-    n_positive = np.sum(y_ij)  # Σ Y_{ij}
-    n_negative = np.sum(1 - y_ij)  # Σ (1-Y_{ij})
-    
-    if n_positive == 0 or n_negative == 0:
-        print("Warning: Cannot calculate AUC - all cases are either positive or negative")
-        return {
-            'auc': np.nan,
-            'n_positive': n_positive,
-            'n_negative': n_negative,
-            'bin_auc_scores': {},
-            'forecast_obs_df_with_ranks': forecast_obs_df
-        }
-    
-    # Calculate AUC using the Mann-Whitney U statistic approach
-    # This is equivalent to the formula but more computationally efficient
-    
-    # Separate positive and negative cases
-    positive_probs = p_ij[y_ij == 1]
-    negative_probs = p_ij[y_ij == 0]
-    
-    # Calculate Mann-Whitney U statistic
-    u_statistic, _ = stats.mannwhitneyu(positive_probs, negative_probs, alternative='greater')
-    
-    # AUC is U statistic divided by (n_positive * n_negative)
-    auc = u_statistic / (n_positive * n_negative)
-    
-    # Alternative direct calculation (less efficient for large datasets)
-    # concordant_pairs = 0
-    # for i in range(len(p_ij)):
-    #     if y_ij[i] == 1:  # positive case
-    #         for j in range(len(p_ij)):
-    #             if y_ij[j] == 0:  # negative case
-    #                 if p_ij[i] > p_ij[j]:
-    #                     concordant_pairs += 1
-    # auc_direct = concordant_pairs / (n_positive * n_negative)
-    
-    # Calculate AUC by bin
-    bin_auc_scores = {}
-    unique_bins = forecast_obs_df['bin_label'].unique()
-    
-    for bin_label in unique_bins:
-        bin_data = forecast_obs_df[forecast_obs_df['bin_label'] == bin_label]
-        
-        if len(bin_data) > 0:
-            bin_p = bin_data['predicted_prob'].values
-            bin_y = bin_data['observed_onset'].values
-            
-            bin_n_positive = np.sum(bin_y)
-            bin_n_negative = np.sum(1 - bin_y)
-            
-            if bin_n_positive > 0 and bin_n_negative > 0:
-                bin_positive_probs = bin_p[bin_y == 1]
-                bin_negative_probs = bin_p[bin_y == 0]
-                
-                bin_u_stat, _ = stats.mannwhitneyu(bin_positive_probs, bin_negative_probs, alternative='greater')
-                bin_auc = bin_u_stat / (bin_n_positive * bin_n_negative)
-            else:
-                bin_auc = np.nan
-            
-            bin_auc_scores[bin_label] = bin_auc
-
-
-    auc_results = {
-        'auc': auc,
-        'bin_auc_scores': bin_auc_scores,
-    }
-    
-    return auc_results
+    """Use the same AUC estimator and input checks as forecast verification."""
+    filtered = forecast_obs_df.loc[~forecast_obs_df['bin_label'].str.contains('Before', na=False)].copy()
+    return calculate_auc(filtered)
 
 
 def calculate_skill_scores(brier_forecast, rps_forecast, 
@@ -709,6 +603,11 @@ def calculate_skill_scores(brier_forecast, rps_forecast,
     dict with skill scores
     """
     
+    brier_forecast = brier_forecast or {'fair_brier_score': np.nan, 'bin_fair_brier_scores': {}}
+    brier_climatology = brier_climatology or {'fair_brier_score': np.nan, 'bin_fair_brier_scores': {}}
+    rps_forecast = rps_forecast or {'fair_rps': np.nan}
+    rps_climatology = rps_climatology or {'fair_rps': np.nan}
+
     skill_scores = {}
     
     print("="*60)

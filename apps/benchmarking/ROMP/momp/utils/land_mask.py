@@ -234,27 +234,29 @@ def apply_nc_mask(ds, nc_mask, mask_var=None, keep_value=1):
             mask_lat_f = _clean_coord_array(mask_da.lat)
             mask_lon_f = _clean_coord_array(mask_da.lon)
 
-            # Calculate nearest indices numerically
-            lat_idx = [int(np.argmin(np.abs(mask_lat_f - v))) for v in ds_lat_f]
-            lon_idx = [int(np.argmin(np.abs(mask_lon_f - v))) for v in ds_lon_f]
+            if not all(np.all(np.isfinite(values)) and len(values) for values in
+                       (ds_lat_f, ds_lon_f, mask_lat_f, mask_lon_f)):
+                raise ValueError("Mask and data require finite nonempty spatial coordinates")
+            extra_dims = [dim for dim in mask_da.dims if dim not in ("lat", "lon")]
+            if any(mask_da.sizes[dim] != 1 for dim in extra_dims):
+                raise ValueError("A spatial mask must have only lat/lon or singleton extra dimensions")
+            mask_da = mask_da.squeeze(extra_dims, drop=True).assign_coords(
+                lat=mask_lat_f, lon=mask_lon_f).sortby("lat").sortby("lon")
+            # Nearest spatial selection is valid only within the mask's coverage.
+            # Reindex alone extrapolates boundary cells arbitrarily far away.
+            mask_aligned = mask_da.reindex(lat=ds_lat_f, lon=ds_lon_f, method="nearest")
+            covered = ((mask_aligned.lat >= mask_lat_f.min()) &
+                       (mask_aligned.lat <= mask_lat_f.max()) &
+                       (mask_aligned.lon >= mask_lon_f.min()) &
+                       (mask_aligned.lon <= mask_lon_f.max()))
+            mask_bool = ((mask_aligned == keep_value) & covered).assign_coords(
+                lat=ds.lat, lon=ds.lon)
 
-            mask_aligned = mask_da.isel(lat=lat_idx, lon=lon_idx)
-            raw_vals = mask_aligned.values
-            bool_vals = raw_vals == keep_value
-
-            mask_bool = xr.DataArray(
-                bool_vals,
-                coords={"lat": ds.lat, "lon": ds.lon},
-                dims=["lat", "lon"]
-            )
         else:
             mask_bool = mask_da == keep_value
 
-        ds_out = ds.copy()
-        for v in ds_out.data_vars:
-            ds_out[v] = ds_out[v].where(mask_bool)
+        return ds.where(mask_bool)
 
-        return ds_out
 
     finally:
         if close_needed and hasattr(mask_ds, "close"):
@@ -351,7 +353,7 @@ def shp_mask(da, region="Ethiopia", **kwargs):
     from shapely.vectorized import contains
     geom = get_shp(region=region)
     if geom is None:
-        return da
+        raise ValueError(f"No country polygon found for {region!r}")
 
     lons, lats = np.meshgrid(da.lon.values, da.lat.values)
     points = np.column_stack((lons.ravel(), lats.ravel()))

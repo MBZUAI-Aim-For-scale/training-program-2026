@@ -11,6 +11,7 @@ comparison of all of them, and forecast maps.
 from __future__ import annotations
 
 import base64
+import functools
 import shutil
 from html import escape
 import subprocess
@@ -21,6 +22,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import xarray as xr
+
+from ai_weather.background_task import BackgroundTask
 
 # ─── Ensure the 'apps' package is discoverable ──────────────────────────────
 try:
@@ -49,7 +52,7 @@ def _section(title: str, color: str = "sky") -> None:
                 unsafe_allow_html=True)
 
 
-@st.cache_data(ttl=60)
+@functools.lru_cache(maxsize=1)
 def gpu_name() -> str | None:
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
@@ -61,7 +64,8 @@ def gpu_name() -> str | None:
 
 @st.cache_resource(max_entries=6)
 def open_output(path: str, mtime: float) -> xr.Dataset:
-    return xr.open_dataset(path).load()
+    with xr.open_dataset(path) as dataset:
+        return dataset.load()
 
 
 def _open(path: str) -> xr.Dataset:
@@ -161,8 +165,10 @@ def _movie_panel(picked, reqs):
         k = queue.pop(0)
         movie.launch(reqs[k])
         states[k] = "running"
-    tabs = st.tabs([catalog.BY_KEY[k].name for k in picked]) if len(picked) > 1 else [st.container()]
+    tabs = st.tabs([catalog.BY_KEY[k].name for k in picked], key="forecast_event_model_tabs", on_change="rerun") if len(picked) > 1 else [st.container()]
     for tab, k in zip(tabs, picked):
+        if len(picked) > 1 and not tab.open:
+            continue
         with tab:
             req, s = reqs[k], movie.status(reqs[k])
             if s["state"] == "running":
@@ -209,8 +215,10 @@ def onset_results(paths: dict, keys: list, init, lead_days, box, region_name):
         return defn, search_from
     show = st.multiselect("Show onset maps for", usable, default=usable[:1], key="forecast_onset_models",
                           format_func=lambda k: catalog.BY_KEY[k].name)
-    tabs = st.tabs([catalog.BY_KEY[k].name for k in show]) if len(show) > 1 else [st.container()] * len(show)
+    tabs = st.tabs([catalog.BY_KEY[k].name for k in show], key="forecast_onset_model_tabs", on_change="rerun") if len(show) > 1 else [st.container()] * len(show)
     for tab, k in zip(tabs, show):
+        if len(show) > 1 and not tab.open:
+            continue
         with tab:
             onset_view.view(paths[k], _open(paths[k]), catalog.BY_KEY[k], init, box, region_name,
                             lead_days, defn, search_from)
@@ -222,30 +230,51 @@ def onset_results(paths: dict, keys: list, init, lead_days, box, region_name):
                             format_func=lambda k: catalog.BY_KEY[k].name)
     gifs = {k: onset_view.movie_path(paths[k], box, defn, init, lead_days) for k in picked}
     todo = [k for k in picked if not gifs[k].exists()]
+    outcome = ss.get("forecast_onset_movie_outcome")
+    if outcome:
+        if outcome[0] == 0:
+            st.success("Onset movies finished.")
+        else:
+            st.error("Onset movie generation failed.")
+            with st.expander("Movie error details"):
+                st.code(outcome[1][-4000:])
+    active_movie = ss.get("forecast_onset_movie_job")
     if todo and st.button(f"Make {len(todo)} onset movie{'s' if len(todo) > 1 else ''}", type="primary",
-                          key="forecast_onset_movie_go"):
-        failed = False
-        for k in todo:  # one after another
-            bar = st.progress(0.0, text=f"{catalog.BY_KEY[k].name}: drawing frames…")
-            try:
-                onset_view.make_movie(paths[k], catalog.BY_KEY[k], box, region_name, init, lead_days, defn,
-                                      search_from, lambda i, n, name=catalog.BY_KEY[k].name:
-                                      bar.progress(i / n, text=f"{name}: frame {i} of {n}"))
-            except OSError as e:
-                failed = True
-                st.error(f"Couldn't make onset movie for {catalog.BY_KEY[k].name}: {e}")
-            finally:
-                bar.empty()
-        if not failed:
+                          disabled=active_movie is not None, key="forecast_onset_movie_go"):
+        requests = [(paths[k], catalog.BY_KEY[k], box, region_name, init, lead_days, defn, search_from)
+                    for k in todo]
+        try:
+            ss.pop("forecast_onset_movie_outcome", None)
+            ss["forecast_onset_movie_job"] = runs.launch_onset_movies(requests)
             st.rerun()
+        except OSError as exc:
+            st.error(f"Could not start onset movies: {exc}")
+    st.fragment(_onset_movie_status, run_every=2 if active_movie else None)()
     done = [k for k in picked if gifs[k].exists()]
-    tabs = st.tabs([catalog.BY_KEY[k].name for k in done]) if len(done) > 1 else [st.container()] * len(done)
+    tabs = st.tabs([catalog.BY_KEY[k].name for k in done], key="forecast_onset_movie_tabs", on_change="rerun") if len(done) > 1 else [st.container()] * len(done)
     for tab, k in zip(tabs, done):
+        if len(done) > 1 and not tab.open:
+            continue
         with tab:
             gif_html(gifs[k], f"{catalog.BY_KEY[k].name}: onset by day, forecast vs observed")
             st.download_button("Download onset movie (GIF)", gifs[k].read_bytes(), file_name=gifs[k].name,
                                mime="image/gif", key=f"forecast_onset_movie_dl_{k}")
     return defn, search_from
+
+
+def _onset_movie_status():
+    job = ss.get("forecast_onset_movie_job")
+    if job is None:
+        return
+    code = job["process"].poll()
+    if code is None:
+        st.info("Task running: creating onset movies in a background process…")
+        return
+    log = (Path(job["folder"].name) / "worker.log").read_text()
+    job["folder"].cleanup()
+    ss.pop("forecast_onset_movie_job")
+    ss["forecast_onset_movie_outcome"] = (code, log)
+    st.rerun()
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -257,7 +286,9 @@ def _run_panel(sig, plan):
     was_busy = runs.busy(s)
     runs.tick(s)
     st.dataframe(runs.status_table(s, plan), hide_index=True, width="stretch")
-    if s.get("running"):
+    if runs.busy(s):
+        st.info("Task running in the background. You can continue using the dashboard.")
+    if s.get("running") and s.get("download") is None:
         with st.expander(f"Log: {catalog.BY_KEY[s['running']].name}", key="forecast_run_log"):
             st.code(jobs.log_tail(s["job"]) or "…")
     if len(s["paths"]) != before or (was_busy and not runs.busy(s)):
@@ -288,6 +319,58 @@ def _model_card_html(m, selected: bool, timings) -> str:
     </div>'''
 
 
+def _load_forecast_metadata():
+    # Prime catalog's cache off the script thread before date controls call date_range().
+    return {"era5_dates": catalog.era5_dates(), "gpu": gpu_name()}
+
+
+def _discover_forecasts(keys, init, lead_days, members, box, region_name, use_case):
+    checks = {key: catalog.check(catalog.BY_KEY[key], init, lead_days,
+                                 runs.members_for(catalog.BY_KEY[key], members),
+                                 box, region_name, use_case) for key in keys}
+    plan = runs.plan(keys, init, lead_days, members, box, region_name, use_case, synthetic=False)
+    return {"checks": checks, "plan": plan, "shared_runs": store.remote_runs()}
+
+
+def _discovery_result(key, signature, function, *args):
+    """Reuse in-flight discovery on reruns; obsolete results never drive newer controls."""
+    current = ss.get(key)
+    if current is None or (current["signature"] != signature and current["task"].done.is_set()):
+        current = {"signature": signature, "task": BackgroundTask(function, *args).start()}
+        ss[key] = current
+    snapshot = current["task"].snapshot()
+    if current["signature"] != signature or not snapshot["done"]:
+        return False, None
+    if snapshot["error"]:
+        st.error("Forecast discovery failed. Refresh to try again.")
+        with st.expander("Discovery error details"):
+            st.code(snapshot["error"])
+        if st.button("Retry forecast discovery", key=f"{key}_retry"):
+            ss.pop(key)
+            st.rerun()
+        return False, None
+    return True, snapshot["result"]
+
+
+def _discovery_status(key):
+    task = ss[key]["task"]
+    if task.done.is_set():
+        st.rerun()
+    st.info("Task running: checking forecast data availability in the background…")
+
+
+def _pending_discovery(key):
+    # Poll already-started work even when new settings need slow cloud discovery.
+    active = ss.get("runs")
+    if active and runs.busy(active):
+        st.fragment(_run_panel, run_every=3)(active["sig"], active["plan"])
+    snapshot = ss[key]["task"].snapshot()
+    if snapshot["done"] and not snapshot["error"]:
+        st.rerun()
+    if not snapshot["done"]:
+        st.fragment(_discovery_status, run_every=1)(key)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Page
 # ═════════════════════════════════════════════════════════════════════════════
@@ -295,11 +378,15 @@ def render():
     """Main entry point called by app.py"""
     timings = catalog.load_timings()
     saved = store.list_saved()
-    gpu = gpu_name()
 
     # ── Header & stats ───────────────────────────────────────────────────
     st.title("Running Your First AI forecast | Lab")
     st.caption("Pick models, a date and a region. Run them. Compare with what happened.")
+    metadata_ready, metadata = _discovery_result("forecast_metadata_task", (), _load_forecast_metadata)
+    if not metadata_ready:
+        _pending_discovery("forecast_metadata_task")
+        return
+    gpu = metadata["gpu"]
 
     ready = [m for m in catalog.MODELS if m.live]
     free_gb = shutil.disk_usage(store.OUTPUT_DIR if store.OUTPUT_DIR.exists() else "/").free / 1e9
@@ -426,13 +513,6 @@ def render():
              "went.  \n**Onset:** when the rainy season starts, by a definition you choose (ICPAC, "
              "Moron–Robertson), from observed rain so far plus the forecast.") or "Precipitation"
 
-    for m in models:
-        for level, msg in catalog.check(m, init, lead_days, runs.members_for(m, members), box,
-                                        region_name, use_case):
-            prefix = f"**{m.name}:** " if len(models) > 1 else ""
-            suffix = " It is left out of this run." if level == "error" and len(models) > 1 else ""
-            (st.error if level == "error" else st.warning)(prefix + msg + suffix)
-
     # ── Step 3: run ──────────────────────────────────────────────────────
     _section("Step 3 · Run the forecasts" if len(models) > 1 else "Step 3 · Run the forecast", "green")
     tags = [("Model" + ("s" if len(models) > 1 else ""), ", ".join(m.name for m in models)),
@@ -443,9 +523,30 @@ def render():
                 "".join(f'<span class="metric-pill"><strong>{k}:</strong> {v}</span>' for k, v in tags) +
                 '</div>', unsafe_allow_html=True)
 
-    plan = runs.plan(model_keys, init, lead_days, members, box, region_name, use_case, synthetic=False)
     sig = runs.signature(model_keys, init, lead_days, members)
     s = runs.state(sig)
+    if s["sig"] != sig:
+        st.info("The previous forecast task is still running. Its settings are retained until it finishes.")
+        st.fragment(_run_panel, run_every=3)(s["sig"], s["plan"])
+        return
+    discovery_signature = (sig, box.lat_min, box.lat_max, box.lon_min, box.lon_max,
+                           region_name, use_case, len(s["paths"]),
+                           ss.get("forecast_discovery_version", 0))
+    discovery_ready, discovery = _discovery_result(
+        "forecast_plan_task", discovery_signature, _discover_forecasts,
+        model_keys, init, lead_days, members, box, region_name, use_case)
+    if not discovery_ready:
+        _pending_discovery("forecast_plan_task")
+        return
+    plan = discovery["plan"]
+    if st.button("Refresh available forecasts", key="forecast_refresh_available"):
+        ss["forecast_discovery_version"] = ss.get("forecast_discovery_version", 0) + 1
+        st.rerun()
+    for m in models:
+        for level, msg in discovery["checks"][m.key]:
+            prefix = f"**{m.name}:** " if len(models) > 1 else ""
+            suffix = " It is left out of this run." if level == "error" and len(models) > 1 else ""
+            (st.error if level == "error" else st.warning)(prefix + msg + suffix)
     actionable = any(w != runs.SKIP for w, _, _ in plan.values())
     if not s["started"]:
         if st.button(runs.button_label(plan), type="primary",
@@ -462,59 +563,70 @@ def render():
 
     _section("Results", "teal")
 
-    with st.expander("How " + ("this forecast was" if len(loaded) == 1 else "these forecasts were") + " made",
-                     key="forecast_pipeline_expander"):
-        k = (st.selectbox("Model", loaded, key="forecast_pipeline_model",
-                          format_func=lambda k: catalog.BY_KEY[k].name)
-             if len(loaded) > 1 else loaded[0])
-        m, full = catalog.BY_KEY[k], _open(paths[k])
-        st.markdown(f"**{m.name}**, started {init:%-d %b %Y %HZ} from "
-                    f"{full.attrs.get('init_source', m.init_source)}")
-        results.pipeline(paths[k], full, m, timings)
-
-    defn = search_from = None
-    if use_case == "Onset":
-        st.markdown("#### Onset (vs observations)")
-        defn, search_from = onset_results(paths, loaded, init, lead_days, box, region_name)
-    else:
-        st.markdown("#### Event movies (vs observations)",
-                    help="An animated map of the observations (ERA5) next to the forecast, with the "
-                         "regional series building up day by day, then a map of the event's footprint "
-                         "and track.  \nAIFS and several other models train on ERA5, so this is not a "
-                         "fully independent check.")
-        event_movies(paths, loaded, init, lead_days, box, region_name, use_case)
-
-    st.markdown("#### Time-series comparison",
-                help=f"Every loaded model for {region_name}, from {init:%-d %b %Y %HZ}, as one series.")
-    var = "t2m" if use_case == "Heat" else "tp"
-    with_var = [k for k in loaded if var not in catalog.missing_in_run(_open(paths[k]))]
-    if with_var:
-        compare.chart(paths, with_var, init, lead_days, box, region_name, var)
-        if use_case == "Onset" and defn is not None:
-            compare.onset_table(paths, with_var, init, lead_days, box, region_name, defn, search_from)
-    else:
-        st.caption(f"None of the loaded models forecasts {catalog.VAR_LABELS[var]}.")
-
-    st.markdown("#### Forecast maps")
-    k = (st.selectbox("Model", loaded, key="forecast_maps_model",
-                      format_func=lambda k: catalog.BY_KEY[k].name)
-         if len(loaded) > 1 else loaded[0])
-    m, p = catalog.BY_KEY[k], Path(paths[k])
-    full = _open(paths[k])
-    ds = results.crop(full, box, lead_days * 24)
-    if ds.sizes["lat"] < 2 or ds.sizes["lon"] < 2:
-        st.error(f"{region_name} holds fewer than 2 grid points of {m.name}'s "
-                 f"{m.grid_deg:g}° grid; choose a larger region.")
-    else:
-        results.field_maps(ds, m, box, region_name)
-    data = results.netcdf_bytes(paths[k], p.stat().st_mtime,
-                                (box.lat_min, box.lat_max, box.lon_min, box.lon_max), lead_days * 24)
-    if store.BUCKET and store.in_bucket(p):
-        theme.hint("✓ In the shared bucket", f"Other Sparks can load this {m.name} run.")
-    st.download_button(f"Download this {m.name} forecast for {region_name} (NetCDF, "
-                       f"{len(data) / 1e6:.1f} MB)", data, mime="application/x-netcdf",
-                       file_name=f"{m.key}_{init:%Y%m%dT%H}_{lead_days}d_"
-                                 f"{region_name.replace(' ', '_').lower()}.nc", key=f"forecast_nc_{k}",
-                       help=f"Variables tp (mm per 6 h), t2m (K), z500 (m² s⁻²) by member and lead "
-                            f"time. The full global file is on the Spark at "
-                            f"`{p.relative_to(store.OUTPUT_DIR.parent)}` ({p.stat().st_size / 1e6:.0f} MB).")
+    result_tabs = st.tabs(["How it was made", "Onset" if use_case == "Onset" else "Event movies",
+                           "Time-series comparison", "Forecast maps & download"],
+                          key="forecast_result_tabs", on_change="rerun")
+    if result_tabs[0].open:
+        with result_tabs[0]:
+            with st.expander("How " + ("this forecast was" if len(loaded) == 1 else "these forecasts were") + " made",
+                             key="forecast_pipeline_expander"):
+                k = (st.selectbox("Model", loaded, key="forecast_pipeline_model",
+                                  format_func=lambda k: catalog.BY_KEY[k].name)
+                     if len(loaded) > 1 else loaded[0])
+                m, full = catalog.BY_KEY[k], _open(paths[k])
+                st.markdown(f"**{m.name}**, started {init:%-d %b %Y %HZ} from "
+                            f"{full.attrs.get('init_source', m.init_source)}")
+                results.pipeline(paths[k], full, m, timings)
+    if result_tabs[1].open:
+        with result_tabs[1]:
+            defn = search_from = None
+            if use_case == "Onset":
+                st.markdown("#### Onset (vs observations)")
+                defn, search_from = onset_results(paths, loaded, init, lead_days, box, region_name)
+            else:
+                st.markdown("#### Event movies (vs observations)",
+                            help="An animated map of the observations (ERA5) next to the forecast, with the "
+                                 "regional series building up day by day, then a map of the event's footprint "
+                                 "and track.  \nAIFS and several other models train on ERA5, so this is not a "
+                                 "fully independent check.")
+                event_movies(paths, loaded, init, lead_days, box, region_name, use_case)
+    if result_tabs[2].open:
+        with result_tabs[2]:
+            st.markdown("#### Time-series comparison",
+                        help=f"Every loaded model for {region_name}, from {init:%-d %b %Y %HZ}, as one series.")
+            defn = search_from = None
+            if use_case == "Onset":
+                defn, search_from = onset_view.controls(region_name, init)
+            var = "t2m" if use_case == "Heat" else "tp"
+            with_var = [k for k in loaded if var not in catalog.missing_in_run(_open(paths[k]))]
+            if with_var:
+                compare.chart(paths, with_var, init, lead_days, box, region_name, var)
+                if use_case == "Onset" and defn is not None:
+                    compare.onset_table(paths, with_var, init, lead_days, box, region_name, defn, search_from)
+            else:
+                st.caption(f"None of the loaded models forecasts {catalog.VAR_LABELS[var]}.")
+    if result_tabs[3].open:
+        with result_tabs[3]:
+            st.markdown("#### Forecast maps")
+            k = (st.selectbox("Model", loaded, key="forecast_maps_model",
+                              format_func=lambda k: catalog.BY_KEY[k].name)
+                 if len(loaded) > 1 else loaded[0])
+            m, p = catalog.BY_KEY[k], Path(paths[k])
+            full = _open(paths[k])
+            ds = results.crop(full, box, lead_days * 24)
+            if ds.sizes["lat"] < 2 or ds.sizes["lon"] < 2:
+                st.error(f"{region_name} holds fewer than 2 grid points of {m.name}'s "
+                         f"{m.grid_deg:g}° grid; choose a larger region.")
+            else:
+                results.field_maps(ds, m, box, region_name)
+            data = results.netcdf_bytes(paths[k], p.stat().st_mtime,
+                                        (box.lat_min, box.lat_max, box.lon_min, box.lon_max), lead_days * 24)
+            if store.BUCKET and (p.parent.name, p.name, p.stat().st_size) in discovery["shared_runs"]:
+                theme.hint("✓ In the shared bucket", f"Other Sparks can load this {m.name} run.")
+            st.download_button(f"Download this {m.name} forecast for {region_name} (NetCDF, "
+                               f"{len(data) / 1e6:.1f} MB)", data, mime="application/x-netcdf",
+                               file_name=f"{m.key}_{init:%Y%m%dT%H}_{lead_days}d_"
+                                         f"{region_name.replace(' ', '_').lower()}.nc", key=f"forecast_nc_{k}",
+                               help=f"Variables tp (mm per 6 h), t2m (K), z500 (m² s⁻²) by member and lead "
+                                    f"time. The full global file is on the Spark at "
+                                    f"`{p.relative_to(store.OUTPUT_DIR.parent)}` ({p.stat().st_size / 1e6:.0f} MB).")

@@ -48,3 +48,13 @@ anaconda_projects/db/
 # saved forecasts, movies and job logs (mounted from the host)
 /outputs/
 apps/outputs/
+
+# Track onset blending source/configuration, but not local data or generated artifacts.
+!apps/onset_blending/
+apps/onset_blending/**
+!apps/onset_blending/**/
+!apps/onset_blending/**/*.py
+!apps/onset_blending/specs/**/*.yml
+!apps/onset_blending/**/README.md
+!apps/onset_blending/readme.md
+!apps/onset_blending/requirements.txt

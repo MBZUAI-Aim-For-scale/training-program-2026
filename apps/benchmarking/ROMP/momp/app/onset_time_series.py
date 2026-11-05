@@ -57,12 +57,12 @@ def obs_onset_analysis(year, lat_select=11, lon_select=39, incl_clim=True, **kwa
             **kwargs_no_coords
         )
 
-        doy = int(climatological_onset_doy.squeeze())
-
-        climatological_onset_datetime = (
-            pd.Timestamp(year=year, month=1, day=1)
-            + pd.Timedelta(days=doy - 1)
-        )
+        doy = float(climatological_onset_doy.squeeze())
+        if np.isfinite(doy):
+            climatological_onset_datetime = (
+                pd.Timestamp(year=year, month=1, day=1)
+                + pd.Timedelta(days=int(doy) - 1)
+            )
 
         # get day-of-year for each timestamp
         doy = da_sub['time'].dt.dayofyear

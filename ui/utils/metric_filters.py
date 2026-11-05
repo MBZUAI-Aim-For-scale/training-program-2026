@@ -4,6 +4,7 @@ import math
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -94,3 +95,64 @@ def load_probabilistic_metric_table(output_root):
         except (OSError, ValueError) as exc:
             failures.append(f"{source.name}: {exc}")
     return table, baselines, failures
+
+
+def load_probabilistic_distribution_stats(output_root, models=None, windows=None):
+    """Summarize saved per-cell scores without treating pooled CSVs as grids."""
+    import xarray as xr
+
+    metrics = {
+        "fair_brier_score": ("Fair Brier Score", 1, "reference_fair_brier_score"),
+        "fair_brier_skill_score": ("Fair Brier Skill Score (%)", 100, None),
+        "fair_rps": ("Fair RPS", 1, "reference_fair_rps"),
+        "fair_rps_skill_score": ("Fair RPS Skill Score (%)", 100, None),
+        "auc": ("AUC", 1, "reference_auc"),
+        "reference_auc": ("Reference AUC", 1, None),
+    }
+    statistics = ("Mean", "Min", "Median", "P75", "P90", "Max")
+
+    def summarize(values):
+        finite = values[np.isfinite(values)]
+        if not finite.size:
+            return dict.fromkeys(statistics, np.nan)
+        return dict(zip(statistics, (
+            np.mean(finite), np.min(finite), np.median(finite),
+            np.percentile(finite, 75), np.percentile(finite, 90), np.max(finite))))
+
+    rows, failures = [], []
+    for source in sorted(Path(output_root).glob("*/probabilistic_metrics_*.nc")):
+        match = re.fullmatch(r"probabilistic_metrics_(.+)_(\d+)-(\d+)\.nc", source.name)
+        if not match:
+            continue
+        model, start, end = match.groups()
+        label, window = metric_model_label(model), f"Days {int(start)}–{int(end)}"
+        if models is not None and label not in models:
+            continue
+        if windows is not None and window not in windows:
+            continue
+        try:
+            with xr.open_dataset(source) as dataset:
+                for variable, (metric, scale, reference_variable) in metrics.items():
+                    if variable not in dataset:
+                        continue
+                    data = dataset[variable]
+                    if set(data.dims) != {"lat", "lon"}:
+                        raise ValueError(f"{variable} requires latitude/longitude score grids")
+                    values = np.asarray(data.transpose("lat", "lon").values, dtype=float) * scale
+                    row = {"Model": label, "Lead Window": window, "Metric": metric,
+                           "fraction": False, "unit": "%" if scale == 100 else "score",
+                           "probabilistic": True, **summarize(values)}
+                    if reference_variable is not None and reference_variable in dataset:
+                        reference = dataset[reference_variable]
+                        if set(reference.dims) != {"lat", "lon"}:
+                            raise ValueError(f"{reference_variable} requires latitude/longitude score grids")
+                        reference_values = np.asarray(reference.transpose("lat", "lon").values, dtype=float)
+                        reference_values = np.where(np.isfinite(values), reference_values, np.nan)
+                        row.update({f"Reference {stat}": value
+                                    for stat, value in summarize(reference_values).items()})
+                    elif scale == 100:
+                        row.update({f"Reference {stat}": 0.0 for stat in statistics})
+                    rows.append(row)
+        except (OSError, ValueError, TypeError) as exc:
+            failures.append(f"{source.name}: {exc}")
+    return pd.DataFrame(rows), failures

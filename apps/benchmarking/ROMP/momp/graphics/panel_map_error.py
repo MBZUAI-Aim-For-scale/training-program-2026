@@ -347,7 +347,7 @@ if __name__ == "__main__":
     plt.tight_layout(rect=[0, 0, 0.99, 1])
     plt.show()
 
-    plot_filename = f"map_{var_name}_{model_name}_{window_str}.png"
+    plot_filename = f"map_{var_name}_{window_str}.png"
     plot_path = os.path.join(cfg.dir_fig, plot_filename)
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     print(f"Figure saved to: {plot_path}")

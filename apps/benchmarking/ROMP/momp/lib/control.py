@@ -197,10 +197,10 @@ def ref_cfg_layout(cfg, ref_model=None, verification_window=None):
     if ref_model:
         cfg_ref.ref_model = ref_model
 
-    if cfg.ref_model == 'climatology':
+    if cfg_ref.ref_model == 'climatology':
         cfg_ref.probabilistic = False
 
-    cfg_ref.model_list = (cfg.ref_model,)
+    cfg_ref.model_list = (cfg_ref.ref_model,)
 
     if verification_window:
         cfg_ref.verification_window_list = (verification_window,)
@@ -233,7 +233,8 @@ def ref_model_case(case_orig, setting):
     #if case.model == 'climatology':
     #    case.years = case.years_clim
 
-    case_cfg_ref = {**asdict(case), **asdict(setting)}
+    setting_values = setting if isinstance(setting, dict) else asdict(setting)
+    case_cfg_ref = {**setting_values, **asdict(case)}
 
 
     return case, case_cfg_ref

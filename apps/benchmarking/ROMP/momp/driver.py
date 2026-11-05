@@ -10,7 +10,10 @@ import logging
 import sys
 import traceback
 
-from momp.lib.loader import get_cfg, get_setting
+from momp.lib.loader import get_cfg
+from momp.lib.assertion import ROMPValidator
+from momp.lib.control import init_dataclass
+from momp.lib.convention import Setting
 from momp.app.bin_skill_score import skill_score_in_bins
 from momp.app.spatial_far_mr_mae import spatial_far_mr_mae_map
 from momp.utils.printing import print_momp_banner
@@ -32,8 +35,10 @@ def run_momp(cfg=None, setting=None):
     """
     if cfg is None:
         cfg = get_cfg()
+    ROMPValidator(vars(cfg)).validate()
     if setting is None:
-        setting = get_setting()
+        # Explicit cfg must not be paired with a cached setting from another run.
+        setting = init_dataclass(Setting, vars(cfg))
 
     print_momp_banner(cfg)
     logger.info("Starting ROMP Workflow...")

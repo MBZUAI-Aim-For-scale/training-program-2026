@@ -11,6 +11,7 @@ import pandas as pd
 import xarray as xr
 
 from momp.utils.practical import restore_args
+from momp.utils.standard import align_spatial_grid
 from momp.io.input import admin_forecast_grid_index
 import momp.params as params
 
@@ -31,7 +32,7 @@ def find_first_true(arr):
         return -1
 
 
-def _fit_forecast_horizon(p_model, max_forecast_day, dry_extent, wet_spell, day_bins):
+def _fit_forecast_horizon(p_model, max_forecast_day, dry_extent, wet_spell, day_bins, dry_spell=7):
     step_count = int(p_model.sizes.get("step", 0))
     if step_count == 0:
         raise ValueError("Forecast data has no 'step' dimension.")
@@ -67,21 +68,18 @@ def _fit_forecast_horizon(p_model, max_forecast_day, dry_extent, wet_spell, day_
             f"but the verification window requires day {max_forecast_day}."
         )
 
-    requested_dry_extent = max(0, int(dry_extent or 0))
-    dry_extent = min(requested_dry_extent, max(0, available_day - max_forecast_day))
-    required_tail = dry_extent if dry_extent > wet_spell else max(0, wet_spell - 1)
+    dry_extent = max(0, int(dry_extent or 0))
+    # The confirmation interval includes the candidate day itself.
+    confirmation = dry_extent if dry_extent > wet_spell and dry_spell > 0 else wet_spell
+    required_tail = max(confirmation, wet_spell) - 1
     required_steps = max_forecast_day + required_tail
     if required_steps > available_day:
         raise ValueError(
             f"Forecast data provides steps only through day {available_day}, "
-            f"but onset detection requires day {required_steps}."
-        )
-
-    if dry_extent < requested_dry_extent:
-        print(
-            f"Using available forecast steps through day {available_day}; "
-            f"dry_extent reduced from {requested_dry_extent} to {dry_extent} "
-            f"for a {max_forecast_day}-day verification window."
+            f"but onset detection requires day {required_steps} with the configured "
+            f"wet_spell={wet_spell} and dry_extent={dry_extent}. "
+            f"The latest verifiable onset day with these criteria is {max(0, available_day - required_tail)}. "
+            "Supply a longer forecast or explicitly change the verification window/onset criteria."
         )
 
     return max_forecast_day, dry_extent, required_steps
@@ -96,38 +94,37 @@ def detect_onset(
     wet_spell=3,
     dry_spell=7,
     dry_threshold=1.0,
-    dry_extent=21,
+    dry_extent=0,
     **kwargs,
 ):
     """
     Detect onset for a specific forecast lead day.
     forecast_series: 1D array of daily forecast rainfall values starting at step 1.
     """
+    series = np.asarray(forecast_series, dtype=float)
+    if series.ndim != 1:
+        raise ValueError("Onset detection requires a one-dimensional daily rainfall series.")
+    if day < 1 or wet_spell < 1 or dry_spell < 0 or dry_extent < 0:
+        raise ValueError("Onset day and wet_spell must be positive; dry windows cannot be negative.")
     start_idx = day - 1
-
-    if dry_extent <= wet_spell:
-        end_idx = start_idx + wet_spell
-        if end_idx <= len(forecast_series):
-            window_series = forecast_series[start_idx:end_idx]
-            if np.all(window_series >= wet_init) and np.nansum(window_series) > thresh:
-                return True
-    else:
-        end_idx = start_idx + wet_spell
-        end_idx_dry = start_idx + dry_extent
-
-        if end_idx_dry <= len(forecast_series):
-            window_series = forecast_series[start_idx:end_idx]
-            dry_series = forecast_series[start_idx:end_idx_dry]
-
-            if np.all(window_series >= wet_init) and np.nansum(window_series) > thresh:
-                dry_bool = dry_series < wet_init
-                consec_dry = np.convolve(dry_bool, np.ones(dry_spell, dtype=int), "valid")
-                has_dry_spell = np.any(consec_dry == dry_spell)
-
-                if not has_dry_spell:
-                    return True
-
-    return False
+    end_idx = start_idx + wet_spell
+    if end_idx > len(series):
+        return False
+    wet = series[start_idx:end_idx]
+    if not (np.isfinite(wet).all() and np.all(wet >= wet_init) and wet.sum() > thresh):
+        return False
+    if dry_extent > wet_spell and dry_spell > 0:
+        dry_end = start_idx + dry_extent
+        if dry_end > len(series):
+            return False
+        confirmation = series[start_idx:dry_end]
+        if not np.isfinite(confirmation).all():
+            return False
+        if dry_spell <= dry_extent:
+            dry = confirmation < dry_threshold
+            if np.any(np.convolve(dry, np.ones(dry_spell, dtype=int), "valid") == dry_spell):
+                return False
+    return True
 
 
 def detect_forecast_onset(day_or_series, forecast_series=None, thresh=10.0, **kwargs):
@@ -136,11 +133,12 @@ def detect_forecast_onset(day_or_series, forecast_series=None, thresh=10.0, **kw
     1) detect_forecast_onset(day, forecast_series, thresh, **kwargs) -> bool
     2) detect_forecast_onset(forecast_series, thresh_val=10.0, **kwargs) -> int or None
     """
-    wet_init = kwargs.get("wet_init", getattr(params, "wet_init", 1.0))
-    wet_spell = kwargs.get("wet_spell", getattr(params, "wet_spell", 3))
-    dry_spell = kwargs.get("dry_spell", getattr(params, "dry_spell", 7))
-    dry_threshold = kwargs.get("dry_threshold", getattr(params, "dry_threshold", 1.0))
-    dry_extent = kwargs.get("dry_extent", getattr(params, "dry_extent", 21))
+    kwargs = kwargs.copy()
+    wet_init = kwargs.pop("wet_init", getattr(params, "wet_init", 1.0))
+    wet_spell = kwargs.pop("wet_spell", getattr(params, "wet_spell", 3))
+    dry_spell = kwargs.pop("dry_spell", getattr(params, "dry_spell", 7))
+    dry_threshold = kwargs.pop("dry_threshold", getattr(params, "dry_threshold", 1.0))
+    dry_extent = kwargs.pop("dry_extent", getattr(params, "dry_extent", 0))
 
     # Signature 1: Called with day as integer
     if isinstance(day_or_series, (int, np.integer)):
@@ -188,7 +186,7 @@ def detect_observed_onset(
     wet_spell=3,
     dry_spell=7,
     dry_threshold=1.0,
-    dry_extent=21,
+    dry_extent=0,
     start_date=(5, 1),
     end_date=(7, 31),
     fallback_date=(4, 1),
@@ -197,6 +195,7 @@ def detect_observed_onset(
     **kwargs,
 ):
     """Detect observed onset dates for a given year from gridded rainfall DataArray."""
+    thresh_slice = align_spatial_grid(thresh_slice, rain_slice, label='onset threshold')
     start_MMDD = start_date[1:] if isinstance(start_date, (list, tuple)) and len(start_date) == 3 else start_date
     end_MMDD = end_date[1:] if isinstance(end_date, (list, tuple)) and len(end_date) == 3 else end_date
     fallback_MMDD = fallback_date
@@ -212,21 +211,27 @@ def detect_observed_onset(
         start_dt = datetime(year, *start_MMDD)
         date_label = f"{start_MMDD[0]:02d}-{start_MMDD[1]:02d}"
 
+    if wet_spell < 1 or dry_spell < 0 or dry_extent < 0:
+        raise ValueError("wet_spell must be positive and dry windows cannot be negative.")
     time_dates = pd.to_datetime(rain_slice.time.values)
+    if time_dates.hasnans or (len(time_dates) > 1 and
+            not np.all(np.diff(time_dates.values) == np.timedelta64(1, "D"))):
+        raise ValueError("Observed rainfall must have unique, consecutive daily timestamps.")
     start_idx_candidates = np.where(time_dates >= start_dt)[0]
-
     if len(start_idx_candidates) == 0 and fallback_date:
         fallback_dt = datetime(year, *fallback_MMDD)
-        start_idx = np.where(time_dates >= fallback_dt)[0][0]
-    else:
-        start_idx = start_idx_candidates[0]
-
+        start_idx_candidates = np.where(time_dates >= fallback_dt)[0]
+    start_idx = start_idx_candidates[0] if len(start_idx_candidates) else len(time_dates)
     rain_subset = rain_slice.isel(time=slice(start_idx, None)).sel(time=slice(None, end_dt))
+    if rain_subset.sizes["time"] == 0:
+        return xr.DataArray(
+            np.full((rain_slice.sizes["lat"], rain_slice.sizes["lon"]), np.datetime64("NaT", "ns")),
+            dims=("lat", "lon"), coords={"lat": rain_slice.lat, "lon": rain_slice.lon}, name="onset_date")
 
     rolling_sum = rain_subset.rolling(time=wet_spell, min_periods=wet_spell, center=False).sum()
     rolling_sum_aligned = rolling_sum.shift(time=-(wet_spell - 1))
 
-    wet_day_condition = rain_subset >= wet_init
+    wet_day_condition = xr.apply_ufunc(np.isfinite, rain_subset) & (rain_subset >= wet_init)
     wet_day_spell = wet_day_condition.rolling(time=wet_spell, min_periods=wet_spell, center=False).reduce(np.all)
 
     first_day_condition = wet_day_spell.shift(time=-(wet_spell - 1))
@@ -234,19 +239,21 @@ def detect_observed_onset(
 
     sum_condition = rolling_sum_aligned > thresh_slice
 
-    if dry_extent >= dry_spell and dry_extent > wet_spell:
-        dry_day_condition = rain_subset < wet_init
-        dry_day_spell = dry_day_condition.rolling(time=dry_spell, min_periods=dry_spell).sum() == dry_spell
-
-        has_dry_after = (
-            (dry_day_spell.rolling(time=dry_extent + 1, min_periods=1).sum() > 0)
-            .shift(time=-dry_extent)
-            .fillna(False)
-            .astype(bool)
-        )
-
-        no_dry_after = xr.apply_ufunc(np.logical_not, has_dry_after)
-        onset_condition = first_day_condition & sum_condition & no_dry_after
+    if dry_extent > wet_spell and dry_spell > 0:
+        # A dry run must fit wholly inside [candidate, candidate + dry_extent).
+        # Rolling runs are labelled at their first day, matching detect_onset.
+        finite = xr.apply_ufunc(np.isfinite, rain_subset)
+        complete = finite.rolling(time=dry_extent, min_periods=dry_extent).sum().shift(
+            time=-(dry_extent - 1)) == dry_extent
+        if dry_spell <= dry_extent:
+            dry = rain_subset < dry_threshold
+            dry_run = (dry.rolling(time=dry_spell, min_periods=dry_spell).sum() == dry_spell).shift(
+                time=-(dry_spell - 1), fill_value=False)
+            positions = dry_extent - dry_spell + 1
+            has_dry = dry_run.rolling(time=positions, min_periods=positions).max().shift(
+                time=-(positions - 1)).fillna(False).astype(bool)
+            complete = complete & ~has_dry
+        onset_condition = first_day_condition & sum_condition & complete
     else:
         onset_condition = first_day_condition & sum_condition
 
@@ -260,7 +267,7 @@ def detect_observed_onset(
 
     valid_mask = onset_indices.values >= 0
     time_coords = rain_subset.time.values
-    onset_dates_array = np.full(onset_indices.shape, np.datetime64("NaT"), dtype="datetime64[ns]")
+    onset_dates_array = np.full(onset_indices.shape, np.datetime64("NaT", "ns"), dtype="datetime64[ns]")
 
     for i in range(onset_indices.shape[0]):
         for j in range(onset_indices.shape[1]):
@@ -287,7 +294,7 @@ def compute_onset_for_deterministic_model(
     wet_spell=3,
     dry_spell=7,
     dry_threshold=1.0,
-    dry_extent=21,
+    dry_extent=0,
     max_forecast_day=45,
     mok=None,
     end_date=(7, 31),
@@ -308,6 +315,9 @@ def compute_onset_for_deterministic_model(
         (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in p_model.dims),
         None,
     )
+    if admin_dim is None:
+        onset_da = align_spatial_grid(onset_da, p_model, label='observed onset')
+    thresh_slice = align_spatial_grid(thresh_slice, onset_da, label='onset threshold')
     if admin_dim:
         lats = onset_da.lat.values
         lons = onset_da.lon.values
@@ -325,7 +335,7 @@ def compute_onset_for_deterministic_model(
     print(f"Processing {len(init_times)} init times x {len(lats)} lats x {len(lons)} lons...")
 
     max_forecast_day, dry_extent, max_steps_needed = _fit_forecast_horizon(
-        p_model, max_forecast_day, dry_extent, wet_spell, kwargs.get("day_bins")
+        p_model, max_forecast_day, dry_extent, wet_spell, kwargs.get("day_bins"), dry_spell
     )
 
     total_potential_inits = 0
@@ -381,6 +391,11 @@ def compute_onset_for_deterministic_model(
                         step=slice(1, max_steps_needed)
                     ).values
 
+                    if not np.isfinite(forecast_series).all():
+                        valid_inits -= 1
+                        continue
+                    if len(forecast_series) < max_steps_needed:
+                        raise ValueError("Forecast series is shorter than the required onset detection horizon.")
                     onset_day = None
                     if len(forecast_series) >= max_steps_needed:
                         for day in range(1, max_forecast_day + 1):
@@ -405,9 +420,8 @@ def compute_onset_for_deterministic_model(
                                 else:
                                     onset_day = day
                                     break
-                except Exception as e:
-                    print(f"Error at init_time {t_idx}, lat {i}, lon {j}: {e}")
-                    onset_day = None
+                except Exception as exc:
+                    raise ValueError(f"Could not detect onset for initialization {init_time}, lat={lat}, lon={lon}: {exc}") from exc
 
                 onset_date = None
                 if onset_day is not None:
@@ -424,7 +438,7 @@ def compute_onset_for_deterministic_model(
                 }
                 results_list.append(result)
 
-    onset_df = pd.DataFrame(results_list)
+    onset_df = pd.DataFrame(results_list, columns=["init_time", "lat", "lon", "onset_day", "onset_date", "obs_onset_date"])
 
     print(f"\nProcessing Summary:")
     print(f"Total potential initializations: {total_potential_inits}")
@@ -446,7 +460,7 @@ def compute_onset_for_all_members(
     wet_spell=3,
     dry_spell=7,
     dry_threshold=1.0,
-    dry_extent=21,
+    dry_extent=0,
     members=None,
     onset_percentage_threshold=0.5,
     max_forecast_day=45,
@@ -477,6 +491,9 @@ def compute_onset_for_all_members(
         (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in p_model.dims),
         None,
     )
+    if admin_dim is None:
+        onset_da = align_spatial_grid(onset_da, p_model, label='observed onset')
+    thresh_slice = align_spatial_grid(thresh_slice, onset_da, label='onset threshold')
     if admin_dim:
         lats = onset_da.lat.values
         lons = onset_da.lon.values
@@ -494,7 +511,7 @@ def compute_onset_for_all_members(
     print(f"Processing {len(init_times)} init times x {len(lats)*len(lons)} unique locations x {len(members)} members...")
 
     max_forecast_day, dry_extent, max_steps_needed = _fit_forecast_horizon(
-        p_model, max_forecast_day, dry_extent, wet_spell, kwargs.get("day_bins")
+        p_model, max_forecast_day, dry_extent, wet_spell, kwargs.get("day_bins"), dry_spell
     )
 
     total_potential_forecasts = 0
@@ -615,3 +632,37 @@ def compute_onset_for_all_members(
     print(f"Onset rate: {ensemble_onsets_found/valid_forecasts:.3f}" if valid_forecasts > 0 else "Onset rate: 0.000")
 
     return onset_df
+
+
+def aggregate_ensemble_onset(member_onsets, *, onset_percentage_threshold=0.5):
+    """Apply reference ROMP consensus and rounded-mean timing for spatial scores.
+
+    Probabilistic bin scores still use individual member rows. Spatial metrics
+    instead verify one consensus forecast for each initialization and grid cell.
+    """
+    if not np.isfinite(onset_percentage_threshold) or not 0 <= onset_percentage_threshold <= 1:
+        raise ValueError('Ensemble onset percentage threshold must be between zero and one.')
+    columns = ['init_time', 'lat', 'lon', 'onset_day', 'onset_date',
+               'member_onset_count', 'total_members', 'onset_percentage', 'obs_onset_date']
+    rows = []
+    for (initialization, lat, lon), group in member_onsets.groupby(['init_time', 'lat', 'lon']):
+        if group['member'].duplicated().any():
+            raise ValueError('Duplicate ensemble member rows for one forecast.')
+        if group['obs_onset_date'].nunique(dropna=False) != 1:
+            raise ValueError('Ensemble members must share the same observed onset.')
+        days = pd.to_numeric(group['onset_day'], errors='raise').dropna()
+        if not np.isfinite(days).all():
+            raise ValueError('Ensemble onset days must be finite or missing.')
+        count, total = len(days), len(group)
+        fraction = count / total
+        onset_day = int(round(days.mean())) if count and fraction >= onset_percentage_threshold else None
+        onset_date = (pd.Timestamp(initialization) + pd.Timedelta(days=onset_day)
+                      if onset_day is not None else None)
+        rows.append({
+            'init_time': initialization, 'lat': lat, 'lon': lon,
+            'onset_day': onset_day,
+            'onset_date': onset_date.strftime('%Y-%m-%d') if onset_date is not None else None,
+            'member_onset_count': count, 'total_members': total,
+            'onset_percentage': fraction, 'obs_onset_date': group['obs_onset_date'].iloc[0],
+        })
+    return pd.DataFrame(rows, columns=columns)

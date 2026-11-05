@@ -7,7 +7,7 @@ from momp.io.input import (
     NoMatchingInitializationTimesError,
 )
 from momp.io.input import load_imd_rainfall
-from momp.stats.detect import detect_observed_onset, compute_onset_for_all_members
+from momp.stats.detect import detect_observed_onset, compute_onset_for_all_members, _fit_forecast_horizon
 #from momp.lib.control import restore_args
 from momp.utils.practical import restore_args
 #from momp.stats.climatology import compute_climatological_onset_dataset
@@ -70,6 +70,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
     #day_bins = kwargs["stats_day_bins"]
     #max_forecast_day = kwargs["max_forecast_day"]
 
+    # RPS is ordinal: category indices must follow lead time, never input order.
+    day_bins = tuple(sorted(tuple(bounds) for bounds in day_bins))
     max_forecast_day = max(day_bins)[1]
     min_forecast_day = min(day_bins)[0]
 
@@ -245,8 +247,8 @@ def create_forecast_observation_pairs_with_bins(onset_all_members, onset_da, *, 
 
 
 ## This function creates forecast-observation pairs using climatological ensemble where each year is a member
-def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates, *, 
-                                             day_bins, max_forecast_day, **kwargs):
+def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates, *,
+                                             day_bins, max_forecast_day, observed_onset=None, **kwargs):
     """
     Create forecast-observation pairs using climatological ensemble where each year is a member.
     Uses day-of-year instead of calendar dates for onset comparison.
@@ -273,21 +275,36 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
     DataFrame with forecast-observation pairs
     """
 
-    # adjust max_forecast_day to the end of day_bins
+    # Keep generated category indices chronological, including outside-window bins.
+    day_bins = tuple(sorted(tuple(bounds) for bounds in day_bins))
     max_forecast_day = max(day_bins)[1]
     min_forecast_day = min(day_bins)[0]
 
     results_list = []
 
-    # Get the observed onset for the target year
-    if target_year not in clim_onset.year.values:
-        raise ValueError(f"Target year {target_year} not found in climatological dataset")
+    # Verification truth is independent of the selected historical ensemble.
+    # Retain the legacy convenience when the evaluation year is in that dataset.
+    if observed_onset is None:
+        if target_year not in clim_onset.year.values:
+            raise ValueError(f"Observed onset for target year {target_year} must be supplied separately from the baseline years")
+        observed_onset = clim_onset.sel(year=target_year)
+    elif 'year' in observed_onset.dims:
+        observed_onset = observed_onset.sel(year=target_year)
+    obs_onset_da = observed_onset.reindex(
+        lat=clim_onset.lat, lon=clim_onset.lon, method='nearest', tolerance=0.01)
 
-    obs_onset_da = clim_onset.sel(year=target_year)
-
-    # Use ALL years as ensemble members (including target year) ### redundant
+    # Only selected baseline years are ensemble members; do not add evaluation truth.
     ensemble_years = list(clim_onset.year.values)
     ensemble_onset_da = clim_onset.sel(year=ensemble_years)
+    reference_membership = ('includes_verification_year' if target_year in ensemble_years
+                            else 'held_out_verification_year')
+    if target_year in ensemble_years:
+        import warnings
+        warnings.warn(
+            f"Climatology reference includes verification year {target_year}; "
+            "this is an in-sample baseline, not leave-one-year-out verification.",
+            RuntimeWarning, stacklevel=2,
+        )
 
     # Create extended bins including "before initialization" and "after max_forecast_day" bins
     #extended_bins = ((-float('inf'), 0),) + day_bins + ((max_forecast_day + 1, float('inf')),)
@@ -337,6 +354,7 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
 
             obs_onset_dt = pd.to_datetime(obs_onset)
             obs_onset_doy = obs_onset_dt.dayofyear  # Day of year for observed onset
+            obs_days_from_init = obs_onset_doy - init_doy
 
             # Only process forecasts that are initialized BEFORE the observed onset (by day of year)
             if init_doy >= obs_onset_doy:
@@ -368,7 +386,9 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
             total_members = len(ensemble_years)
 
             # First pass: calculate total members with onset across all bins
-            total_members_with_onset = 0
+            # Count each usable year once. Reliability windows may overlap the
+            # ordered bins, so summing bin counts double-counts ensemble members.
+            total_members_with_onset = sum(day is not None for day in ensemble_forecast_days)
             bin_members_onset = []  # Store for second pass
 
             for bin_idx, (bin_start, bin_end) in enumerate(extended_bins):
@@ -394,7 +414,6 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
                             members_with_onset_in_bin += 1
 
                 bin_members_onset.append(members_with_onset_in_bin)
-                total_members_with_onset += members_with_onset_in_bin
 
             # Skip if no members showed onset
             if total_members_with_onset == 0:
@@ -419,7 +438,7 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
 
                     # Get contributing years
                     for i, member_onset_day in enumerate(ensemble_forecast_days):
-                        if member_onset_day is not None and member_onset_day <= 0:
+                        if member_onset_day is not None and member_onset_day <= min_forecast_day - 1:
                             contributing_years.append(ensemble_years_with_data[i])
 
                 # Handle the "after max_forecast_day" bin
@@ -474,9 +493,10 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
                     'obs_onset_date': obs_onset_dt.strftime('%Y-%m-%d'),
                     'obs_onset_doy': obs_onset_doy,
                     'init_doy': init_doy,
-                    'obs_days_from_init_doy': obs_days_from_init if 'obs_days_from_init' in locals() else (obs_onset_doy - init_doy),
+                    'obs_days_from_init_doy': obs_days_from_init,
                     'bin_index': bin_idx,
-                    'forecast_type': 'climatological_doy'
+                    'forecast_type': 'climatological_doy',
+                    'reference_membership': reference_membership,
                 }
                 results_list.append(result)
 
@@ -557,6 +577,9 @@ def multi_year_forecast_obs_pairs(*, years, obs_dir, obs_file_pattern, obs_var,
             p_model = get_forecast_probabilistic_twice_weekly(year, **kwargs)
 #            p_model_slice = p_model.sel(lat=inside_lats, lon=inside_lons)
             p_model_slice = p_model # !!!!! region subset
+            # Reject incompatible criteria before loading/detecting observations.
+            _fit_forecast_horizon(p_model_slice, max_forecast_day, dry_extent,
+                                  wet_spell, day_bins, dry_spell)
                     
             print("Loading observational rainfall data...")
             rainfall_ds = load_imd_rainfall(year, **kwargs)
@@ -642,6 +665,7 @@ def multi_year_climatological_forecast_obs_pairs(clim_onset, *, years, day_bins,
     clim_onset_slice = clim_onset #!!!!! region subset
 
     all_forecast_obs_pairs = []
+    thresh_da = None
 
     #for target_year in years_clim:
     for target_year in years:
@@ -654,12 +678,17 @@ def multi_year_climatological_forecast_obs_pairs(clim_onset, *, years, day_bins,
             init_dates = get_initialization_dates(target_year, **kwargs)
 
 
-            # Create forecast-observation pairs for this year
+            observed_onset = None
+            if target_year not in clim_onset_slice.year.values:
+                if thresh_da is None:
+                    thresh_da = load_thresh_file(**kwargs)
+                rainfall = load_imd_rainfall(target_year, **kwargs)
+                observed_onset = detect_observed_onset(rainfall, thresh_da, target_year, **kwargs)
+
+            # Baseline membership stays unchanged when truth is from a held-out year.
             forecast_obs_pairs = create_climatological_forecast_obs_pairs(
-                clim_onset_slice,
-                target_year,
-                init_dates,
-                **kwargs
+                clim_onset_slice, target_year, init_dates,
+                observed_onset=observed_onset, **kwargs
             )
 
             if len(forecast_obs_pairs) > 0:
@@ -668,9 +697,11 @@ def multi_year_climatological_forecast_obs_pairs(clim_onset, *, years, day_bins,
             else:
                 print(f"No pairs generated for target year {target_year}")
 
-        except Exception as e:
-            print(f"Error processing target year {target_year}: {e}")
+        except FileNotFoundError as exc:
+            print(f"Skipping missing target observation year {target_year}: {exc}")
             continue
+        except Exception as exc:
+            raise ValueError(f"Could not verify climatology for target year {target_year}: {exc}") from exc
 
     # Combine all years
     if not all_forecast_obs_pairs:

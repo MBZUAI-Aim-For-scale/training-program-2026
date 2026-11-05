@@ -15,7 +15,7 @@ objectives:
 - "Diagnose reliability and design a held-out calibration experiment; distinguish the saved uncalibrated results from an unimplemented IDR extension."
 - "Recognize and resolve the most common configuration, data, and pipeline failure modes."
 keypoints:
-- "Onset is derived from daily rainfall using explicit wet-spell/dry-spell settings; available forecast lead time can shorten the dry-spell search."
+- "Onset is derived from daily rainfall using explicit wet-spell/dry-spell settings; the complete confirmation interval must fit within the available forecast lead time."
 - "Run deterministic and probabilistic workers separately and compare each metric with its appropriate reference; saved results can appear in separate dashboard tables."
 - "Skill is always relative to a reference. Read FAR, MR and MAE together, and read BSS together with AUC and reliability."
 - "Results depend on explicit choices (thresholds, tolerance, resolution, period, reference). Report them with every score."
@@ -76,7 +76,7 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 
 5. **Access dashboards**:
 
-	* **Streamlit UI**: `http://localhost:8501`; choose the short/medium-range benchmarking page.
+	* **Streamlit UI**: `http://localhost:8501`; click **Benchmarking** in the top menu.
 
 	The numerical and figure-reading exercises use the saved CSVs and figures. Run benchmarks through `run_momp.py` or the existing dashboard at `ui/pages/short_medium_benchmarking.py`. Scientific regeneration requires the matching prepared input files and the settings stated below.
 
@@ -98,18 +98,18 @@ By the end of this lesson, you will be able to:
 
 In Ethiopian agriculture, the onset of the rainy season (Kiremt: June–September) dictates planting dates for millions of smallholder farmers. A late or false onset signal can lead to crop failure from planting too early, lost growing days from planting too late, and regional food insecurity.
 
-Onset is derived from daily rainfall rather than read directly from model output. The reference runs use the following settings; the implementation and forecast horizon must also be recorded:
+Onset is derived from daily rainfall rather than read directly from model output. Record the implementation, settings and forecast horizon with every experiment. The saved lesson snapshot used a requested 21-day dry search; the current reference configuration defaults to `dry_extent=0` (disabled):
 
 - **Wet-spell trigger**: `wet_spell=3` consecutive days must each have at least `wet_init=1` mm, and their **three-day total must exceed `wet_threshold=20` mm**. The 20 mm threshold is not a daily threshold.
-- **Dry-spell veto**: the requested `dry_extent=21`-day search rejects a candidate containing a run of `dry_spell=7` days below 1 mm/day. The current detector uses `wet_init` as its dry-day cutoff; `dry_threshold` is retained in configuration but is not an independent active cutoff. Forecast code counts the search from the candidate day and shortens it when the available lead tail is insufficient.
-- **Application**: forecasts initialize during May–July; `mok=(5,15)` starts observed onset detection on 15 May. Observed detection extends the seasonal end by 47 days. Record the logged horizon adjustment: the prepared ensemble files reduce the requested dry search to 16 days for AIFS Ensemble and 15 days for GenCast in the 16–30-day case. The joint-window deterministic run uses a 30-day horizon for both cases, with a 20-day dry search for AIFS Single and 15 days for FuXi/GraphCast. These finite-horizon results are not an identical full-21-day test at every lead.
+- **Dry-spell veto**: when enabled, a `dry_extent=21`-day interval rejects a candidate containing a run of `dry_spell=7` days below the independent `dry_threshold=1` mm/day. The interval includes the candidate day. The current detector preserves the configured interval; it does not shorten the criterion to fit a forecast.
+- **Application**: forecasts initialize during May–July; `mok=(5,15)` starts observed onset detection on 15 May. Observed detection extends the seasonal end by 47 days. With a 3-day wet spell, a 1–15-day verification window needs data through day 17 when dry confirmation is disabled, or day 35 with 21-day confirmation. The 16–30-day window needs day 32 or day 50 respectively. The historical snapshot used shortened dry-search intervals in some finite-horizon cases; its printed values are retained as historical outputs and should not be treated as a regenerated full-21-day experiment.
 
 ## The ROMP Benchmarking Package
 
 ### Motivation for a Benchmarking Package
 
 - **Demand**: model developers and forecasters both want a reproducible, quantitative workflow for routinely evaluating model performance on onset.
-- **Region- and threshold-agnostic**: the package is not tied to Ethiopia. It can be applied to Kiremt rains and to other regions, and used with any model you choose.
+- **Region- and threshold-agnostic**: the package is not tied to Ethiopia. It can be applied to onset rains and to other regions, and used with any model you choose.
 - **Goal functionality**: compare models across location (grid cell, region or country), wet-spell thresholds, dry-spell thresholds, and lead times.
 
 ### Design Capabilities
@@ -132,10 +132,10 @@ We want your feedback, in person and online, to improve this package.
 
 | Parameter | Meaning |
 | --- | --- |
-| `wet_init` | Minimum rain on each wet day; also the current dry-day cutoff (1 mm/day here) |
+| `wet_init` | Minimum rain on each wet day (1 mm/day here) |
 | `wet_spell`, `wet_threshold` | Wet-spell length and strict total-rainfall threshold: 3 days, sum >20 mm |
-| `dry_spell`, `dry_threshold` | Dry-run length (7 days); `dry_threshold=1` is recorded, but the current detector uses `wet_init` for dry days |
-| `dry_extent` | Requested dry-search extent (21 days); forecast lead availability can reduce it |
+| `dry_spell`, `dry_threshold` | Dry-run length (7 days) and independent dry-day rainfall cutoff (1 mm/day here) |
+| `dry_extent` | Full confirmation interval including the candidate day; reference default 0 disables the check. A requested interval is never shortened automatically. |
 | `start_date`, `end_date` | Evaluation years and recurring initialization season (May–July); observed search also uses `mok` |
 
 #### 2. Data and domain
@@ -203,7 +203,7 @@ A forecast can discriminate better than chance while its probabilities are poorl
 
 A model is only useful if it beats a reference that needs no model. The default reference is climatology, the distribution of onset dates over past years.
 
-Skill scores depend on the reference period and dataset. In this implementation the climatological ensemble includes the target year when it belongs to the reference period; these saved comparisons are in-sample, not leave-one-year-out operational validation. The probability run requested 2003–2023 and reference years 2007–2024; paired RPS excludes unsupported or unmatched cases, including target years unavailable in the reference onset dataset.
+Skill scores depend on the reference period and dataset. In this implementation the climatological ensemble includes the target year when it belongs to the reference period; these saved comparisons are in-sample, not leave-one-year-out operational validation. The saved probability run requested 2003–2023 and reference years 2007–2024; its paired RPS excluded unsupported or unmatched cases. The current pipeline loads target-year observations separately when an evaluation year falls outside the baseline period: 2003–2006 can therefore be verified against the 2007–2024 climatology without adding those years as baseline members. This is not an error or an automatic skipped-year condition. Actually missing observation files are reported as missing years, and retained sample coverage must still be checked.
 
 ### Sample Size and Uncertainty
 
@@ -301,7 +301,7 @@ The windows are disjoint: Days 16–30 is not a cumulative Days 1–30 forecast.
 ## Command-Line Execution (`run_momp.py`)
 
 
-`run_momp.py` is the command-line entry point. The  Configure data locations in the existing `ai_weather/config.py` and `.env`.
+`run_momp.py` is the command-line entry point. Configure data locations in the existing `ai_weather/config.py` and `.env`.
 
 
 ### Step 1: Access the Container Environment
@@ -310,17 +310,20 @@ Run from the repository root (`/app` inside the container). Prepared rainfall in
 
 #### Interactive Shell 
 
-Use the image's application environment explicitly, including when the host checkout contains a different `.venv`:
+Enter the running container; its application environment is already installed:
 
 ```{bash}
 docker exec -it -u 0 ai_weather bash
+cd /app
 
 ```
 
 
 ### Step 2: Model Execution Syntax
 
-Use `--mode` and optional `--model` directly with `run_momp.py`. The shared environment settings in the first example below apply to both tracks and use overrides already supported by that runner. Model files must contain matching initialization dates. On a host source checkout, use `.venv/bin/python` instead of container `python`. In the dashboard, select CHIRPS/Ethiopia, set the same wet/dry parameters, and use Model run windows plus Advanced Temporal & Verification Settings for the dates, baseline years, weekly Monday/Thursday schedule, 2024 reference calendar, both lead windows and 3/5-day tolerances. Select **Run Benchmark** there to use the same execution path.
+Use `--mode` and optional `--model` directly with `run_momp.py`. **Inside Docker**, the commands below use the image's `python` at `/opt/envs/app/bin/python`. You do not need to create a host Python environment for this workflow. **Outside Docker only**, an already configured host development checkout can use `.venv/bin/python` in place of `python`. Model files must contain matching initialization dates.
+
+For the same workflow in the dashboard, click **Benchmarking** in the top menu, select CHIRPS/Ethiopia, set the same wet/dry parameters, and use Model run windows plus Advanced Temporal & Verification Settings for the dates, baseline years, weekly Monday/Thursday schedule, 2024 reference calendar, both lead windows and 3/5-day tolerances. Select **Run Benchmark** there to use the same execution path.
 
 #### 1. Single Model Execution
 
@@ -340,7 +343,7 @@ python run_momp.py --mode prob --model AIFS_ENS
 
 #### 2. Full Batch Execution (All Models)
 
-Keep the shared exports above for both batches. The deterministic reference uses evaluation/reference years 2000–2024. The probabilistic reference uses evaluation years 2003–2023 and reference years 2007–2024, as recorded in its CSVs. The commands below set those periods directly. Changing the periods or other settings is a new experiment. Full ensemble batches can take many minutes; classroom figure-reading can use the saved results.
+The saved deterministic reference uses evaluation/reference years 2000–2024. The saved probabilistic reference uses evaluation years 2003–2023 and reference years 2007–2024, as recorded in its CSVs. The commands below use the current configuration and any explicit environment/spec overrides; they do not by themselves set those historical periods. Changing the periods or other settings is a new experiment. Full ensemble batches can take many minutes; classroom figure-reading can use the saved results.
 
 * **Batch All Deterministic Models**:
 
@@ -389,7 +392,7 @@ python run_momp.py --mode prob
 > * **Compute Allocation**: serial or bounded CPU year workers; scoring does not use GPU acceleration
 > * **Spatial Domain**: 49 × 61 candidate grid positions at 0.25°; the JJAS mask, observed onset availability and metric denominators reduce finite coverage
 > 
-> *Note: the saved grids use `timing_matched_v2`. An out-of-tolerance in-window predicted/observed pair contributes both FP and FN. These corrected results supersede historical miss rates that counted only the false alarm.*
+> *Snapshot method note: the saved grids use `timing_matched_v2`, where an out-of-tolerance in-window predicted/observed pair contributed both FP and FN. The current pipeline follows the supplied reference's exclusive contingency rule: that case contributes FP only. The printed snapshot therefore documents an older method; regenerate outputs before comparing its miss rates directly with a current run.*
 > {: .note}
 
 ---
@@ -705,16 +708,18 @@ Every benchmark result should state:
 | Run stops or results look meaningless after switching tracks | Wrong mode, stale settings or incompatible model selection | Check `run_momp.py --help`, the actual command and the existing dashboard/configuration settings |
 | Model is missing from the output | Unregistered model, missing source years or unmatched initialization dates | Catalog key, prepared input filenames and initialization coverage |
 | Blank cells or N/A | Masked cells, absent predictions/observations or a zero/nonfinite denominator | Metric-specific finite counts, actual coverage and saved reference scores; missing does not mean zero |
-| Very high miss rate despite predicted events | Forecast dates miss the timing tolerance, or events occur outside the interval | Check both date errors and the corrected FP/FN counting definition |
+| Very high miss rate despite predicted events | Events occur outside the interval, or results use a different contingency definition | Check the selected interval and the saved method metadata; the current reference rule assigns an out-of-tolerance in-window prediction to FP only |
 | MAE exceeds 15 or 30 days | False-alarm date errors compare with observed onset outside the selected interval | Read `mae_combined` semantics and the color cap before treating it as an error |
 
 
 
 ## Exercises
 
-Use the **Forecast Benchmarking** dashboard for every exercise. Work in pairs and change one setting at a time, comparing each result with your recorded baseline. The timings allow **40 minutes of hands-on activity**; computation time is additional. The facilitator can demonstrate or share a completed run while groups wait.
+Use the **Benchmarking** dashboard for every exercise: click **Benchmarking** in the top menu. Work in pairs and change one setting at a time, comparing each result with your recorded baseline. The timings allow **40 minutes of hands-on activity**; computation time is additional. The facilitator can demonstrate or share a completed run while groups wait.
 
 Use a short practice period: **Evaluation Start = 1 May 2020**, **Evaluation End = 31 July 2020**, **Baseline Start Year = 2018** and **Baseline End Year = 2021**, if those years are available. Otherwise, the facilitator should choose one available evaluation year and a common baseline period of at least two available years that includes it. These practice runs use fewer years than the lesson figures, so their numbers will differ. Record the model, changed setting, lead window, and before/after scores on paper or in a screenshot before starting the next run; a rerun replaces that model's saved results. Record N/A as unavailable, not zero.
+
+Exercises 1–4 intentionally enable a 21-day dry-confirmation interval to explore sensitivity; this is a change from the reference default of 0. Their Days 1–15 window requires at least 35 days of rainfall in the selected files. If coverage is shorter, the facilitator should choose compatible data or explicitly revise the experiment rather than silently shorten the confirmation period.
 
 > #### Exercise 1: Set Up a Baseline in the Dashboard (5 min)
 >
@@ -769,8 +774,8 @@ Use a short practice period: **Evaluation Start = 1 May 2020**, **Evaluation End
 
 > #### Exercise 6: Compare Lead Windows and Share a Finding (5 min)
 >
-> 1. Select only **AIFS Single** again and restore the shared settings, evaluation dates and baseline years from Exercise 1. Under its advanced settings, change **Verification windows** to **Both windows**. Set **Tolerance: days 1–15 = 3** and **Tolerance: days 16–30 = 3**, keeping the same allowed timing error for this comparison. Notice that **Max Forecast Day (automatic)** updates to 30; leave it unchanged. Click **Run Benchmark**.
-> 2. In **All Metrics**, choose **Metric model category → All**, untick **All models**, select AIFS Single and Traditional Climatology in **Models to compare**, then choose both **Lead times**. Compare MAE, miss rate and false-alarm rate across the two windows from this completed run. In **Metric Map**, switch **Lead Time** while keeping the model, metric and map area fixed. These practice tolerances differ from the lesson's standard 3/5-day setup, so use your displayed results rather than the printed reference numbers.
+> 1. Select only **AIFS Single** again and restore the wet thresholds, evaluation dates and baseline years from Exercise 1. For this new lead-window comparison, explicitly set **Dry spell search extension = 0** for both windows. This reference setting needs rainfall through day 32 for a 3-day wet spell; retaining 21-day confirmation would need day 50. Under its advanced settings, change **Verification windows** to **Both windows**. Set **Tolerance: days 1–15 = 3** and **Tolerance: days 16–30 = 3**, keeping the same allowed timing error for this comparison. Notice that **Max Forecast Day (automatic)** updates to 30; leave it unchanged. Click **Run Benchmark**.
+> 2. In **All Metrics**, choose **Metric model category → All**, untick **All models**, select AIFS Single and Traditional Climatology in **Models to compare**, then choose both **Lead times**. Compare MAE, miss rate and false-alarm rate across the two windows from this completed run. In **Metric Map**, switch **Lead Time** while keeping the model, metric and map area fixed. These practice tolerances differ from the lesson's standard 3/5-day setup, and the onset definition differs from Exercise 1's enabled dry check. Compare windows within this fresh run using your displayed results, rather than the printed reference numbers or the earlier baseline.
 > 3. Share one finding with another pair: state the setting you changed, the scores you observed and one limitation. Did a setting improve one score while worsening another? Explain why a longer lead window or a looser onset rule should not automatically be described as a better forecast.
 {: .exercise}
 
@@ -782,7 +787,7 @@ Ask each pair to identify one conclusion supported by a saved artifact, one hypo
 
 > #### Key Points
 >
-> - Onset is derived from daily rainfall. Record wet-spell totals, daily cutoffs and the effective dry-search extent; forecast lead truncation matters.
+> - Onset is derived from daily rainfall. Record wet-spell totals, independent daily cutoffs and the full confirmation interval; check that forecast coverage supports the selected verification window.
 > - ROMP is configuration-driven, so results can be reproduced and compared across location, thresholds, lead time and models.
 > - Deterministic (FAR, MR, MAE) and probabilistic (BS, RPS, AUC, reliability) tracks are separate and their metrics cannot be compared directly.
 > - Skill is metric- and reference-specific. AIFS Single improves on the deterministic reference for early MAE/FAR/MR, while GenCast has positive early RPSS but negative BSS in this probability snapshot.

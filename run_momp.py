@@ -15,7 +15,6 @@ import os
 import subprocess
 import sys
 from datetime import date
-from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 
 # ------------------------------------------------------------------------------
@@ -52,8 +51,8 @@ for _p in (PROJECT_ROOT, ROMP_ROOT):
 DATA_DIR = Path(config.DATA_DIR).expanduser()
 EXTERNAL_DATA_DIR = Path(config.EXTERNAL_DATA_DIR).expanduser()
 
-ROMP_OUT_DIR = Path(getattr(config, "ROMP_OUT_DIR", getattr(config, "ROMP_DEMO_OUT_DIR", PROJECT_ROOT / "romp_output"))).expanduser()
-ROMP_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_FIG_DIR", PROJECT_ROOT / "romp_figure"))).expanduser()
+ROMP_OUT_DIR = Path(os.getenv("ROMP_OUT_DIR") or getattr(config, "ROMP_OUT_DIR", getattr(config, "ROMP_DEMO_OUT_DIR", PROJECT_ROOT / "romp_output"))).expanduser()
+ROMP_FIG_DIR = Path(os.getenv("ROMP_FIG_DIR") or getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_FIG_DIR", PROJECT_ROOT / "romp_figure"))).expanduser()
 
 import momp  # noqa: E402,F401
 import momp.params as params  # noqa: E402
@@ -98,15 +97,15 @@ PROBABILISTIC_FLAGS = dict(
     AUC=True,
     Reliability=True,
     skill_score=True,
-    FAR=False,
-    MAE=False,
-    MR=False,
+    FAR=True,
+    MAE=True,
+    MR=True,
     plot_heatmap_bss_auc=True,
     plot_reliability=True,
     plot_panel_heatmap_skill=True,
     plot_bar_bss_rpss_auc=True,
-    plot_spatial_far_mr_mae=False,
-    plot_panel_heatmap_error=False,
+    plot_spatial_far_mr_mae=True,
+    plot_panel_heatmap_error=True,
 )
 
 VALID_MODES = ["det", "deterministic", "prob", "probabilistic"]
@@ -242,10 +241,7 @@ def patched_package_metadata():
     def patched_version(pkg_name):
         if pkg_name.lower() == "momp":
             return "0.0.1"
-        try:
-            return original_version(pkg_name)
-        except PackageNotFoundError:
-            return "0.0.1"
+        return original_version(pkg_name)
 
     def patched_distribution(pkg_name):
         if pkg_name.lower() == "momp":
@@ -305,34 +301,40 @@ def _iso_to_tuple(value):
     try:
         d = date.fromisoformat(str(value))
         return (d.year, d.month, d.day)
-    except Exception:
-        return None
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid evaluation date {value!r}; expected YYYY-MM-DD.") from exc
 
 def _apply_forecast_window(cfg, window: str):
-    window = str(window).lower()
-    if "1-15" in window:
+    window = str(window).strip().lower().removesuffix(" days")
+    if window == "1-15":
         cfg.verification_window_list = ((1, 15),)
         cfg.tolerance_days_list = (3,)
         cfg.max_forecast_day = 15
-    elif "16-30" in window:
+    elif window == "16-30":
         cfg.verification_window_list = ((16, 30),)
         cfg.tolerance_days_list = (5,)
         cfg.max_forecast_day = 30
+    else:
+        raise ValueError(f"Unknown forecast window {window!r}; expected '1-15' or '16-30'.")
 
 def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
     if not isinstance(spec, dict):
-        return
+        raise ValueError("Benchmark spec must be a JSON object.")
     ground_truth = _clean_str(spec.get("ground_truth", ""))
     if ground_truth:
         obs_meta = _obs_meta(ground_truth)
-        if obs_meta:
-            cfg.obs = ground_truth
-            obs_dir = _clean_str(_meta_get(obs_meta, "dir", ""))
-            if obs_dir:
-                cfg.obs_dir = resolve_path(obs_dir)
-            file_pattern = _clean_str(_meta_get(obs_meta, "file_pattern", "{}.nc"))
-            cfg.obs_file_pattern = (file_pattern,)
-            cfg.obs_var = _clean_str(_meta_get(obs_meta, "var", "precip"))
+        if not obs_meta:
+            raise ValueError(f"Unknown ground truth {ground_truth!r}.")
+        cfg.obs = ground_truth.upper()
+        obs_dir = _clean_str(_meta_get(obs_meta, "dir", ""))
+        if obs_dir:
+            cfg.obs_dir = resolve_path(obs_dir)
+        patterns = _meta_get(obs_meta, "file_pattern", "{}.nc")
+        cfg.obs_file_pattern = tuple(patterns) if isinstance(patterns, (list, tuple)) else (str(patterns),)
+        cfg.obs_var = _clean_str(_meta_get(obs_meta, "var", "precip"))
+        cfg.ref_model_dir = cfg.obs_dir
+        cfg.ref_model_file_pattern = cfg.obs_file_pattern
+        cfg.ref_model_var = cfg.obs_var
     coverage = _clean_str(spec.get("benchmark_coverage", ""))
     if coverage:
         cfg.region = coverage
@@ -340,6 +342,11 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
     if forecast_window:
         _apply_forecast_window(cfg, forecast_window)
     shared = spec.get("shared", {})
+    if not isinstance(shared, dict):
+        raise ValueError("Spec shared settings must be a JSON object.")
+    for key in ("wet_spell_length", "dry_spell_limit", "dry_spell_search_extension"):
+        if shared.get(key) is not None and type(shared[key]) is not int:
+            raise ValueError(f"Spec {key} must be an integer number of days.")
     if shared.get("wet_day_threshold") is not None:
         cfg.wet_threshold = float(shared["wet_day_threshold"])
     if shared.get("minimum_wet_day_rainfall") is not None:
@@ -348,6 +355,8 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
         cfg.wet_spell = int(shared["wet_spell_length"])
     if shared.get("dry_spell_limit") is not None:
         cfg.dry_spell = int(shared["dry_spell_limit"])
+    if shared.get("dry_threshold") is not None:
+        cfg.dry_threshold = float(shared["dry_threshold"])
     if shared.get("dry_spell_search_extension") is not None:
         cfg.dry_extent = int(shared["dry_spell_search_extension"])
     area_mask_file = shared.get("area_mask_file")
@@ -371,6 +380,8 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
     if baseline_data_path:
         cfg.ref_model_dir = resolve_path(baseline_data_path)
     models = spec.get("models", [])
+    if not isinstance(models, list) or any(not isinstance(model, dict) for model in models):
+        raise ValueError("Spec models must be an array of model settings objects.")
     model_spec = None
     for m in models:
         exec_key = _clean_str(m.get("exec_key", "")).lower()
@@ -380,6 +391,8 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
             model_spec = m
             break
     if not model_spec:
+        if models:
+            raise ValueError(f"No model settings match requested model {model_key!r} in the benchmark spec.")
         return
     eval_start = model_spec.get("eval_start")
     if eval_start:
@@ -395,15 +408,26 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
         cfg.start_year_clim = int(model_spec["baseline_start_year"])
     if model_spec.get("baseline_end_year") is not None:
         cfg.end_year_clim = int(model_spec["baseline_end_year"])
-    init_days = model_spec.get("init_days")
+    init_days = model_spec.get("initialization_days", model_spec.get("init_days"))
     if init_days is not None:
-        try:
-            cfg.init_days = tuple(sorted(set(int(x)) for x in init_days))
-        except Exception:
-            cfg.init_days = (0, 3)
-    cfg.run_years_concurrently = bool(model_spec.get("run_years_concurrently", True))
-    if model_spec.get("ensemble_forecast") is not None:
-        cfg.ensemble_forecast = bool(model_spec["ensemble_forecast"])
+        if not isinstance(init_days, (list, tuple)) or any(type(day) is not int for day in init_days):
+            raise ValueError("Spec initialization days must be an array of integers.")
+        cfg.init_days = tuple(sorted(set(init_days)))
+    for key in ("run_years_concurrently", "ensemble_forecast"):
+        if model_spec.get(key) is not None:
+            if type(model_spec[key]) is not bool:
+                raise ValueError(f"Spec {key} must be a JSON boolean.")
+            setattr(cfg, key, model_spec[key])
+    for key in ("init_type", "date_filter_year", "max_forecast_day"):
+        if model_spec.get(key) is not None:
+            setattr(cfg, key, model_spec[key])
+    for key in ("verification_window_list", "tolerance_days_list"):
+        if model_spec.get(key) is not None:
+            value = model_spec[key]
+            if not isinstance(value, (list, tuple)) or not value:
+                raise ValueError(f"Spec {key} must be a nonempty array.")
+            setattr(cfg, key, tuple(tuple(item) if isinstance(item, (list, tuple)) else item
+                                   for item in value))
 
 # ------------------------------------------------------------------------------
 # Apply Advanced Temporal & Verification Parameters from Environment
@@ -417,8 +441,8 @@ def apply_env_vars_to_cfg(cfg):
             return None
         try:
             return ast.literal_eval(val)
-        except Exception:
-            return None
+        except (ValueError, SyntaxError) as exc:
+            raise ValueError(f"Invalid literal override {val!r}.") from exc
 
     # Streamlit Date Evaluation Windows
     if val := os.getenv("ROMP_EVAL_START"):
@@ -432,13 +456,13 @@ def apply_env_vars_to_cfg(cfg):
     if val := os.getenv("ROMP_BASELINE_START_YEAR"):
         try:
             cfg.start_year_clim = int(val)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise ValueError(f"Invalid numeric override {val!r}.") from exc
     if val := os.getenv("ROMP_BASELINE_END_YEAR"):
         try:
             cfg.end_year_clim = int(val)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise ValueError(f"Invalid numeric override {val!r}.") from exc
 
     # Streamlit Forecast Window
     if val := os.getenv("ROMP_FORECAST_WINDOW"):
@@ -453,13 +477,14 @@ def apply_env_vars_to_cfg(cfg):
         ("wet_init", "ROMP_WET_INIT", float),
         ("wet_spell", "ROMP_WET_SPELL", int),
         ("dry_spell", "ROMP_DRY_SPELL", int),
+        ("dry_threshold", "ROMP_DRY_THRESHOLD", float),
         ("dry_extent", "ROMP_DRY_EXTENT", int),
     ]:
         if val := os.getenv(env_name):
             try:
                 setattr(cfg, key, converter(val))
-            except ValueError:
-                pass
+            except ValueError as exc:
+                raise ValueError(f"{env_name} must be a valid {converter.__name__}, got {val!r}.") from exc
 
     # Preserve explicit empty values: the UI uses them to disable a mask or
     # select scalar onset criteria instead of a threshold file.
@@ -477,28 +502,30 @@ def apply_env_vars_to_cfg(cfg):
     if val := os.getenv("ROMP_DATE_FILTER_YEAR"):
         try:
             cfg.date_filter_year = int(val)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise ValueError(f"Invalid numeric override {val!r}.") from exc
     if val := os.getenv("ROMP_VERIFICATION_WINDOW_LIST"):
         parsed = _parse_tuple(val)
-        if parsed:
-            cfg.verification_window_list = parsed
+        if not isinstance(parsed, (list, tuple)) or not parsed:
+            raise ValueError("ROMP_VERIFICATION_WINDOW_LIST must be a nonempty list of pairs.")
+        cfg.verification_window_list = tuple(tuple(window) for window in parsed)
     if val := os.getenv("ROMP_TOLERANCE_DAYS_LIST"):
         parsed = _parse_tuple(val)
-        if parsed:
-            cfg.tolerance_days_list = parsed
+        if not isinstance(parsed, (list, tuple)) or not parsed:
+            raise ValueError("ROMP_TOLERANCE_DAYS_LIST must be a nonempty list.")
+        cfg.tolerance_days_list = tuple(parsed)
     if val := os.getenv("ROMP_MAX_FORECAST_DAY"):
         try:
             cfg.max_forecast_day = int(val)
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise ValueError(f"Invalid numeric override {val!r}.") from exc
 
     if "ROMP_INIT_DAYS" in os.environ:
         val = os.environ["ROMP_INIT_DAYS"]
         try:
             cfg.init_days = tuple(sorted(set(int(day.strip()) for day in val.split(",") if day.strip())))
-        except ValueError:
-            pass
+        except ValueError as exc:
+            raise ValueError(f"Invalid numeric override {val!r}.") from exc
 
     for key, env_name in [
         ("run_years_concurrently", "ROMP_RUN_YEARS_CONCURRENTLY"),
@@ -510,6 +537,8 @@ def apply_env_vars_to_cfg(cfg):
                 setattr(cfg, key, True)
             elif normalized in {"0", "false", "no", "off"}:
                 setattr(cfg, key, False)
+            else:
+                raise ValueError(f"{env_name} must be a boolean, got {val!r}.")
 
     if val := os.getenv("ROMP_GROUND_TRUTH"):
         obs_key = _clean_str(val).upper()
@@ -522,6 +551,8 @@ def apply_env_vars_to_cfg(cfg):
                 "pattern": _meta_get(obs_meta, "file_pattern", "{}.nc"),
                 "var": _meta_get(obs_meta, "var", "precip"),
             }
+        if not obs_settings:
+            raise ValueError(f"Unknown ground truth {obs_key!r}.")
         if obs_settings:
             obs_dir = _clean_str(obs_settings.get("dir", ""))
             if obs_dir:
@@ -571,8 +602,8 @@ def validate_runtime_config(cfg):
             raise ValueError(f"Day bins {cfg.day_bins} do not partition verification window {(start, end)}.")
     # Keep the full bin catalog until all overrides are merged, then pass only
     # active bins to the downstream validator and calculation stages.
-    cfg.day_bins = tuple(tuple(b) for b in cfg.day_bins
-                         if any(b[0] >= start and b[1] <= end for start, end in windows))
+    cfg.day_bins = tuple(sorted(tuple(b) for b in cfg.day_bins
+                               if any(b[0] >= start and b[1] <= end for start, end in windows)))
     if getattr(cfg, "run_years_concurrently", None) is not None:
         cfg.parallel = cfg.run_years_concurrently
     if cfg.probabilistic:
@@ -662,9 +693,9 @@ def validate_paths(cfg):
         for y in range(sd[0], ed[0] + 1):
             patterns_to_try = []
             if isinstance(obs_pat_raw, (list, tuple)):
-                patterns_to_try.extend(p.format(y) for p in obs_pat_raw if "{}" in p)
-            elif isinstance(obs_pat_raw, str) and "{}" in obs_pat_raw:
-                patterns_to_try.append(obs_pat_raw.format(y))
+                patterns_to_try.extend(p.format(y) if "{}" in p else p for p in obs_pat_raw)
+            elif isinstance(obs_pat_raw, str):
+                patterns_to_try.append(obs_pat_raw.format(y) if "{}" in obs_pat_raw else obs_pat_raw)
             
             patterns_to_try.extend([f"CHIRPS_{region_clean}_{y}.nc", f"{y}.nc"])
             if not any(pat in names for pat in patterns_to_try):
@@ -701,6 +732,43 @@ def validate_paths(cfg):
 
     if problems:
         raise FileNotFoundError("Data file check failed:\n  " + "\n  ".join(problems))
+
+
+def validate_forecast_horizons(cfg):
+    """Check every available forecast's lead metadata before starting workers."""
+    from momp.io.input import available_forecast_years
+    from momp.stats.detect import _fit_forecast_horizon
+    from momp.utils import storage
+    from momp.utils.standard import _promote_coords, dim_fmt_model
+
+    years = getattr(cfg, 'years', None)
+    if years is None or years == 'All' or not years:
+        years = tuple(range(cfg.start_date[0], cfg.end_date[0] + 1))
+    for model, folder, pattern in zip(cfg.model_list, cfg.model_dir_list, cfg.file_pattern_list):
+        if model == 'climatology':
+            continue
+        available = available_forecast_years(years, model_dir=folder, file_pattern=pattern)
+        if not available:
+            raise FileNotFoundError(f"No forecast files are available for model {model!r} in {folder!r}.")
+        for year in available:
+            filename = pattern.format(year) if '{}' in pattern else pattern
+            path = storage.join(folder, filename)
+            try:
+                with storage.open_dataset(path, cache=False) as source:
+                    # Preserve coordinate promotion used by the actual loader,
+                    # then remove rainfall before any dimension transposition.
+                    # Only lead/date/spatial coordinate metadata is read here.
+                    promoted = _promote_coords(source)
+                    metadata = dim_fmt_model(promoted.drop_vars(list(promoted.data_vars)),
+                                             preserve_admin=True)
+                    _fit_forecast_horizon(metadata, cfg.max_forecast_day, cfg.dry_extent,
+                                          cfg.wet_spell, cfg.day_bins, dry_spell=cfg.dry_spell)
+            except Exception as exc:
+                raise ValueError(
+                    f"Forecast horizon preflight failed for model {model!r}, year {year}, "
+                    f"file {path!r}: {exc}"
+                ) from exc
+
 
 def sync_params(cfg):
     for attr in dir(cfg):
@@ -746,12 +814,11 @@ def run_single_model(mode, catalog_key, meta):
 
         spec_path = os.getenv("ROMP_SPEC_PATH")
         spec_file = Path(spec_path).expanduser() if spec_path else None
-        if spec_file and spec_file.exists():
-            try:
-                spec = json.loads(spec_file.read_text(encoding="utf-8"))
-                apply_spec_to_cfg(cfg, spec, catalog_key)
-            except Exception as exc:
-                print(f"Warning: could not apply benchmark spec: {exc}")
+        if spec_file:
+            # Explicit specs are authoritative: never run scientific calculations
+            # with defaults when their requested configuration cannot be loaded.
+            spec = json.loads(spec_file.read_text(encoding="utf-8"))
+            apply_spec_to_cfg(cfg, spec, catalog_key)
                 
         # Apply environment variables passed from Streamlit UI
         apply_env_vars_to_cfg(cfg)
@@ -760,6 +827,7 @@ def run_single_model(mode, catalog_key, meta):
         ROMPValidator(vars(cfg)).validate()
         
         validate_paths(cfg)
+        validate_forecast_horizons(cfg)
         sync_params(cfg)
         print_summary(cfg)
         print(f"Running MOMP driver pipeline at {driver_path}...")
@@ -785,8 +853,17 @@ def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
         f"{[_model_name(m, k) for k, m in models]}"
     )
     if len(models) == 1 or in_process:
-        for key, meta in models:
-            run_single_model(mode, key, meta)
+        from momp.lib.loader import set_cfg
+
+        # sync_params publishes each model's merged overrides. Start the next
+        # model from the same base, rather than inheriting the previous spec.
+        base_cfg = get_cfg(validate=False)
+        try:
+            for key, meta in models:
+                set_cfg(base_cfg)
+                run_single_model(mode, key, meta)
+        finally:
+            set_cfg(base_cfg)
         return 0
     failures = []
     for key, meta in models:

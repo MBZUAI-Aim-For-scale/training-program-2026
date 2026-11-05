@@ -1644,8 +1644,8 @@ def run_momp_benchmark(
     ----------
     mode : "det" or "prob"
     model_key : run a single catalog model (e.g. "AIFS"); None = all of that mode
-    run_config : legacy dict -> ROMP_* environment variables. NOTE: the current
-        ``run_momp.py`` ignores these; prefer ``spec_path``.
+    run_config : legacy dict mapped to ROMP_* environment variables, which override
+        the spec values in the canonical runner.
     spec_path : benchmark spec JSON, passed as ``--spec`` (dates, onset rules,
         mask, baseline ... are applied by run_momp.apply_spec_to_cfg)
     timeout_minutes : kill the run after this many minutes
@@ -1684,43 +1684,52 @@ def run_momp_benchmark(
     env.setdefault("MPLBACKEND", "Agg")
     Path(env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
     if run_config:
+        for key, env_name in (("area_mask_file", "ROMP_AREA_MASK_FILE"),
+                              ("onset_threshold_file", "ROMP_ONSET_THRESHOLD_FILE"),
+                              ("baseline_forecast", "ROMP_BASELINE_FORECAST")):
+            if key in run_config:
+                env[env_name] = str(run_config[key] or "")
         if run_config.get("eval_start"):
             env["ROMP_EVAL_START"] = str(run_config["eval_start"])
         if run_config.get("eval_end"):
             env["ROMP_EVAL_END"] = str(run_config["eval_end"])
         if run_config.get("baseline_start_year"):
-            env["ROMP_BASELINE_START_YEAR"] = str(
-                run_config["baseline_start_year"]
-            )
+            env["ROMP_BASELINE_START_YEAR"] = str(run_config["baseline_start_year"])
         if run_config.get("baseline_end_year"):
-            env["ROMP_BASELINE_END_YEAR"] = str(
-                run_config["baseline_end_year"]
-            )
+            env["ROMP_BASELINE_END_YEAR"] = str(run_config["baseline_end_year"])
         if "initialization_days" in run_config:
-            env["ROMP_INIT_DAYS"] = ",".join(
-                str(int(x))
-                for x in run_config.get("initialization_days", [])
-            )
-        env["ROMP_RUN_YEARS_CONCURRENTLY"] = (
-            "1"
-            if run_config.get("run_years_concurrently", True)
-            else "0"
-        )
-        env["ROMP_ENSEMBLE_FORECAST"] = (
-            "1"
-            if run_config.get("ensemble_forecast", False)
-            else "0"
-        )
+            env["ROMP_INIT_DAYS"] = ",".join(str(int(x)) for x in run_config.get("initialization_days", []))
+        env["ROMP_RUN_YEARS_CONCURRENTLY"] = "1" if run_config.get("run_years_concurrently", True) else "0"
+        env["ROMP_ENSEMBLE_FORECAST"] = "1" if run_config.get("ensemble_forecast", False) else "0"
         if run_config.get("forecast_window"):
-            env["ROMP_FORECAST_WINDOW"] = str(
-                run_config["forecast_window"]
-            ).replace(" days", "")
+            env["ROMP_FORECAST_WINDOW"] = str(run_config["forecast_window"]).replace(" days", "")
         if run_config.get("ground_truth"):
             env["ROMP_GROUND_TRUTH"] = str(run_config["ground_truth"])
         if run_config.get("benchmark_coverage"):
-            env["ROMP_BENCHMARK_COVERAGE"] = str(
-                run_config["benchmark_coverage"]
-            )
+            env["ROMP_BENCHMARK_COVERAGE"] = str(run_config["benchmark_coverage"])
+
+        for key, env_name in [
+            ("wet_day_threshold", "ROMP_WET_THRESHOLD"),
+            ("minimum_wet_day_rainfall", "ROMP_WET_INIT"),
+            ("wet_spell_length", "ROMP_WET_SPELL"),
+            ("dry_spell_limit", "ROMP_DRY_SPELL"),
+            ("dry_threshold", "ROMP_DRY_THRESHOLD"),
+            ("dry_spell_search_extension", "ROMP_DRY_EXTENT"),
+        ]:
+            if run_config.get(key) is not None:
+                env[env_name] = str(run_config[key])
+
+        if run_config.get("init_type"):
+            env["ROMP_INIT_TYPE"] = str(run_config["init_type"])
+        if run_config.get("date_filter_year"):
+            env["ROMP_DATE_FILTER_YEAR"] = str(run_config["date_filter_year"])
+        if run_config.get("verification_window_list"):
+            env["ROMP_VERIFICATION_WINDOW_LIST"] = str(run_config["verification_window_list"])
+        if run_config.get("tolerance_days_list"):
+            env["ROMP_TOLERANCE_DAYS_LIST"] = str(run_config["tolerance_days_list"])
+        if run_config.get("max_forecast_day"):
+            env["ROMP_MAX_FORECAST_DAY"] = str(run_config["max_forecast_day"])
+
     cmd = [select_runtime_python(PROJECT_ROOT), "-u", str(rmp), "--mode", mode]
     if model_key:
         cmd.extend(["--model", model_key])
@@ -2351,22 +2360,7 @@ def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
     
     return bytes(pdf.output())
 
-import runpy
-import os
-import sys
-import importlib.metadata
-from importlib.metadata import PackageNotFoundError
-import pyproj
-from contextlib import contextmanager
 
-correct_proj_data = pyproj.datadir.get_data_dir()
-os.environ["PROJ_DATA"] = correct_proj_data
-os.environ["PROJ_LIB"] = correct_proj_data
-
-from momp.lib.loader import apply_overrides, reset_cfg, get_cfg
-reset_cfg()                      # clear cached singleton before switching modes/files
-apply_overrides(mode="prob")     # forces mode-derived overrides, same as --mode
-cfg = get_cfg()
 @contextmanager
 def sanitized_driver_argv(driver_path, mode):
     """
@@ -2399,117 +2393,7 @@ def sanitized_driver_argv(driver_path, mode):
 
 
 def execute_momp_benchmark(mode="det"):
-    """Execute the full MOMP driver pipeline for the given mode."""
-    python = select_runtime_python(PROJECT_ROOT)
-    if python != os.path.abspath(sys.executable):
-        result = run_momp_benchmark(mode=mode, stream=True)
-        if not result["ok"]:
-            raise RuntimeError(result.get("stderr") or result.get("stdout") or "Benchmark worker failed.")
-        return
-    print(check_runtime_python(python, os.environ.copy(), PROJECT_ROOT), flush=True)
-    print("=" * 60)
-    print(f"Initializing MOMP Benchmark Execution [{mode.upper()} MODE]")
-    print("=" * 60)
-
-    # Setup Earthdata authentication credentials
-    os.environ.setdefault("EARTHDATA_AUTH", "netrc")
-    try:
-        config.setup_earthdata_auth()
-    except Exception as e:
-        print(f"Authentication warning: {e}")
-
-    # Patch importlib metadata for uninstalled local package imports
-    original_version = importlib.metadata.version
-    original_distribution = importlib.metadata.distribution
-
-    class DummyDistribution:
-        version = "0.0.1"
-
-    def patched_version(pkg_name):
-        if pkg_name.lower() == "momp":
-            return "0.0.1"
-        try:
-            return original_version(pkg_name)
-        except PackageNotFoundError:
-            return "0.0.1"
-
-    def patched_distribution(pkg_name):
-        if pkg_name.lower() == "momp":
-            return DummyDistribution()
-        return original_distribution(pkg_name)
-
-    importlib.metadata.version = patched_version
-    importlib.metadata.distribution = patched_distribution
-
-    try:
-        # Load configuration settings
-        cfg = get_cfg()
-
-        # Resolve dataset and path settings against project root
-        cfg.pkg_dir = str(MOMP_PKG_DIR)
-        cfg.work_dir = resolve_path(getattr(cfg, "work_dir", str(ROMP_ROOT)))
-        cfg.obs_dir = resolve_path(getattr(cfg, "obs_dir", "data/external/ENACTS_regridded_025"))
-        cfg.ref_model_dir = resolve_path(getattr(cfg, "ref_model_dir", "data/external/ENACTS"))
-        cfg.nc_mask = resolve_path(getattr(cfg, "nc_mask", "data/external/jjas_100mm_rainfall_mask_0p25.nc"))
-
-        if hasattr(cfg, "shpfile_dir") and cfg.shpfile_dir:
-            cfg.shpfile_dir = resolve_path(cfg.shpfile_dir)
-
-        cfg.dir_out = str(config.ROMP_OUT_DIR)
-        cfg.dir_fig = str(config.ROMP_FIG_DIR)
-
-        # Apply mode configuration
-        configure_benchmark_mode(cfg, mode=mode)
-        cfg.model_dir_list = tuple(resolve_path(d) for d in cfg.model_dir_list)
-
-        # Disable parallel execution to prevent Jupyter deadlock issues
-        cfg.parallel = True
-
-        # Synchronize configuration into momp.params module state
-        for attr in dir(cfg):
-            if not attr.startswith("_"):
-                setattr(params, attr, getattr(cfg, attr))
-        params.parallel = True
-
-        os.makedirs(cfg.dir_out, exist_ok=True)
-        os.makedirs(cfg.dir_fig, exist_ok=True)
-
-        print(f"Work Directory : {cfg.work_dir}")
-        print(f"Package Dir    : {cfg.pkg_dir}")
-        print(f"Obs Directory  : {cfg.obs_dir}")
-        print(f"Model List     : {cfg.model_list}")
-        print(f"Parallel Execution : {cfg.parallel}")
-        print("-" * 60)
-
-        # Execute driver pipeline script
-        driver_path = MOMP_PKG_DIR / "driver.py"
-        if not driver_path.exists():
-            raise FileNotFoundError(f"Driver not found at: {driver_path}")
-
-        sys.stdout.flush()
-        
-        # CRITICAL FIX: Sanitize sys.argv before running the driver
-        with sanitized_driver_argv(driver_path, mode):
-            runpy.run_path(str(driver_path), run_name="__main__")
-        
-        print(f"\nMOMP [{mode.upper()}] benchmark completed successfully.")
-
-    except SystemExit as e:
-        # Handle SystemExit(0) as success
-        if e.code == 0 or e.code is None:
-            print(f"\nMOMP [{mode.upper()}] benchmark completed successfully.")
-        else:
-            print(f"\nExecution failed with exit code: {e.code}")
-            import traceback
-            traceback.print_exc()
-    except Exception as e:
-        print(f"\nExecution failed: {e}")
-        import traceback
-        traceback.print_exc()
-
-    finally:
-        # Restore original importlib hooks
-        importlib.metadata.version = original_version
-        importlib.metadata.distribution = original_distribution
-
-
+    """Use the canonical runner outside the notebook kernel for every execution."""
+    result = run_momp_benchmark(mode=mode, stream=True)
+    if not result["ok"]:
+        raise RuntimeError(result.get("stderr") or result.get("stdout") or "Benchmark worker failed.")

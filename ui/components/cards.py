@@ -28,3 +28,9 @@ def feature_card(icon, title, desc):
           </div>
         </div>
     """, unsafe_allow_html=True)
+
+def section_header(text: str, accent: str = "sky") -> None:
+    st.markdown(
+        f'<div class="sec-hd {accent}"><span class="sec-hd-accent"></span>{text}</div>',
+        unsafe_allow_html=True,
+    )

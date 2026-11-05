@@ -98,7 +98,7 @@ def print_data_info(data_dir, pattern="*.nc"):
     # List all .nc files
     nc_files = list(data_dir.glob(pattern))
     if not nc_files:
-        raise FileNotFoundError(f"No .nc files found in {shp_dir}")
+        raise FileNotFoundError(f"No .nc files found in {data_dir}")
     
     # Pick the first file
     first_file = nc_files[0]

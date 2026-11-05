@@ -1,8 +1,9 @@
 import os
 import logging
-# Fix gRPC C-core fork safety issues when using multiprocessing with gcsfs
-os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "1"
-os.environ["GRPC_POLL_STRATEGY"] = "poll"
+# Workers use spawn and create their own clients. Opting into gRPC's fork
+# handlers causes native warnings when other threads are using a channel.
+# Set this before imports can initialize gRPC; retain explicit user overrides.
+os.environ.setdefault("GRPC_ENABLE_FORK_SUPPORT", "0")
 from datetime import datetime
 import re
 import shutil
@@ -83,7 +84,7 @@ def _pick_data_dir() -> Path:
 DATA_DIR = _pick_data_dir()
 EXTERNAL_DATA_DIR = DATA_DIR / "external"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-ENACTS_DIR = EXTERNAL_DATA_DIR / "ENACTS_regridded_025"
+ENACTS_DIR = EXTERNAL_DATA_DIR / "ENACTS"
 CHIRPS_025_DIR = EXTERNAL_DATA_DIR / "CHIRPS_regridded_025"
 
 # Region (country) and observation dataset
@@ -134,6 +135,12 @@ MODEL_FOLDERS = {
     "GenCast": "gencast",
 }
 
+COUNTRY_BOX_MODEL_FOLDERS = {
+    "aifs_single": "AIFS_v2",
+    "aifs_ens": "AIFS_ENS_v2",
+    "graphcast": "graphcast",
+}
+
 
 def bucket_uri(demo: str = "demo4", rel: str = "") -> str:
     prefix = BUCKET_PREFIXES.get(demo, demo)
@@ -148,6 +155,10 @@ MODEL_URI_TEMPLATE = "{root}/MODEL/{region}/{folder}"
 
 
 def _model_uri(key: str) -> str:
+    local_key = MODEL_FOLDERS.get(key, key)
+    country_folder = COUNTRY_BOX_MODEL_FOLDERS.get(local_key)
+    if country_folder:
+        return f"gs://{DEMO_BUCKET}/Forecasts_Country_0p25deg/{country_folder}/tp/{region}"
     return MODEL_URI_TEMPLATE.format(
         root=BUCKET_ROOT,
         region=region,
@@ -155,8 +166,9 @@ def _model_uri(key: str) -> str:
     )
 
 
-# Standard CHIRPS observation path in GCS (0.25-degree regridded)
-OBS_URI = f"gs://{DEMO_BUCKET}/demo4/DATA/{region}/{obs}"
+# Country-box collections live directly under the bucket, outside demo prefixes.
+OBS_URI = (f"gs://{DEMO_BUCKET}/CHIRPSv3_Country_Boxes_025deg/{region}" if obs == "CHIRPS"
+           else f"gs://{DEMO_BUCKET}/demo4/DATA/{region}/{obs}")
 
 # ==============================================================================
 # 3. URI SANITIZATION & GCS STORAGE HELPERS
@@ -445,6 +457,13 @@ def _model_dir(key: str):
     return _pick(f"model {key}", [(LOCAL_MODEL_DIRS[key], True)], _model_uri(key))
 
 
+def _model_file_pattern(key: str, folder: str) -> str:
+    country_folder = COUNTRY_BOX_MODEL_FOLDERS.get(MODEL_FOLDERS.get(key, key))
+    if country_folder and is_uri(folder):
+        return f"{country_folder}_tp_{region}_{{}}_box025.nc"
+    return "{}.nc"
+
+
 # Prioritize 0.25-degree regridded CHIRPS data directories
 OBS_DIR = _pick(
     "observations",
@@ -485,12 +504,27 @@ def _find_apps_dir(proj_root: Path) -> Path:
     return proj_root / "apps"
 
 
-APPS_DIR = _find_apps_dir(PROJ_ROOT)
-ROMP_ROOT = APPS_DIR / "benchmarking" / "ROMP"
-MOMP_PKG_DIR = ROMP_ROOT / "momp"
+def _find_momp_package_dir(apps_dir: Path) -> Path:
+    candidate = apps_dir / "benchmarking" / "ROMP" / "momp"
+    if (candidate / "driver.py").is_file():
+        return candidate
+    # Wheels install the vendored package as top-level momp, not under apps.
+    import importlib.util
 
-ROMP_OUT_DIR = PKG_DIR / "data" / "ROMP_OUTPUT"
-ROMP_FIG_DIR = ROMP_OUT_DIR / "figures"
+    spec = importlib.util.find_spec("momp")
+    if spec is not None and spec.origin:
+        installed = Path(spec.origin).parent
+        if (installed / "driver.py").is_file():
+            return installed
+    return candidate
+
+
+APPS_DIR = _find_apps_dir(PROJ_ROOT)
+MOMP_PKG_DIR = _find_momp_package_dir(APPS_DIR)
+ROMP_ROOT = MOMP_PKG_DIR.parent
+
+ROMP_OUT_DIR = Path(os.getenv("ROMP_OUT_DIR", str(PKG_DIR / "data" / "ROMP_OUTPUT"))).expanduser()
+ROMP_FIG_DIR = Path(os.getenv("ROMP_FIG_DIR", str(ROMP_OUT_DIR / "figures"))).expanduser()
 
 ROMP_OUT_DIR.mkdir(parents=True, exist_ok=True)
 ROMP_FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -513,7 +547,7 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
         "label": "Deterministic · AIFS",
         "dir": _model_dir("aifs_single"),
         "model_name": "aifs_single",
-        "file_pattern": "{}_adm3.nc",
+        "file_pattern": "{}.nc",
         "var": "tp",
         "unit_cvt": 1.0,
         "probabilistic": False,
@@ -566,6 +600,9 @@ BENCHMARK_MODEL_CATALOG: Dict[str, Dict[str, Any]] = {
     },
 }
 
+for _model_meta in BENCHMARK_MODEL_CATALOG.values():
+    _model_meta["file_pattern"] = _model_file_pattern(_model_meta["model_name"], _model_meta["dir"])
+
 if _MISSING_ITEMS:
     warnings.warn(
         f"config: {len(_MISSING_ITEMS)} input(s) not found locally and bucket fallback is off "
@@ -600,7 +637,8 @@ layout = ("model", "verification_window")
 _OBS_SETS = {
     "CHIRPS": dict(
         dir=OBS_DIR, 
-        pattern=("{}.nc", f"CHIRPS_{region}_{{}}.nc", f"CHIRPS_025_{region}_{{}}.nc"), 
+        pattern=(f"CHIRPSv3_{region}_{{}}_box025.nc", "{}.nc",
+                 f"CHIRPS_{region}_{{}}.nc", f"CHIRPS_025_{region}_{{}}.nc"),
         var="RAINFALL"  # <-- Changed from "precip" to "RAINFALL"
     ),
     "IMERG": dict(
@@ -626,6 +664,8 @@ ref_model_unit_cvt = None
 nc_mask = resolve_path(JJAS_MASK_FILE)
 shpfile_dir = SHAPEFILE_MASK_FILE
 CLIMATOLOGY_SHAPEFILE = join(shpfile_dir, "ETH_Zones_woreda.geojson")
+ETH_GEOJSON_PATH = join(shpfile_dir, "eth_admbnda_admin3_csa_bofedb_2021.geojson")
+ZONE_WOREDA_SHP = join(shpfile_dir, "ETH_Zones_Woreda.geojson")
 polygon = False
 
 wet_init = 1
@@ -633,7 +673,8 @@ wet_threshold = 20
 wet_spell = 3
 dry_threshold = 1
 dry_spell = 7
-dry_extent = 21
+# Match the supplied ROMP reference experiment; explicit run settings may enable confirmation.
+dry_extent = 0
 thresh_file = None
 thresh_var = None
 
@@ -720,13 +761,13 @@ def compute_mode_overrides(mode: str = "det", catalog: Optional[Dict[str, Any]] 
     if is_prob:
         overrides.update(
             BS=True, RPS=True, AUC=True, Reliability=True,
-            FAR=False, MAE=False, MR=False,
+            FAR=True, MAE=True, MR=True,
             plot_heatmap_bss_auc=True,
             plot_reliability=True,
             plot_panel_heatmap_skill=True,
             plot_bar_bss_rpss_auc=True,
-            plot_spatial_far_mr_mae=False,
-            plot_panel_heatmap_error=False,
+            plot_spatial_far_mr_mae=True,
+            plot_panel_heatmap_error=True,
         )
     else:
         overrides.update(
@@ -809,7 +850,7 @@ plot_obs_days = 30
 ONSET_INFO_DIR = DATA_DIR / "onset_info"
 
 # CORRECTED: ONSET_DATA_DIR points to where forecast data actually lives
-ONSET_DATA_DIR = ONSET_INFO_DIR / "data"  # data/onset_info/data
+ONSET_DATA_DIR = ONSET_INFO_DIR / "data"
 
 # ONSET_VERIFICATION_DIR points to Monsoon_Data (reference files, models, results)
 ONSET_VERIFICATION_DIR = ONSET_INFO_DIR / "Monsoon_Data"  # data/onset_info/Monsoon_Data
@@ -826,7 +867,7 @@ ONSET_RUN_INPUT_ROOT = ONSET_INFO_DIR / "operational" / "monsoon-onset" / "IMERG
 ENACTS_CLIM_PKL_PATH = ONSET_RUN_INPUT_ROOT / "imd_clim_mok_date_wide.pkl"
 
 MESSAGE_YEAR = datetime.now().year
-YEAR = MESSAGE_YEAR
+YEAR = 2024  # Default onset-blending initialization year
 
 # Base directories for processed data and reference files
 ONSET_PROCESSED_DIR = ONSET_VERIFICATION_DIR / "Processed_Data"
@@ -840,7 +881,7 @@ DEFAULT_COEF_DIR = ONSET_VERIFICATION_DIR / "results" / "dry_spell_aifs_aifs_ens
 DEFAULT_COEF_TAG = "clim_mok_date_2022_year2022"
 DEFAULT_BLEND_MODEL = "blended_model"
 DEFAULT_REGION = "Ethiopia"
-DEFAULT_ISSUE_DATE = f"{YEAR}-06-15"
+DEFAULT_ISSUE_DATE = f"{YEAR}-05-25"
 
 DEFAULT_MODEL_SINGLE = "aifs"
 DEFAULT_MODEL_ENS = "aifs_ens"
@@ -971,7 +1012,7 @@ ONSET_FORECAST_GENCAST_SPEC = {
     "type": "rainfall_forecast",
     "input": {
         "nc_folder": str(ONSET_DATA_DIR / "forecast" / "gencast"),
-        "file_regex": rf"^{YEAR}_.*_adm3\.nc$",
+        "file_regex": rf"^{YEAR}_.*0p25\.nc$",
         "value_col": "tp",
         "wide_day_dim": "day",
         "wide_prefix": "rain",
@@ -1009,7 +1050,7 @@ ONSET_FORECAST_GENCAST_SPEC = {
         "thresh_col": "onset_threshold",
     },
     "mok": {
-        "file": str(ONSET_REFERENCE_DIR / "MOK Onset May.csv"),
+        "file": str(ONSET_REFERENCE_DIR / "MOK_Onset_May.csv"),
         "year_col": "Year",
         "day_col": "MOK",
         "base_date": "05-01",
@@ -1026,9 +1067,9 @@ ONSET_FORECAST_GENCAST_SPEC = {
 ONSET_FORECAST_IMD_CLIM_SPEC = {
     "type": "ground_truth_rainfall",
     "input": {
-        "nc_folder": str(ONSET_DATA_DIR / "ENACTS"),
+        "nc_folder": str(ONSET_DATA_DIR  / "ENACTS"),
         "gt_path": str(ONSET_VERIFICATION_DIR / "Models" / "dry_spell" / "imd_clim_mok_date_wide.pkl"),
-        "file_regex": r"^[0-9]{4}_adm3\.nc$",
+        "file_regex": r"^[0-9]{4}\.nc$",
         "value_col": "precip",
         "parallel": False,
         "workers": 10,
@@ -1064,7 +1105,7 @@ ONSET_FORECAST_IMD_CLIM_SPEC = {
         "thresh_col": "onset_threshold",
     },
     "mok": {
-        "file": str(ONSET_REFERENCE_DIR / "MOK Onset May.csv"),
+        "file": str(ONSET_REFERENCE_DIR / "MOK_Onset_May.csv"),
         "year_col": "Year",
         "day_col": "MOK",
         "base_date": "05-01",
@@ -1118,7 +1159,7 @@ ONSET_FORECAST_NGCM_SPEC = {
     "type": "rainfall_forecast",
     "input": {
         "nc_folder": str(ONSET_DATA_DIR / "forecast" / "gcm"),
-        "file_regex": rf"^{YEAR}_.*_adm3\.nc$",
+        "file_regex": rf"^{YEAR}_.*0p25\.nc$",
         "value_col": "tp",
         "wide_day_dim": "day",
         "wide_prefix": "rain",
@@ -1154,7 +1195,7 @@ ONSET_FORECAST_NGCM_SPEC = {
         "thresh_col": "onset_threshold",
     },
     "mok": {
-        "file": str(ONSET_REFERENCE_DIR / "MOK Onset May.csv"),
+        "file": str(ONSET_REFERENCE_DIR / "MOK_Onset_May.csv"),
         "year_col": "Year",
         "day_col": "MOK",
         "base_date": "05-01",
@@ -1389,10 +1430,8 @@ if __name__ == "__main__":
     print(f"outputs   : {ROMP_OUT_DIR}   (results are written locally)")
     if BUCKET_OK:
         print("browse    :")
-        for _demo, _rel in (("demo3", ""),
-                            ("demo4", f"MODEL/{region}/{MODEL_FOLDERS['AIFS']}"),
-                            ("demo4", f"MODEL/{region}/{MODEL_FOLDERS['AIFS_ENS']}"),
-                            ("demo4", f"DATA/{region}/{obs}")):
-            print(f"  {console_url(_demo, _rel)}")
+        for _uri in (bucket_uri("demo3"), _model_uri("AIFS"),
+                     _model_uri("AIFS_ENS"), _model_uri("GraphCast"), OBS_URI):
+            print("  " + _uri.replace("gs://", "https://console.cloud.google.com/storage/browser/", 1))
     print("check     :")
     sys.exit(check_data())

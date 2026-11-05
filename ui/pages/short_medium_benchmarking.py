@@ -8,6 +8,9 @@ robust argument filtering for onset analysis, and error-proof tab routing.
 """
 from __future__ import annotations
 from ai_weather.benchmark_job import BenchmarkJob
+from ai_weather.background_task import BackgroundTask
+from ui.utils.benchmark_session import reconnect_benchmark, remember_benchmark
+from ui.utils.benchmark_report import collect_evaluated_models
 from ui.utils.parameter_help import PARAMETER_HELP
 from ui.utils.benchmark_messages import cancellation_warning, execution_status
 from ai_weather.spatial import climatology_boundary_path
@@ -39,7 +42,7 @@ import pandas as pd
 import streamlit as st
 import xarray as xr
 from PIL import Image, ImageDraw
-import config
+from ai_weather import config
 from ai_weather.map_extent import geographic_extent
 from ai_weather.precipitation import precipitation_to_mm
 from ai_weather.runtime import check_runtime_python, select_runtime_python
@@ -57,9 +60,9 @@ _STARTUP_ENV: Dict[str, str] = dict(os.environ)
 # Safe config access
 # ======================================================================
 PROJECT_ROOT = Path(getattr(config, "PROJECT_ROOT", Path.cwd())).resolve()
-ROMP_OUTPUT_ROOT = Path(__file__).resolve().parents[2] / "data" / "ROMP_OUTPUT"
+ROMP_OUTPUT_ROOT = Path(getattr(config, "ROMP_OUT_DIR", PROJECT_ROOT / "data" / "ROMP_OUTPUT"))
 
-ROMP_DEMO_FIG_DIR = ROMP_OUTPUT_ROOT / "figures"
+ROMP_DEMO_FIG_DIR = Path(getattr(config, "ROMP_FIG_DIR", ROMP_OUTPUT_ROOT / "figures"))
 ROMP_DEMO_OUT_DIR = ROMP_OUTPUT_ROOT
 EXTERNAL_DATA_DIR = Path(
     getattr(
@@ -80,7 +83,7 @@ BENCHMARK_OBS_CATALOG = getattr(config, "BENCHMARK_OBS_CATALOG", {})
 CONFIG_BENCHMARK_MODEL_CATALOG = getattr(config, "BENCHMARK_MODEL_CATALOG", {})
 
 try:
-    from config import get_region_presets
+    from ai_weather.config import get_region_presets
 except Exception:
     def get_region_presets() -> List[Dict[str, Any]]:
         return []
@@ -142,11 +145,8 @@ try:
 except Exception:
     PHASE_6_AVAILABLE = False
 
-try:
-    import momp.app.onset_time_series as ots
-    OTS_AVAILABLE = True
-except Exception:
-    OTS_AVAILABLE = False
+# The plotting engine is imported by the onset subprocess, never by the UI.
+OTS_AVAILABLE = (Path(config.MOMP_PKG_DIR) / "app" / "onset_time_series.py").is_file()
 
 try:
     from fpdf import FPDF
@@ -755,8 +755,9 @@ def _detect_model_data_date_range(model_dir: str):
     return _scan_filename_date_range([Path(str(p)) for p in files_sorted])
 
 
-@st.cache_data(show_spinner=False, ttl=600)
 def detect_benchmark_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
+    # The session inventory owns the cache. A second cache here can replay an
+    # empty scan after inputs become available, even when inventory is retried.
     detected: List[Dict[str, Any]] = []
     current_year = datetime.now().year
     catalog = CONFIG_BENCHMARK_MODEL_CATALOG or {}
@@ -1995,8 +1996,16 @@ def _prepare_local_obs_dir(remote_or_local_path: str) -> str:
                     fname = Path(r_file).name
                     local_file = cache_dir / fname
                     if not local_file.exists() or local_file.stat().st_size == 0:
-                        with fs.open(r_file, "rb") as src, open(local_file, "wb") as dst:
-                            dst.write(src.read())
+                        import shutil
+                        import tempfile
+
+                        # Publish complete files atomically so other sessions cannot
+                        # open a partially downloaded NetCDF file.
+                        with tempfile.TemporaryDirectory(dir=cache_dir) as staging:
+                            pending = Path(staging) / fname
+                            with fs.open(r_file, "rb") as src, pending.open("wb") as dst:
+                                shutil.copyfileobj(src, dst)
+                            os.replace(pending, local_file)
                 if list(cache_dir.glob("*.nc")):
                     return str(cache_dir.resolve())
         except Exception:
@@ -2005,15 +2014,21 @@ def _prepare_local_obs_dir(remote_or_local_path: str) -> str:
     return path_str
 
 
-def _get_onset_base_kwargs():
-    raw_obs_dir = (
-        getattr(config, "CHIRPS_025_DIR", None)
-        or getattr(config, "CHIRPS_DIR", None)
+def _raw_onset_obs_dir():
+    return (
+        getattr(config, "obs_dir", None)
         or getattr(config, "OBS_DIR", None)
+        or getattr(config, "CHIRPS_DIR", None)
         or getattr(config, "ref_model_dir", None)
+        or getattr(config, "CHIRPS_025_DIR", None)
         or Path(getattr(config, "PROJECT_ROOT", ".")) / "data" / "external" / "CHIRPS_regridded_025"
     )
-    obs_dir = _prepare_local_obs_dir(str(raw_obs_dir))
+
+
+def _get_onset_base_kwargs():
+    # ROMP's storage reader supports bucket URIs. Preserve the configured source
+    # instead of substituting a nominal local folder or an unrelated old cache.
+    obs_dir = str(_raw_onset_obs_dir())
     auto_patterns, _ = _discover_dataset_structure(obs_dir)
 
     default_params = {
@@ -2055,8 +2070,8 @@ def _get_onset_base_kwargs():
 
 @st.cache_data(show_spinner=False, ttl=600)
 def _available_years():
-    base_kwargs, obs_dir = _get_onset_base_kwargs()
-    _, years = _discover_dataset_structure(obs_dir)
+    # Listing filenames must not download the entire observation archive.
+    _, years = _discover_dataset_structure(str(_raw_onset_obs_dir()))
     return years or list(range(2015, 2024))
 
 @st.cache_data(show_spinner=False, ttl=300)
@@ -2150,6 +2165,9 @@ plt.show = lambda *a, **k: None
 plt.close = lambda *a, **k: None
 
 kwargs = payload.get("kwargs", {})
+# Every onset analysis owns its figure directory, including the library's saves.
+kwargs["dir_fig"] = str(out_dir / "analysis")
+Path(kwargs["dir_fig"]).mkdir(parents=True, exist_ok=True)
 for k in ["year", "years", "lat", "lon", "lat_select", "lon_select"]:
     kwargs.pop(k, None)
 
@@ -2182,19 +2200,16 @@ def _analyze_onset_streamlit(year, lat, lon):
     base_kwargs, CHIRPS_DIR = _get_onset_base_kwargs()
     grid_lat, grid_lon = _snap_to_grid(lat, lon, str(CHIRPS_DIR))
     pngs: List[bytes] = []
+    result = {"pngs": pngs, "grid_lat": grid_lat, "grid_lon": grid_lon,
+              "error": None, "warning": None}
 
     # Clean kwargs to guarantee no duplicated year argument
     for k in ["year", "years", "lat", "lon", "lat_select", "lon_select"]:
         base_kwargs.pop(k, None)
 
-    env = {}
-    _SAFE_ENV_VARS = [
-        "PATH", "HOME", "USER", "SHELL", "TERM", "LANG", "LC_ALL",
-        "VIRTUAL_ENV", "CONDA_PREFIX", "CONDA_DEFAULT_ENV",
-    ]
-    for key in _SAFE_ENV_VARS:
-        if key in _STARTUP_ENV:
-            env[key] = _STARTUP_ENV[key]
+    # Keep the container's data-source and authentication environment, just as
+    # benchmark workers do. Plotting and process-specific settings follow below.
+    env = dict(_STARTUP_ENV)
 
     env["PYTHONPATH"] = str(PROJECT_ROOT.resolve())
     env["PYTHONUNBUFFERED"] = "1"
@@ -2232,22 +2247,23 @@ def _analyze_onset_streamlit(year, lat, lon):
                 raise subprocess.TimeoutExpired("onset analysis", 900)
             proc = SimpleNamespace(returncode=_rc, stdout="\n".join(_worker_out), stderr="")
         except subprocess.TimeoutExpired:
-            st.error("Onset analysis timed out after 15 minutes.")
-            return pngs, grid_lat, grid_lon
+            result["error"] = "Onset analysis timed out after 15 minutes."
+            return result
         except Exception as e:
-            st.error(f"Could not start onset analysis: {type(e).__name__}: {e}")
-            return pngs, grid_lat, grid_lon
+            result["error"] = f"Could not start onset analysis: {type(e).__name__}: {e}"
+            return result
 
         if out_dir.exists():
             pngs = [f.read_bytes() for f in sorted(out_dir.glob("*.png"))]
 
         if proc.returncode != 0:
             err_lines = (proc.stderr or proc.stdout or "").strip().splitlines()
-            st.error("Error during onset analysis: " + (err_lines[-1] if err_lines else f"exit code {proc.returncode}"))
+            result["error"] = "Error during onset analysis: " + (err_lines[-1] if err_lines else f"exit code {proc.returncode}")
         elif not pngs:
-            st.warning("Onset analysis finished but produced no figures.")
+            result["warning"] = "Onset analysis finished but produced no figures."
 
-    return pngs, grid_lat, grid_lon
+    result["pngs"] = pngs
+    return result
 
 
 # ======================================================================
@@ -2261,139 +2277,9 @@ def _locate_run_momp() -> Optional[Path]:
 
 
 def _spawn_no_fork(argv, env, cwd, timeout, on_line=None, cancel_event=None):
-    """
-    Run `argv` in `cwd` using posix_spawn on Unix to prevent memory fragmentation and fork-safety issues.
-    """
-    import select
-    import signal
-    import time
-    from ai_weather.benchmark_job import track_worker, untrack_worker
+    from ai_weather.process_runner import spawn_process
 
-    started = time.time()
-
-    if not hasattr(os, "posix_spawn"):
-        proc = subprocess.Popen(
-            argv, cwd=cwd, env=env, stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT, text=True, bufsize=1,
-        )
-        timed_out = False
-        try:
-            for line in proc.stdout:
-                if on_line:
-                    on_line(line.rstrip("\n"))
-                if cancel_event is not None and cancel_event.is_set():
-                    proc.kill()
-                    break
-                if time.time() - started > timeout:
-                    proc.kill()
-                    timed_out = True
-                    break
-        finally:
-            proc.stdout.close()
-            proc.wait()
-        return (130 if cancel_event is not None and cancel_event.is_set() else 124 if timed_out else proc.returncode), timed_out
-
-    read_fd, write_fd = os.pipe()
-    actions = [
-        (os.POSIX_SPAWN_OPEN, 0, os.devnull, os.O_RDONLY, 0),
-        (os.POSIX_SPAWN_DUP2, write_fd, 1),
-        (os.POSIX_SPAWN_DUP2, write_fd, 2),
-        (os.POSIX_SPAWN_CLOSE, read_fd),
-        (os.POSIX_SPAWN_CLOSE, write_fd),
-    ]
-    shell_argv = ["/bin/sh", "-c", 'cd "$1" && shift && exec "$@"', "sh", str(cwd), *map(str, argv)]
-
-    try:
-        pid = os.posix_spawn("/bin/sh", shell_argv, env, file_actions=actions, setpgroup=0)
-    except BaseException:
-        os.close(read_fd)
-        os.close(write_fd)
-        raise
-    os.close(write_fd)
-    track_worker(pid)
-    status = None
-    termination_attempted = False
-
-    def poll_exit():
-        nonlocal status
-        if status is None:
-            exited, child_status = os.waitpid(pid, os.WNOHANG)
-            if exited:
-                status = child_status
-
-    def terminate_group():
-        nonlocal termination_attempted
-        termination_attempted = True
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            poll_exit()
-            return
-        except PermissionError:
-            poll_exit()
-            if status is None:
-                raise
-        deadline = time.time() + 0.2
-        while status is None and time.time() < deadline:
-            poll_exit()
-            if status is None:
-                time.sleep(0.02)
-        try:
-            # The group may already be gone after graceful termination.
-            os.killpg(pid, 0)
-            os.killpg(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except PermissionError:
-            poll_exit()
-            if status is None:
-                raise
-            if on_line:
-                on_line("[stop-warning] The main benchmark process exited, but the operating system blocked verification of remaining worker cleanup.")
-
-    timed_out = False
-    buf = b""
-    try:
-        while True:
-            if cancel_event is not None and cancel_event.is_set():
-                terminate_group()
-                break
-            left = timeout - (time.time() - started)
-            if left <= 0:
-                terminate_group()
-                timed_out = True
-                break
-
-            ready, _, _ = select.select([read_fd], [], [], min(left, 0.5))
-            if not ready:
-                continue
-
-            chunk = os.read(read_fd, 65536)
-            if not chunk:
-                break
-
-            buf += chunk
-            *done, buf = buf.split(b"\n")
-            for raw in done:
-                if on_line:
-                    on_line(raw.decode("utf-8", "replace").rstrip("\r"))
-
-        if buf and on_line:
-            on_line(buf.decode("utf-8", "replace").rstrip("\r"))
-    except BaseException as exc:
-        if isinstance(exc, PermissionError) and on_line:
-            on_line(f"[stop-warning] The operating system denied process management for PID {pid}. Worker shutdown is not confirmed.")
-        if not termination_attempted:
-            terminate_group()
-        raise
-    finally:
-        os.close(read_fd)
-        if status is None:
-            _, status = os.waitpid(pid, 0)
-        untrack_worker(pid)
-
-    rc = os.waitstatus_to_exitcode(status)
-    return (130 if cancel_event is not None and cancel_event.is_set() else 124 if timed_out else rc), timed_out
+    return spawn_process(argv, env, cwd, timeout, on_line, cancel_event)
 
 
 def run_momp_benchmark(
@@ -2462,6 +2348,7 @@ def run_momp_benchmark(
             ("minimum_wet_day_rainfall", "ROMP_WET_INIT"),
             ("wet_spell_length", "ROMP_WET_SPELL"),
             ("dry_spell_limit", "ROMP_DRY_SPELL"),
+            ("dry_threshold", "ROMP_DRY_THRESHOLD"),
             ("dry_spell_search_extension", "ROMP_DRY_EXTENT"),
         ]:
             if run_config.get(key) is not None:
@@ -2551,11 +2438,7 @@ def info_box(text: str, kind: str = "") -> None:
     st.markdown(f'<div class="ibox {kind}">{text}</div>', unsafe_allow_html=True)
 
 
-def section_header(text: str, accent: str = "sky") -> None:
-    st.markdown(
-        f'<div class="sec-hd {accent}"><span class="sec-hd-accent"></span>{text}</div>',
-        unsafe_allow_html=True,
-    )
+from ui.components.cards import section_header
 
 
 BENCHMARK_COVERAGE_COUNTRIES = (
@@ -2608,11 +2491,13 @@ def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None,
     c1, c2, c3 = st.columns(3)
     wet_day_threshold = c1.number_input("Wet-day threshold", min_value=0.0, value=float(getattr(config, "wet_threshold", 20)), step=0.5, format="%.1f", key="shared_wet_day_threshold")
     minimum_wet_day_rainfall = c2.number_input("Minimum wet-day rainfall", min_value=0.0, value=float(getattr(config, "wet_init", 1)), step=0.1, format="%.1f", key="shared_min_wet_day")
-    wet_spell_length = c3.number_input("Wet spell length", min_value=1, value=3, format="%d", key="shared_wet_spell")
+    wet_spell_length = c3.number_input("Wet spell length", min_value=1, value=int(getattr(config, "wet_spell", 3)), format="%d", key="shared_wet_spell")
 
-    c4, c5, _ = st.columns(3)
-    dry_spell_limit = c4.number_input("Dry spell limit", min_value=0, value=7, format="%d", key="shared_dry_spell")
-    dry_spell_search_extension = c5.number_input("Dry spell search extension", min_value=0, value=int(getattr(config, "dry_extent", 21)), format="%d", key="shared_dry_ext")
+    c4, c5, c6 = st.columns(3)
+    dry_spell_limit = c4.number_input("Dry spell limit", min_value=0, value=int(getattr(config, "dry_spell", 7)), format="%d", key="shared_dry_spell")
+    dry_spell_search_extension = c5.number_input("Dry spell search extension", min_value=0, value=int(getattr(config, "dry_extent", 0)), format="%d", key="shared_dry_ext",
+        help="0 disables dry confirmation, as in the reference configuration. A positive interval includes the candidate day and needs rainfall through verification end + interval − 1.")
+    dry_threshold = c6.number_input("Dry-day rainfall threshold", min_value=0.0, value=float(getattr(config, "dry_threshold", 1)), step=0.1, format="%.1f", key="shared_dry_threshold")
 
     masks_column, advanced_column = st.columns(2, gap="large")
     with masks_column:
@@ -2661,6 +2546,7 @@ def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None,
         "minimum_wet_day_rainfall": float(minimum_wet_day_rainfall),
         "wet_spell_length": int(wet_spell_length),
         "dry_spell_limit": int(dry_spell_limit),
+        "dry_threshold": float(dry_threshold),
         "dry_spell_search_extension": int(dry_spell_search_extension),
         "area_mask_file": str(area_mask_file or "").strip(),
         "onset_threshold_file": str(onset_threshold_file or "").strip(),
@@ -2727,7 +2613,7 @@ class BenchmarkReportPDF(FPDF):
             self.set_font("Helvetica", "B", 9)
             self.set_text_color(15, 23, 42)
             self.set_x(self.l_margin)
-            self.cell(0, 8, _pdf_safe_text("Forecast Benchmarking Report"))
+            self.cell(0, 8, _pdf_safe_text("Benchmarking Report"))
             self.ln(4)
             self.set_draw_color(226, 232, 240)
             self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
@@ -2900,7 +2786,7 @@ def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_text_color(15, 23, 42)
     pdf.set_x(pdf.l_margin)
-    pdf.multi_cell(0, 12, "Forecast Benchmarking Report", align="C")
+    pdf.multi_cell(0, 12, "Benchmarking Report", align="C")
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(71, 85, 105)
     pdf.set_x(pdf.l_margin)
@@ -2921,6 +2807,10 @@ def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
         ("Deterministic Models", det_count),
         ("Probabilistic Models", prob_count),
     ])
+    if context.get('model_count_basis') == 'stored_outputs':
+        pdf.paragraph(
+            'Models are counted from stored benchmark outputs. Input settings shown are the current '
+            'dashboard controls; confirm the output metadata matches the experiment being reported.')
 
     if active_rows:
         models_df = pd.DataFrame([
@@ -3224,6 +3114,9 @@ def render_benchmark_job():
         st.rerun()
         return
     st.info("Stopping benchmark…" if snapshot["stopping"] else "Benchmark running. You can stop it below.")
+    completed = len(snapshot['runs'])
+    if completed < len(job.plans):
+        st.caption(f"Model {completed + 1} of {len(job.plans)}: {job.plans[completed]['label']}")
     if st.button("Stop Benchmark", key="btn_stop_benchmark", disabled=snapshot["stopping"]):
         job.cancel()
         st.info("Stop requested; terminating benchmark workers.")
@@ -3234,13 +3127,135 @@ def render_benchmark_job():
         st.code("\n".join(snapshot["logs"][-20:]), language="text")
 
 
+
+@st.fragment(run_every=1)
+def render_onset_job():
+    job = st.session_state.get("onset_active_task")
+    if job is None:
+        return
+    snapshot = job.snapshot()
+    if not snapshot["done"]:
+        st.info("Onset analysis running in the background. You can continue using the dashboard.")
+        return
+    meta = st.session_state.pop("onset_task_meta", {})
+    result = snapshot["result"]
+    if snapshot["error"]:
+        st.session_state["onset_error"] = snapshot["error"]
+    else:
+        st.session_state["onset_pngs"] = result["pngs"]
+        st.session_state["onset_meta"] = {
+            **meta, "grid_lat": result["grid_lat"], "grid_lon": result["grid_lon"]}
+        st.session_state["onset_error"] = result["error"]
+        st.session_state["onset_warning"] = result["warning"]
+    st.session_state.pop("onset_active_task", None)
+    st.rerun()
+
+
+
+def render_benchmark_run_controls(*, disabled=True):
+    st.markdown('<div class="run-section">', unsafe_allow_html=True)
+    c1, _ = st.columns([1, 2])
+    clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch',
+                        disabled=disabled)
+    st.markdown("</div>", unsafe_allow_html=True)
+    render_benchmark_job()
+    return clicked
+
+
+def _load_benchmark_inventory(ground_truth):
+    import time
+
+    return {"ground_truth": ground_truth, "models": detect_benchmark_models(),
+            "observation_years": available_observation_years(ground_truth),
+            "loaded_at": time.time()}
+
+
+@st.fragment(run_every=1)
+def render_benchmark_inventory():
+    job = st.session_state.get("benchmark_inventory_task")
+    if job is None:
+        return
+    snapshot = job.snapshot()
+    if not snapshot["done"]:
+        st.info("Loading benchmark inputs in the background. Navigation remains available.")
+        return
+    ground_truth = st.session_state.pop("benchmark_inventory_ground_truth")
+    cache = st.session_state.setdefault("benchmark_inventory_cache", {})
+    if snapshot["error"]:
+        cache[ground_truth] = {"error": snapshot["error"]}
+    else:
+        cache[ground_truth] = snapshot["result"]
+    st.session_state.pop("benchmark_inventory_task", None)
+    st.rerun()
+
+
+
+def _load_benchmark_coverage(keys):
+    import time
+
+    loaded = {}
+    for key in keys:
+        try:
+            coverage = inspect_model_temporal_coverage(*key[:3])
+        except Exception as exc:
+            coverage = {"dates": [], "horizons": {}, "failures": [f"{type(exc).__name__}: {exc}"]}
+        loaded[key] = {"data": coverage, "loaded_at": time.time()}
+    return loaded
+
+
+@st.fragment(run_every=1)
+def render_benchmark_coverage():
+    job = st.session_state.get("benchmark_coverage_task")
+    if job is None:
+        return
+    snapshot = job.snapshot()
+    if not snapshot["done"]:
+        st.info("Checking selected forecast metadata in the background. Run Benchmark will be available when validation finishes.")
+        return
+    cache = st.session_state.setdefault("benchmark_coverage_cache", {})
+    keys = st.session_state.pop("benchmark_coverage_keys", [])
+    if snapshot["error"]:
+        import time
+
+        for key in keys:
+            cache[key] = {"data": {"dates": [], "horizons": {}, "failures": [snapshot["error"]]},
+                          "loaded_at": time.time()}
+    else:
+        cache.update(snapshot["result"])
+    st.session_state.pop("benchmark_coverage_task", None)
+    st.rerun()
+
+
+
+@st.fragment(run_every=1)
+def render_onset_years():
+    job = st.session_state.get("onset_years_task")
+    if job is None:
+        return
+    snapshot = job.snapshot()
+    if not snapshot["done"]:
+        st.info("Loading available onset observation years in the background…")
+        return
+    import time
+
+    st.session_state["onset_years_result"] = {
+        "years": snapshot["result"], "error": snapshot["error"], "loaded_at": time.time()}
+    st.session_state.pop("onset_years_task", None)
+    st.rerun()
+
+
 def page() -> None:
     _inject_theme_css()
+    reconnect_benchmark(st.session_state, st.query_params)
+    if st.session_state.get('benchmark_reconnect_error'):
+        st.warning(st.session_state['benchmark_reconnect_error'])
+    # Poll independently of the selected result tab, before data discovery.
+    render_onset_job()
 
     presets = get_benchmark_presets()
     title_column, guide_column = st.columns([3, 1])
     with title_column:
-        st.markdown('<div class="page-title">Forecast Benchmarking</div>', unsafe_allow_html=True)
+        st.markdown('<div class="page-title">Benchmarking</div>', unsafe_allow_html=True)
         st.markdown(
             '<div class="page-subtitle">'
             "Evaluate AI weather model skill against observational references "
@@ -3251,6 +3266,10 @@ def page() -> None:
 
     with guide_column:
         with st.popover("Parameter guide", width="stretch"):
+            st.markdown(
+                "[Weather model benchmarking guide]"
+                "(https://mbzuai-aim-for-scale.github.io/training-program-2026/04-weather-model)"
+            )
             st.caption("Expand a parameter for its meaning and usage.")
             for parameter, instruction in PARAMETER_HELP.items():
                 with st.expander(parameter):
@@ -3259,6 +3278,9 @@ def page() -> None:
     last_run = st.session_state.get("benchmark_last_run")
     status_text = ("Stop requested" if cancellation_warning(last_run) else "Cancelled") if last_run and last_run.get("cancelled") else (
         "Completed" if last_run and last_run.get("ok") else "Failed" if last_run else "Idle")
+    active_job = st.session_state.get('benchmark_active_job')
+    if active_job is not None:
+        status_text = 'Stopping' if active_job.snapshot()['stopping'] else 'Running'
     render_kpi_row(
         len(CONFIG_BENCHMARK_MODEL_CATALOG or {}),
         len(presets),
@@ -3289,11 +3311,47 @@ def page() -> None:
 
     # Models
     section_header("Models", "teal")
-    model_registry = detect_benchmark_models()
+    import time
+
+    inventory_cache = st.session_state.setdefault("benchmark_inventory_cache", {})
+    if st.button("Refresh model data", key="benchmark_refresh_inventory",
+                 disabled=st.session_state.get("benchmark_inventory_task") is not None,
+                 help="Rescan forecast files and observation years."):
+        inventory_cache.clear()
+        st.session_state.pop("benchmark_coverage_cache", None)
+    inventory = inventory_cache.get(ground_truth)
+    if inventory and not inventory.get("error") and time.time() - inventory["loaded_at"] > 600:
+        inventory = None
+    if inventory is None:
+        if st.session_state.get("benchmark_inventory_task") is None:
+            st.session_state["benchmark_inventory_ground_truth"] = ground_truth
+            st.session_state["benchmark_inventory_task"] = BackgroundTask(
+                _load_benchmark_inventory, ground_truth).start()
+        render_benchmark_inventory()
+        if st.session_state.get("benchmark_active_job") is not None:
+            render_benchmark_run_controls()
+        return
+    if inventory.get("error"):
+        st.error(f"Could not load benchmark inputs: {inventory['error']}")
+        if st.button("Retry benchmark inputs", key="benchmark_retry_inventory"):
+            inventory_cache.pop(ground_truth, None)
+            st.rerun()
+        if st.session_state.get("benchmark_active_job") is not None:
+            render_benchmark_run_controls()
+        return
+    # Finish a previous ground-truth inventory without replacing current controls.
+    render_benchmark_inventory()
+    model_registry = inventory["models"]
     active_rows: List[Dict[str, Any]] = []
 
     if not model_registry:
         info_box("No forecast model data was detected.", "amber")
+        st.caption("Check that the forecast folders are accessible, then click Refresh model data.")
+        with st.expander("Forecast data locations"):
+            st.text(f"Data directory: {config.DATA_DIR}")
+            for model_key, meta in CONFIG_BENCHMARK_MODEL_CATALOG.items():
+                st.text(f"{model_key}: {_meta_get(meta, 'dir', '')}")
+            st.caption("Models appear when NetCDF files contain readable dates or dated filenames.")
     else:
         mrr = {r["_row_key"]: r for r in model_registry}
         category_options = ["All", "Deterministic", "Probabilistic"]
@@ -3335,7 +3393,7 @@ def page() -> None:
 
     model_run_windows: Dict[str, Dict[str, Any]] = {}
     verification_problems = []
-    observation_years = available_observation_years(ground_truth)
+    observation_years = inventory["observation_years"]
 
     def render_model_run_windows():
         section_header("Model run windows", "amber")
@@ -3422,44 +3480,71 @@ def page() -> None:
     if PHASE_2_AVAILABLE or PHASE_3_AVAILABLE:
         section_header("Data Readiness & Fair Comparison", "green")
         if PHASE_2_AVAILABLE:
-            with st.expander("Data Readiness Report", expanded=False):
-                try:
-                    m_inv = build_model_inventory()
-                    o_inv = build_obs_inventory()
-                    summary = readiness_summary(m_inv + o_inv)
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("Ready", summary.get("Ready", 0))
-                    c2.metric("Warning", summary.get("Warning", 0))
-                    c3.metric("No data", summary.get("No data", 0))
-                    c4.metric("Error", summary.get("Error", 0))
-                    st.dataframe(inventory_to_dataframe(m_inv + o_inv), hide_index=True, width='stretch')
-                except Exception as e:
-                    st.warning(f"Could not load inventory: {e}")
+            readiness_panel = st.expander("Data Readiness Report", expanded=False,
+                                          key="benchmark_readiness_report", on_change="rerun")
+            if readiness_panel.open:
+                with readiness_panel:
+                    try:
+                        m_inv = build_model_inventory()
+                        o_inv = build_obs_inventory()
+                        summary = readiness_summary(m_inv + o_inv)
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("Ready", summary.get("Ready", 0))
+                        c2.metric("Warning", summary.get("Warning", 0))
+                        c3.metric("No data", summary.get("No data", 0))
+                        c4.metric("Error", summary.get("Error", 0))
+                        st.dataframe(inventory_to_dataframe(m_inv + o_inv), hide_index=True, width='stretch')
+                    except Exception as e:
+                        st.warning(f"Could not load inventory: {e}")
 
     # Run Benchmark Action
     observation_problems = []
+    coverage_cache = st.session_state.setdefault("benchmark_coverage_cache", {})
+    missing_coverage = []
     for row in active_rows:
         window = model_run_windows[row["_row_key"]]
         errors = temporal_settings_errors({**window, "probabilistic": row.get("_probabilistic", False)}, observation_years)
         observation_problems.extend(f"{row['Model']}: {error}" for error in errors)
         if not errors:
-            coverage = inspect_model_temporal_coverage(row["_exec_key"], window["eval_start"].year, window["eval_end"].year)
+            coverage_key = (row["_exec_key"], window["eval_start"].year, window["eval_end"].year,
+                            json.dumps(CONFIG_BENCHMARK_MODEL_CATALOG.get(row["_exec_key"], {}),
+                                       sort_keys=True, default=str))
+            cached_coverage = coverage_cache.get(coverage_key)
+            if cached_coverage is None or time.time() - cached_coverage["loaded_at"] > 300:
+                missing_coverage.append(coverage_key)
+                continue
+            coverage = cached_coverage["data"]
             if coverage["failures"]:
                 observation_problems.append(f"{row['Model']}: cannot read forecast metadata: {'; '.join(coverage['failures'])}")
             elif not coverage["dates"]:
                 observation_problems.append(f"{row['Model']}: no forecast initialization dates are available for these years. Adjust the evaluation period or model data configuration.")
             elif not any(initialization_matches_schedule(parts, window) for parts in coverage["dates"]):
                 observation_problems.append(f"{row['Model']}: no forecast initialization dates match this schedule and evaluation season. Adjust the selected days or dates.")
-            required_days = window["max_forecast_day"] + max(0, int(shared_settings["wet_spell_length"]) - 1)
+            confirmation_days = max(int(shared_settings["wet_spell_length"]),
+                                    int(shared_settings["dry_spell_search_extension"])
+                                    if shared_settings["dry_spell_limit"] > 0 else 0)
+            required_days = window["max_forecast_day"] + confirmation_days - 1
             too_short = [year for year, end in coverage["horizons"].items() if end < required_days]
             if too_short:
-                observation_problems.append(f"{row['Model']}: forecast files for {too_short} need at least {required_days} days to verify the selected window and wet spell.")
+                available = min(coverage['horizons'][year] for year in too_short)
+                latest = available - confirmation_days + 1
+                observation_problems.append(
+                    f"{row['Model']}: forecast files for {too_short} provide as few as {available} days, "
+                    f"but verification through day {window['max_forecast_day']} with the full "
+                    f"{confirmation_days}-day confirmation period needs day {required_days}. "
+                    f"These criteria support verification only through day {latest}. "
+                    "Choose a shorter verification window, supply longer forecasts, or explicitly "
+                    "change the onset criteria; 0 disables dry confirmation in the reference configuration.")
+    if missing_coverage and st.session_state.get("benchmark_coverage_task") is None:
+        st.session_state["benchmark_coverage_keys"] = missing_coverage
+        st.session_state["benchmark_coverage_task"] = BackgroundTask(
+            _load_benchmark_coverage, missing_coverage).start()
+    render_benchmark_coverage()
     for problem in observation_problems + verification_problems:
         st.error(problem)
-    st.markdown('<div class="run-section">', unsafe_allow_html=True)
-    c1, _ = st.columns([1, 2])
-    run_clicked = c1.button("Run Benchmark", key="btn_run", type="primary", width='stretch', disabled=not coverage_ready or bool(observation_problems or verification_problems) or st.session_state.get("benchmark_active_job") is not None)
-    st.markdown("</div>", unsafe_allow_html=True)
+    run_clicked = render_benchmark_run_controls(
+        disabled=not coverage_ready or bool(missing_coverage or observation_problems or verification_problems)
+        or st.session_state.get("benchmark_active_job") is not None)
 
     import hashlib
     settings_signature = hashlib.sha256(json.dumps({
@@ -3487,14 +3572,15 @@ def page() -> None:
                        "forecast_window": forecast_window})
             plans.append({"mode": "prob" if row.get("_probabilistic") else "det",
                           "model_key": row["_exec_key"], "label": row.get("Model", row["_exec_key"]), "config": rc})
-        st.session_state["benchmark_active_job"] = BenchmarkJob(run_momp_benchmark, plans, settings_signature).start()
+        job = BenchmarkJob(
+            run_momp_benchmark, plans, settings_signature,
+            resource_key=str(ROMP_DEMO_OUT_DIR.resolve()))
+        remember_benchmark(st.session_state, st.query_params, job)
+        job.start()
         st.rerun()
 
-    if st.session_state.get("benchmark_active_job") is not None:
-        render_benchmark_job()
-
     last_run = st.session_state.get("benchmark_last_run")
-    if last_run:
+    if last_run and st.session_state.get("benchmark_active_job") is None:
         if last_run.get("cancelled"):
             cleanup_warning = cancellation_warning(last_run)
             if cleanup_warning:
@@ -3519,8 +3605,17 @@ def page() -> None:
 
     # Results Section
     section_header("Results", "sky")
+    if st.session_state.get("benchmark_active_job") is not None:
+        st.caption("Saved results are available after the running benchmark finishes.")
+        return
+    if not st.toggle("Show saved results", value=False, key="benchmark_show_results",
+                     help="Load maps, metrics and figures when you are ready to view them."):
+        return
     if st.button("Refresh saved results", key="benchmark_refresh_results",
                  help="Reload saved metrics, maps and figures after a benchmark completes."):
+        st.session_state.pop("benchmark_inventory_cache", None)
+        st.session_state.pop("benchmark_coverage_cache", None)
+        st.session_state.pop("onset_years_result", None)
         st.cache_data.clear()
         st.rerun()
     tab_labels = ["Metric Map", "All Metrics", "Benchmark Outputs"]
@@ -3723,6 +3818,7 @@ def page() -> None:
         with res_tabs[1]:
             from ui.utils.metric_filters import (
                 lead_window_sort_key, load_probabilistic_metric_table,
+                load_probabilistic_distribution_stats,
                 metric_comparison_groups, metric_model_label, metric_model_options,
             )
 
@@ -3766,6 +3862,10 @@ def page() -> None:
                     # Keep configured models visible before they have generated outputs.
                     for metric in present_metrics:
                         for window in ow:
+                            # Filtering columns must not remove their comparison baseline.
+                            baseline_key = (metric, window, "Traditional Climatology")
+                            if baseline_key in tbl:
+                                selected[baseline_key] = tbl[baseline_key]
                             for model in group_models:
                                 selected.setdefault((metric, window, model), None)
                     st.markdown(build_metrics_table_html(selected, group_models, ow, baselines=probability_baselines).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
@@ -3787,16 +3887,34 @@ def page() -> None:
             section_header("Detailed Metric Distributions", "violet")
             st.caption(
                 "Distribution statistics computed directly from gridded model outputs. "
-                "Green = better (lower than baseline), Red = worse (higher than baseline). Bold = best value."
+                "Green = better than the reference, Red = worse. Bold = best value. "
+                "Lower error scores and higher skill scores/AUC are better. "
+                "Spatial means can differ from the pooled scores above."
             )
             spatial_models = {metric_model_label(output["model_label"]) for output in map_outputs}
             stats_df = compute_metric_distribution_stats() if om and ow and set(om) & spatial_models else pd.DataFrame()
+            probabilistic_models = [model for model in om if categories[model] == "Probabilistic"]
+            if probabilistic_models and ow:
+                probability_stats, grid_errors = load_probabilistic_distribution_stats(
+                    ROMP_DEMO_OUT_DIR, models=probabilistic_models, windows=ow)
+                if not probability_stats.empty:
+                    stats_df = pd.concat([stats_df, probability_stats], ignore_index=True)
+                if grid_errors:
+                    st.warning("Some probabilistic score grids could not be read: " + "; ".join(grid_errors))
+                available_pairs = (set(zip(probability_stats["Model"], probability_stats["Lead Window"]))
+                                   if not probability_stats.empty else set())
+                missing_grids = [f"{model} ({window})" for model in probabilistic_models for window in ow
+                                 if (model, window) not in available_pairs]
+                if missing_grids:
+                    st.info("Rerun Benchmark for these selections to generate per-grid probabilistic scores: "
+                            + ", ".join(missing_grids) + ". Existing CSV summaries cannot provide spatial percentiles.")
             if not stats_df.empty:
                 stats_df = stats_df.copy()
                 stats_df["Model"] = stats_df["Model"].map(metric_model_label)
+                reference_stats_df = stats_df
                 stats_df = stats_df[stats_df["Model"].isin(om) & stats_df["Lead Window"].isin(ow)]
             if stats_df.empty:
-                info_box("No gridded distributions are available for these selections. Scalar probabilistic results, when available, are shown above.", "amber")
+                info_box("No saved score grids are available for these selections. Run Benchmark to generate them.", "amber")
             else:
                 # Normalize string helper to prevent Unicode en-dash / hyphen key lookup misses
                 def _norm(s):
@@ -3816,12 +3934,16 @@ def page() -> None:
 
                     # Check for Climatology / Baseline model
                     clim_mask = g["Model"].apply(lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))
-                    clim_row = g[clim_mask]
+                    reference_group = reference_stats_df[
+                        (reference_stats_df["Lead Window"] == window) &
+                        (reference_stats_df["Metric"] == metric)]
+                    clim_row = reference_group[reference_group["Model"].apply(
+                        lambda m: any(k in _norm(m) for k in ["clim", "trad", "base", "ref"]))]
 
                     for stat in stat_cols:
                         stat_k = _norm(stat)
                         vals = pd.to_numeric(g[stat], errors="coerce").dropna()
-                        if not vals.empty:
+                        if not vals.empty and metric != "Reference AUC":
                             # Best value: minimum for error metrics, maximum for skill metrics
                             best_vals[(win_k, met_k, stat_k)] = float(vals.max()) if higher_better else float(vals.min())
 
@@ -3836,6 +3958,12 @@ def page() -> None:
                                 differences = (model_vals - baseline_value).abs()
                                 if not differences.empty:
                                     comparison_scales[(win_k, met_k, stat_k)] = float(differences.max())
+                        reference_column = f"Reference {stat}"
+                        if reference_column in g:
+                            references = pd.to_numeric(g[reference_column], errors="coerce")
+                            differences = (pd.to_numeric(g[stat], errors="coerce") - references).abs().dropna()
+                            if not differences.empty:
+                                comparison_scales[(win_k, met_k, stat_k)] = float(differences.max())
 
                 # Sort ordering
                 metric_order = {"false alarm rate": 0, "miss rate": 1, "mean absolute error": 2}
@@ -3864,7 +3992,11 @@ def page() -> None:
                         metric = str(row["Metric"])
                         met_k = _norm(metric)
                         higher_better = is_metric_higher_better(metric)
-                        is_fraction = bool(row.get("fraction", False)) or any(k in met_k for k in ["rate", "far", "mr"])
+                        fraction = row.get("fraction", False)
+                        is_fraction = (pd.notna(fraction) and bool(fraction)) or any(k in met_k for k in ["rate", "far", "mr"])
+                        unit_str = row.get("unit")
+                        if not isinstance(unit_str, str):
+                            unit_str = "%" if is_fraction else "days"
 
                         cells_html = [
                             f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left; '
@@ -3883,7 +4015,8 @@ def page() -> None:
                                 continue
 
                             val_float = float(val)
-                            formatted = f"{val_float:.1f}%" if is_fraction else f"{val_float:.1f} d"
+                            formatted = (f"{val_float:.1f}%" if unit_str == "%" else
+                                         f"{val_float:.1f} d" if unit_str == "days" else f"{val_float:.3f}")
 
                             # Apply bolding if best value across models
                             best_v = best_vals.get((win_k, met_k, stat_k))
@@ -3891,14 +4024,16 @@ def page() -> None:
                                 formatted = f"<b>{formatted}</b>"
 
                             # Color coding vs baseline using _distribution_cell_style
-                            base_v = baseline_vals.get((win_k, met_k, stat_k))
+                            base_v = row.get(f"Reference {stat}")
+                            if base_v is None or not np.isfinite(base_v):
+                                base_v = baseline_vals.get((win_k, met_k, stat_k))
                             scale = comparison_scales.get((win_k, met_k, stat_k))
                             comparison_style = _distribution_cell_style(
                                 val_float,
                                 base_v,
                                 scale,
                                 higher_better,
-                                is_baseline=is_clim,
+                                is_baseline=is_clim or metric == "Reference AUC",
                             )
 
                             cell_style = (
@@ -3906,20 +4041,22 @@ def page() -> None:
                             )
                             cells_html.append(f'<td style="{cell_style}">{formatted}</td>')
 
-                        unit_str = "%" if is_fraction else "days"
                         cells_html.append(
                             f'<td style="border:1px solid #cbd5e1; padding:8px 12px; text-align:center; '
                             f'color:#64748b; background-color:#ffffff;">{unit_str}</td>'
                         )
                         rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
 
+                    card_description = ("Per-grid probabilistic scores" if
+                                        group_df.get("probabilistic", pd.Series(False, index=group_df.index)).fillna(False).any()
+                                        else f"+/-{tolerance_days} day tolerance")
                     card_html = (
                         f'<div style="margin-bottom:1.75rem; background:#ffffff; border:1px solid #e2e8f0; '
                         f'border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,0.05);">'
                         f'<div style="font-size:1rem; font-weight:700; color:#0f172a; text-transform:uppercase;">'
                         f'{display_model} - {display_window}</div>'
                         f'<div style="font-size:0.8rem; color:#64748b; margin-bottom:12px;">'
-                        f'+/-{tolerance_days} day tolerance</div>'
+                        f'{card_description}</div>'
                         f'<table style="width:100%; border-collapse:collapse; font-size:0.88rem;">'
                         f'<thead><tr style="background-color:#f1f5f9; color:#0f172a; text-transform:uppercase; font-size:0.8rem;">'
                         f'<th style="border:1px solid #cbd5e1; padding:8px 12px; text-align:left;">METRIC</th>'
@@ -4047,71 +4184,90 @@ def page() -> None:
             with res_tabs[tab_labels.index("Onset Analysis")]:
                 section_header("Onset Time Series Analysis", "teal")
                 mode = st.radio("Location Selection Mode", ["Coordinates", "Woreda"], horizontal=True, key="ots_mode")
-                years = _available_years()
-                default_yr_idx = years.index(2021) if 2021 in years else len(years) - 1
-                year = st.selectbox("Year", years, index=default_yr_idx, key="ots_year")
-
-                lat, lon, label = None, None, None
-                if mode == "Coordinates":
-                    c1, c2 = st.columns(2)
-                    lat = c1.number_input("Latitude", value=8.5, step=0.25, format="%.4f", key="ots_lat")
-                    lon = c2.number_input("Longitude", value=39.2, step=0.25, format="%.4f", key="ots_lon")
-                    label = f"Lat {lat:.4f}, Lon {lon:.4f}"
+                years = None
+                years_result = st.session_state.get("onset_years_result")
+                if years_result and time.time() - years_result["loaded_at"] > 600:
+                    years_result = None
+                if years_result is None:
+                    if st.session_state.get("onset_years_task") is None:
+                        st.session_state["onset_years_task"] = BackgroundTask(_available_years).start()
+                    render_onset_years()
+                elif years_result["error"]:
+                    st.error(f"Could not load onset observation years: {years_result['error']}")
+                    if st.button("Retry onset observation years", key="onset_years_retry"):
+                        st.session_state.pop("onset_years_result", None)
+                        st.rerun()
                 else:
-                    shp_path = _find_shapefile_path()
-                    if shp_path:
-                        woredas = _load_woredas_cached(shp_path)
-                        if woredas:
-                            search_q = st.text_input("Filter Woreda", value=st.session_state.get("ots_search", ""), key="ots_search")
-                            woreda_list = list(woredas.keys())
-                            filtered_woredas = [w for w in woreda_list if search_q.lower() in w.lower()] if search_q.strip() else woreda_list
+                    years = years_result["years"]
+                if years:
+                    default_yr_idx = years.index(2021) if 2021 in years else len(years) - 1
+                    year = st.selectbox("Year", years, index=default_yr_idx, key="ots_year")
 
-                            if not filtered_woredas:
-                                st.warning("No woredas match the filter query.")
-                            else:
-                                prev_woreda = st.session_state.get("ots_selected_woreda_name")
-                                default_idx = (
-                                    filtered_woredas.index(prev_woreda)
-                                    if prev_woreda and prev_woreda in filtered_woredas
-                                    else 0
-                                )
-                                selected_woreda = st.selectbox(
-                                    "Select Woreda",
-                                    filtered_woredas,
-                                    index=default_idx,
-                                    key="ots_woreda_selectbox"
-                                )
-                                if selected_woreda:
-                                    st.session_state["ots_selected_woreda_name"] = selected_woreda
-                                    lat, lon = woredas[selected_woreda]
-                                    label = selected_woreda
-                        else:
-                            st.warning("No woredas found in shapefile.")
+                    lat, lon, label = None, None, None
+                    if mode == "Coordinates":
+                        c1, c2 = st.columns(2)
+                        lat = c1.number_input("Latitude", value=8.5, step=0.25, format="%.4f", key="ots_lat")
+                        lon = c2.number_input("Longitude", value=39.2, step=0.25, format="%.4f", key="ots_lon")
+                        label = f"Lat {lat:.4f}, Lon {lon:.4f}"
                     else:
-                        st.warning("Shapefile not found.")
+                        shp_path = _find_shapefile_path()
+                        if shp_path:
+                            woredas = _load_woredas_cached(shp_path)
+                            if woredas:
+                                search_q = st.text_input("Filter Woreda", value=st.session_state.get("ots_search", ""), key="ots_search")
+                                woreda_list = list(woredas.keys())
+                                filtered_woredas = [w for w in woreda_list if search_q.lower() in w.lower()] if search_q.strip() else woreda_list
 
-                if st.button("Run Onset Analysis", type="primary", key="btn_run_ots") and lat is not None and lon is not None:
-                    with st.spinner("Analyzing onset timeseries..."):
-                        pngs, grid_lat, grid_lon = _analyze_onset_streamlit(year, lat, lon)
-                        st.session_state["onset_pngs"] = pngs
-                        st.session_state["onset_meta"] = {
-                            "year": year,
-                            "lat": lat,
-                            "lon": lon,
-                            "label": label,
-                            "grid_lat": grid_lat,
-                            "grid_lon": grid_lon,
-                        }
+                                if not filtered_woredas:
+                                    st.warning("No woredas match the filter query.")
+                                else:
+                                    prev_woreda = st.session_state.get("ots_selected_woreda_name")
+                                    default_idx = (
+                                        filtered_woredas.index(prev_woreda)
+                                        if prev_woreda and prev_woreda in filtered_woredas
+                                        else 0
+                                    )
+                                    selected_woreda = st.selectbox(
+                                        "Select Woreda",
+                                        filtered_woredas,
+                                        index=default_idx,
+                                        key="ots_woreda_selectbox"
+                                    )
+                                    if selected_woreda:
+                                        st.session_state["ots_selected_woreda_name"] = selected_woreda
+                                        lat, lon = woredas[selected_woreda]
+                                        label = selected_woreda
+                            else:
+                                st.warning("No woredas found in shapefile.")
+                        else:
+                            st.warning("Shapefile not found.")
 
-                if "onset_pngs" in st.session_state and st.session_state["onset_pngs"]:
-                    meta = st.session_state["onset_meta"]
-                    st.info(
-                        f"**Results for {meta.get('label') or 'Selected Location'}** | "
-                        f"Year: {meta['year']} | "
-                        f"Snapped to Grid: Lat {meta['grid_lat']:.4f}, Lon {meta['grid_lon']:.4f}"
-                    )
-                    for img_bytes in st.session_state["onset_pngs"]:
-                        st.image(img_bytes, width='stretch')
+                    onset_busy = st.session_state.get("onset_active_task") is not None
+                    if st.button("Run Onset Analysis", type="primary", key="btn_run_ots",
+                                 disabled=onset_busy or lat is None or lon is None) and not onset_busy:
+                        # Capture settings now; later widget edits must not relabel the result.
+                        st.session_state["onset_task_meta"] = {
+                            "year": year, "lat": lat, "lon": lon, "label": label}
+                        st.session_state.pop("onset_error", None)
+                        st.session_state.pop("onset_warning", None)
+                        st.session_state["onset_active_task"] = BackgroundTask(
+                            _analyze_onset_streamlit, year, lat, lon).start()
+                        st.rerun()
+
+                    if st.session_state.get("onset_error"):
+                        st.error(st.session_state["onset_error"])
+                    if st.session_state.get("onset_warning"):
+                        st.warning(st.session_state["onset_warning"])
+
+                    if "onset_pngs" in st.session_state and st.session_state["onset_pngs"]:
+                        meta = st.session_state["onset_meta"]
+                        st.info(
+                            f"**Results for {meta.get('label') or 'Selected Location'}** | "
+                            f"Year: {meta['year']} | "
+                            f"Snapped to Grid: Lat {meta['grid_lat']:.4f}, Lon {meta['grid_lon']:.4f}"
+                        )
+                        for img_bytes in st.session_state["onset_pngs"]:
+                            st.image(img_bytes, width='stretch')
 
     # Tab 5: Skill vs Baseline
     if PHASE_4_AVAILABLE and "Skill vs Baseline" in tab_labels:
@@ -4182,10 +4338,14 @@ def page() -> None:
 
                     # Executive Summary Metrics
                     st.markdown("#### Report Summary")
+                    report_rows = collect_evaluated_models(
+                        ROMP_DEMO_OUT_DIR, CONFIG_BENCHMARK_MODEL_CATALOG, model_registry,
+                        reference_models=(shared_settings.get('baseline_forecast'),))
+                    st.caption(
+                        'Models are counted from stored benchmark outputs, independently of current selection. '
+                        'Check output metadata before combining results with the current input settings.')
                     c1, c2, c3, c4 = st.columns(4)
-                    det_count = sum(1 for r in active_rows if r.get("Category") == "Deterministic")
-                    prob_count = sum(1 for r in active_rows if r.get("Category") == "Probabilistic")
-                    c1.metric("Models Evaluated", len(active_rows))
+                    c1.metric("Models Evaluated", len(report_rows))
                     c2.metric("Ground Truth", ground_truth)
                     c3.metric("Forecast Window", forecast_window)
                     c4.metric("Baseline", shared_settings.get("baseline_forecast", "climatology"))
@@ -4243,7 +4403,8 @@ def page() -> None:
                                     "benchmark_coverage": benchmark_coverage,
                                     "forecast_window": forecast_window,
                                     "shared_settings": shared_settings,
-                                    "active_rows": active_rows,
+                                    "active_rows": report_rows,
+                                    "model_count_basis": "stored_outputs",
                                     "fair_plan": st.session_state.get("fair_comparison_plan"),
                                     "map_outputs": map_outputs,
                                     "scores_df": scores_df,

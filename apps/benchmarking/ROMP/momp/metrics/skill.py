@@ -2,7 +2,7 @@
 from momp.stats.climatology import compute_climatological_onset_dataset
 from momp.stats.bins import multi_year_forecast_obs_pairs, multi_year_climatological_forecast_obs_pairs
 from momp.io.input import available_forecast_years
-from momp.stats.score import calculate_brier_score, calculate_auc, calculate_paired_rps, calculate_brier_score_climatology, calculate_auc_climatology, calculate_skill_scores, probe_prob
+from momp.stats.score import calculate_brier_score, calculate_auc, calculate_paired_rps, calculate_brier_score_climatology, calculate_auc_climatology, calculate_skill_scores, probe_prob, match_samples, calculate_paired_brier
 from momp.utils.printing import tuple_to_str
 from momp.io.output import save_ref_score_results, load_ref_score_results
 #from momp.lib.control import restore_args
@@ -146,8 +146,13 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
         #sys.exit()
 
 
+        forecast_obs_df, climatology_obs_df = match_samples(forecast_obs_df, climatology_obs_df)
+        results["forecast_obs_df"] = forecast_obs_df
         results["climatology_obs_df"] = climatology_obs_df
-        
+        results["reference_obs_df"] = climatology_obs_df
+        if AUC:
+            results["AUC"] = calculate_auc(forecast_obs_df)
+
 #        print("\n clim_onset = ", clim_onset)
 #        import pandas as pd
 #        pd.set_option('display.max_rows', None)
@@ -161,15 +166,16 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
 #        sys.exit()
 
         if BS:
-            brier_ref = calculate_brier_score_climatology(climatology_obs_df)
-            results["BS_ref"] = brier_ref
+            results["BS"], results["BS_ref"] = calculate_paired_brier(
+                forecast_obs_df, climatology_obs_df)
         else:
             results["BS_ref"] = None
         
         if RPS:
+            results["rps_forecast_obs_df"] = extract_pd_bins(forecast_obs_df_all, rps_bins)
+            results["rps_reference_obs_df"] = extract_pd_bins(climatology_obs_df_all, rps_bins)
             results["RPS"], results["RPS_ref"] = calculate_paired_rps(
-                extract_pd_bins(forecast_obs_df_all, rps_bins),
-                extract_pd_bins(climatology_obs_df_all, rps_bins),
+                results["rps_forecast_obs_df"], results["rps_reference_obs_df"],
             )
         else:
             results["RPS_ref"] = None
@@ -196,17 +202,23 @@ def create_score_results(*, BS, RPS, AUC, skill_score,
         else:
             ref_obs_df_all = multi_year_forecast_obs_pairs(**kwargs_ref)
         ref_obs_df = extract_pd_bins(ref_obs_df_all, day_bins)
+        forecast_obs_df, ref_obs_df = match_samples(forecast_obs_df, ref_obs_df)
+        results["forecast_obs_df"] = forecast_obs_df
+        results["reference_obs_df"] = ref_obs_df
+        if AUC:
+            results["AUC"] = calculate_auc(forecast_obs_df)
 
         if BS:
-            brier_ref = calculate_brier_score(ref_obs_df)
-            results["BS_ref"] = brier_ref
+            results["BS"], results["BS_ref"] = calculate_paired_brier(
+                forecast_obs_df, ref_obs_df)
         else:
             results["BS_ref"] = None
         
         if RPS:
+            results["rps_forecast_obs_df"] = extract_pd_bins(forecast_obs_df_all, rps_bins)
+            results["rps_reference_obs_df"] = extract_pd_bins(ref_obs_df_all, rps_bins)
             results["RPS"], results["RPS_ref"] = calculate_paired_rps(
-                extract_pd_bins(forecast_obs_df_all, rps_bins),
-                extract_pd_bins(ref_obs_df_all, rps_bins),
+                results["rps_forecast_obs_df"], results["rps_reference_obs_df"],
             )
         else:
             results["RPS_ref"] = None

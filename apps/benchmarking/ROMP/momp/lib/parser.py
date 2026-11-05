@@ -263,6 +263,8 @@ def parse_window_list(string):
     try:
         # Split by space to get individual pairs, then split by comma
         pairs = [tuple(map(int, p.split(','))) for p in string.split()]
+        if not pairs or any(len(pair) != 2 for pair in pairs):
+            raise ValueError('Expected non-empty start,end pairs')
         return tuple(pairs)
     except Exception:
         raise argparse.ArgumentTypeError("Window list must be in format 'start,end start,end' (e.g., '1,15 16,20')")

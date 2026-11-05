@@ -45,6 +45,7 @@ dependencies = [
     "plotly>=7.1.0",
     "google-cloud-storage>=3.16.0",
     "gcsfs>=2025.3.2",
+    "scikit-learn>=1.7.2",
 ]
 
 [project.optional-dependencies]
@@ -63,7 +64,7 @@ momp-run = "momp.driver:run_momp"
 
 [tool.setuptools]
 # Top-level .py files in the project root
-py-modules = ["config", "dataset", "features", "plots", "utils"]
+py-modules = ["config", "run_momp", "run_app", "run_blending"]
 include-package-data = true
 
 [tool.setuptools.package-data]

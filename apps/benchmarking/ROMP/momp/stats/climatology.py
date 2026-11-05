@@ -68,12 +68,13 @@ def compute_climatological_onset(
                     raise ValueError("thresh_da must be scalar.")
 
                 rainfall_ds = load_imd_rainfall(year, **kwargs)
-                rainfall_all_years.append(rainfall_ds)
             else:
                 rainfall_ds = load_imd_rainfall(year, **kwargs)
 
             # Detect onset for this year
             onset_da = detect_observed_onset(rainfall_ds, thresh_da, year, **kwargs)
+            if grid_point:
+                rainfall_all_years.append(rainfall_ds)
 
             # Convert onset dates to day of year
             if np.issubdtype(onset_da.dtype, np.datetime64):
@@ -84,9 +85,11 @@ def compute_climatological_onset(
             onset_doy = onset_doy.where(~onset_da.isnull())
             all_onset_days.append(onset_doy)
 
-        except Exception as e:
-            print(f"Warning: Could not process year {year} in compute_climatological_onset: {e}")
+        except FileNotFoundError as exc:
+            print(f"Skipping missing climatology year {year}: {exc}")
             continue
+        except Exception as exc:
+            raise ValueError(f"Could not compute climatological onset for year {year}: {exc}") from exc
 
     if not all_onset_days:
         raise ValueError("No valid years found for climatology computation")
@@ -290,8 +293,6 @@ def compute_climatological_onset_dataset(
 
         try:
             rainfall_ds = load_imd_rainfall(year, **kwargs)
-            last_ds = rainfall_ds
-
             onset_da = detect_observed_onset(rainfall_ds, thresh_slice, year, **kwargs)
 
             valid_onsets = (~pd.isna(onset_da.values)).sum()
@@ -299,35 +300,31 @@ def compute_climatological_onset_dataset(
 
             print(f"Year {year}: Found onset in {valid_onsets}/{total_points} grid points ({valid_onsets/total_points:.1%})")
 
-            onset_arrays.append(onset_da.values)
+            onset_arrays.append(onset_da)
+            last_ds = rainfall_ds
             valid_years.append(year)
 
-        except Exception as e:
-            print(f"Error processing year {year}: {e}")
+        except FileNotFoundError as exc:
+            print(f"Skipping missing climatology year {year}: {exc}")
             continue
+        except Exception as exc:
+            raise ValueError(f"Could not compute climatological onset for year {year}: {exc}") from exc
 
     if not onset_arrays:
         raise ValueError("No years were successfully processed")
 
-    onset_3d = np.stack(onset_arrays, axis=0)
-
-    climatological_onset_da = xr.DataArray(
-        onset_3d,
-        coords=[
-            ("year", valid_years),
-            ("lat", last_ds.lat.values),
-            ("lon", last_ds.lon.values),
-        ],
-        name="climatological_onset_dates",
-        attrs={
-            "description": "Onset dates for climatological ensemble",
-            "method": f"MOK {mok} filter" if mok else "no date filter",
-            "years_processed": valid_years,
-            "total_years": len(valid_years),
-        },
-    )
-
-    total_possible = len(valid_years) * last_ds[0].size
+    # Coordinate labels must agree; positional stacking silently relabels cells
+    # when annual grids differ or their ordering changes.
+    climatological_onset_da = xr.concat(
+        onset_arrays, dim=pd.Index(valid_years, name="year"), join="exact"
+    ).rename("climatological_onset_dates")
+    climatological_onset_da.attrs = {
+        "description": "Onset dates for climatological ensemble",
+        "method": f"MOK {mok} filter" if mok else "no date filter",
+        "years_processed": valid_years,
+        "total_years": len(valid_years),
+    }
+    total_possible = climatological_onset_da.size
     total_valid = (~pd.isna(climatological_onset_da.values)).sum()
 
     print(f"\n{'='*60}")

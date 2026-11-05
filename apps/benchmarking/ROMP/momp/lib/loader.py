@@ -1,4 +1,5 @@
 import importlib.resources
+from importlib import resources
 import os
 from pathlib import Path
 import argparse
@@ -239,9 +240,10 @@ def build_cfg(cli_args=None):
 
 
 def get_cfg(cli_args=None, validate=True):
-    global _cfg
-    if _cfg is None:
+    global _cfg, _setting
+    if _cfg is None or cli_args is not None:
         _cfg = build_cfg(cli_args)
+        _setting = None
 
     if validate:
         try:
@@ -266,7 +268,7 @@ def set_cfg(cfg):
 
 def get_setting(cli_args=None, validate=True):
     global _setting
-    if _setting is None:
+    if _setting is None or cli_args is not None:
         cfg = get_cfg(cli_args, validate=validate)
         #_setting = init_dataclass(Setting, cfg)
         _setting = init_dataclass(Setting, vars(cfg))

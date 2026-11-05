@@ -43,6 +43,7 @@ from momp.stats.detect import (
     detect_observed_onset,
     compute_onset_for_deterministic_model,
     compute_onset_for_all_members,
+    aggregate_ensemble_onset,
 )
 from momp.stats.climatology import (
     compute_climatological_onset,
@@ -135,8 +136,8 @@ def compute_onset_metrics_with_windows(
     """
     Computes contingency matrix metrics (TP, FP, FN, TN, MAE) following verification window logic.
 
-    Timing errors outside tolerance leave both a false predicted event (FP)
-    and a missed observed event (FN) when both dates fall in the window.
+    Each forecast contributes one contingency outcome. As in reference ROMP,
+    an in-window prediction outside the timing tolerance is a false positive.
     """
     forecast_bin_start = verification_window[0]
     forecast_bin_end = verification_window[1]
@@ -184,10 +185,6 @@ def compute_onset_metrics_with_windows(
                     mae_tp.append(abs_diff_days)
                 else:
                     FP += 1
-                    # The predicted date is a false alarm and the observed
-                    # in-window event was also missed at the allowed tolerance.
-                    if is_observed_event:
-                        FN += 1
                     if abs_diff_days is not None:
                         mae_fp.append(abs_diff_days)
             elif is_observed_event:
@@ -319,7 +316,10 @@ def compute_metrics_multiple_years(
         if probabilistic and not ref_clim:
             print("Extracting ensemble forecast data ...")
             print("Computing onset for ensemble forecast ...")
-            onset_df = compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs)
+            onset_df = aggregate_ensemble_onset(
+                compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs),
+                onset_percentage_threshold=onset_percentage_threshold,
+            )
 
         elif not ref_clim:
             print("Extracting model forecast data ...")
@@ -441,7 +441,10 @@ def ens_compute_metrics_multiple_years(
         if probabilistic and not ref_clim:
             print("-------Extracting ensemble forecast data ...")
             print("-------Computing onset for ensemble forecast ...")
-            onset_df = compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs)
+            onset_df = aggregate_ensemble_onset(
+                compute_onset_for_all_members(p_model, thresh_da, onset_da, **kwargs),
+                onset_percentage_threshold=onset_percentage_threshold,
+            )
 
         elif ref_clim:
             print("-------Computing onset for climatology as forecast ...")

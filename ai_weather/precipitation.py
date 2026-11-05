@@ -3,12 +3,12 @@
 import warnings
 
 
-def precipitation_to_mm(data, unit_cvt=None):
+def precipitation_to_mm(data, unit_cvt=None, *, sample_duration_days=None):
     """Convert declared rainfall amounts to mm; require a fallback if unlabeled.
 
-    Source units take precedence over catalog multipliers. Rate units require
-    time integration and are rejected. The returned mm metadata makes repeated
-    conversion safe, and the input array is never modified in place.
+    Source units take precedence over catalog multipliers. Daily mm rates require
+    an explicit sample duration for integration. Other rates are rejected. The
+    returned mm metadata makes repeated conversion safe; inputs are not modified.
     """
     import logging
     import math
@@ -26,6 +26,12 @@ def precipitation_to_mm(data, unit_cvt=None):
     }
     if normalized in factors:
         factor = factors[normalized]
+    elif normalized in {'mm/day', 'mm/d', 'mmday-1', 'mmday^-1', 'mmd-1', 'mmd^-1'}:
+        if sample_duration_days is None:
+            raise ValueError("Daily precipitation rates require an explicit sample duration for time integration.")
+        factor = float(sample_duration_days)
+        if not math.isfinite(factor) or factor <= 0:
+            raise ValueError("The precipitation sample duration must be finite and positive.")
     elif units:
         raise ValueError(f"Unsupported precipitation units {units!r}. Supply rainfall amounts in m, cm, mm or kg m-2; rates require time integration.")
     else:

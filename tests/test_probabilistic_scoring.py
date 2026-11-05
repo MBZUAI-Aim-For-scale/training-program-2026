@@ -115,6 +115,9 @@ class ProbabilisticScoringTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     result = run(**arguments)
                 rps_pairs = rps.call_args.args[0]
+                pd.testing.assert_frame_equal(result["rps_forecast_obs_df"], rps_pairs)
+                pd.testing.assert_frame_equal(result["rps_reference_obs_df"], rps.call_args.args[1])
+                self.assertIsNotNone(result["reference_obs_df"])
                 self.assertEqual(len(rps_pairs), 10)
                 self.assertNotIn("Days 16-30", set(rps_pairs.bin_label))
                 self.assertIn("Before day 16", set(rps_pairs.bin_label))
@@ -158,6 +161,8 @@ class ProbabilisticScoringTests(unittest.TestCase):
               "_fit_forecast_horizon": lambda *args: (2, 0, 3),
               "restore_args": lambda func, kwargs, bound: {**kwargs, **{
                   key: value for key, value in bound.items() if key != "kwargs"}}}
+        from momp.utils.standard import align_spatial_grid
+        ns['align_spatial_grid'] = align_spatial_grid
         load_functions("stats/detect.py", ns, {"detect_onset", "compute_onset_for_all_members"})
         load_functions("stats/bins.py", ns, {"create_forecast_observation_pairs_with_bins"})
         values = np.full((1, 3, 3, 1, 1), np.nan)
@@ -198,6 +203,8 @@ class ProbabilisticScoringTests(unittest.TestCase):
               "_fit_forecast_horizon": lambda *args: (2, 0, 3),
               "restore_args": lambda func, kwargs, bound: {**kwargs, **{
                   key: value for key, value in bound.items() if key != "kwargs"}}}
+        from momp.utils.standard import align_spatial_grid
+        ns['align_spatial_grid'] = align_spatial_grid
         load_functions("stats/detect.py", ns, {"detect_onset", "compute_onset_for_all_members"})
         load_functions("stats/bins.py", ns, {"create_forecast_observation_pairs_with_bins"})
         path = MOMP / "stats/bins.py"

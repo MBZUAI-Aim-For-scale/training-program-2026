@@ -132,6 +132,8 @@ def coords_fmt(ds_tag, *, region=None, **kwargs):
 
     lats, latn, lonw, lone, ds_tag = lon_swap(ds_tag, region=region, **kwargs_clean)
     ds_tag = lat_swap(ds_tag)
+    if "lon" in ds_tag.coords and np.issubdtype(ds_tag.lon.dtype, np.number):
+        ds_tag = ds_tag.sortby("lon")
     return lats, latn, lonw, lone, ds_tag
 
 
@@ -174,19 +176,19 @@ def region_select(ds, *, region=None, nc_mask=None, land_only=False, shp_only=Fa
         try:
             ds_reg = apply_nc_mask(ds_reg, nc_mask)
         except Exception as e:
-            print(f"[WARNING] Could not apply nc_mask ({nc_mask}): {e}")
+            raise ValueError(f"Could not apply required nc_mask ({nc_mask}): {e}") from e
 
     if land_only:
         try:
             ds_reg = mask_land(ds_reg)
         except Exception as e:
-            print(f"[WARNING] Could not apply land_mask: {e}")
+            raise ValueError(f"Could not apply required land_mask: {e}") from e
 
     if shp_only:
         try:
             ds_reg = shp_mask(ds_reg, region=region)
         except Exception as e:
-            print(f"[WARNING] Could not apply shp_mask for region '{region}': {e}")
+            raise ValueError(f"Could not apply required shp_mask for region '{region}': {e}") from e
 
     return ds_reg
 

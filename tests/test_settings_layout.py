@@ -9,6 +9,63 @@ from streamlit.testing.v1 import AppTest
 
 
 class SettingsLayoutTests(unittest.TestCase):
+    def test_deterministic_filter_keeps_hidden_baseline_for_summary_and_distributions(self):
+        source = Path("ui/pages/short_medium_benchmarking.py").read_text()
+        tree = ast.parse(source)
+        definitions = "\n\n".join(ast.get_source_segment(source, node) for node in tree.body
+                                  if isinstance(node, ast.FunctionDef) and node.name in {
+                                      "build_metrics_table_html", "_distribution_cell_style"})
+        page = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                    and node.name == "page")
+        metrics_tab = next(node for node in page.body if isinstance(node, ast.If)
+                           and ast.unparse(node.test) == "res_tabs[1].open")
+        setup = '''
+from __future__ import annotations
+import streamlit as st
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from types import SimpleNamespace
+class OpenTab:
+    open = True
+    def __enter__(self): return self
+    def __exit__(self, *args): return False
+res_tabs = [None, OpenTab()]
+config = SimpleNamespace(ref_model='climatology')
+CONFIG_BENCHMARK_MODEL_CATALOG = {
+    'AIFS': {'model_name': 'aifs_single'}, 'FuXi': {'model_name': 'fuxi'}}
+ROMP_DEMO_OUT_DIR = Path('/nonexistent/metrics-test')
+window = 'Days 1–15'
+map_outputs = [dict(path=model, model_label=model, windows=[window],
+                    contingency_definition='timing_matched_v2')
+               for model in ['AIFS Single', 'FuXi', 'Traditional Climatology']]
+def load_metric_values_by_window_cached(path):
+    value = {'AIFS Single': 2., 'FuXi': 8., 'Traditional Climatology': 5.}[path]
+    return {window: {'Mean Absolute Error days': value}}
+def compute_metric_distribution_stats():
+    return pd.DataFrame([
+        {'Model': model, 'Lead Window': window, 'Metric': 'Mean Absolute Error',
+         **{stat: value for stat in ['Mean', 'Min', 'Median', 'P75', 'P90', 'Max']}}
+        for model, value in [('AIFS Single', 2.), ('FuXi', 8.), ('Traditional Climatology', 5.)]])
+def is_metric_higher_better(metric): return False
+def info_box(text, color): st.info(text)
+def section_header(text, color): st.subheader(text)
+'''
+        app = AppTest.from_string(setup + definitions + "\n" + ast.get_source_segment(source, metrics_tab))
+        app.session_state["metrics_model_category"] = "Deterministic"
+        app.run()
+        self.assertFalse(app.exception)
+        summary = next(item.value for item in app.markdown if 'all-metrics-table' in item.value)
+        self.assertIn("34,197,94", summary)
+        self.assertIn("239,68,68", summary)
+        self.assertIn("font-weight:700", summary)
+        self.assertNotIn("<th>Traditional Climatology</th>", summary)
+        distributions = next(item.value for item in app.markdown if 'AIFS_SINGLE - ' in item.value)
+        self.assertIn("34,197,94", distributions)
+        self.assertIn("239,68,68", distributions)
+        self.assertIn("<b>2.0 d</b>", distributions)
+        self.assertNotIn("CLIMATOLOGY - ", distributions)
+
     def test_advanced_controls_are_in_right_column_beside_masks(self):
         source = Path("ui/pages/short_medium_benchmarking.py").read_text()
         function = next(n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef)

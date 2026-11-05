@@ -167,26 +167,38 @@ def open_dataset(path: Any, **kwargs) -> xr.Dataset:
         f = fs.open(clean_p, "rb")
 
         try:
-            return xr.open_dataset(f, **{"engine": "h5netcdf", **kwargs})
-        except ImportError as err:
-            if "h5py" in str(err):
-                raise ImportError(
-                    "Failed to stream NetCDF4 file from GCS because 'h5py' is missing. "
-                    "Run `uv pip install h5py` inside your python environment."
-                ) from err
-            raise
-        except Exception:
             try:
+                dataset = xr.open_dataset(f, **{"engine": "h5netcdf", **kwargs})
+            except Exception as first_error:
+                if "engine" in kwargs or isinstance(first_error, ImportError):
+                    raise
                 f.seek(0)
-                return xr.open_dataset(f, **{"engine": "scipy", **kwargs})
-            except Exception as fallback_err:
-                raise RuntimeError(
-                    f"Failed to open NetCDF dataset from GCS ({path_str}). "
-                    f"Error: {fallback_err}"
-                ) from fallback_err
+                try:
+                    dataset = xr.open_dataset(f, engine="scipy", **kwargs)
+                except Exception as fallback_error:
+                    raise RuntimeError(
+                        f"Failed to open NetCDF dataset from GCS ({path_str}): {fallback_error}"
+                    ) from fallback_error
+        except BaseException:
+            f.close()
+            raise
 
-    # Local Filesystem Opening
+        backend_close = dataset._close
+
+        def close_remote():
+            try:
+                if backend_close is not None:
+                    backend_close()
+            finally:
+                f.close()
+
+        dataset.set_close(close_remote)
+        return dataset
+
+    # An explicitly requested engine is authoritative; preserve its original error.
+    if "engine" in kwargs:
+        return xr.open_dataset(path_str, **kwargs)
     try:
         return xr.open_dataset(path_str, **kwargs)
-    except Exception:
+    except (OSError, ValueError):
         return xr.open_dataset(path_str, engine="netcdf4", **kwargs)

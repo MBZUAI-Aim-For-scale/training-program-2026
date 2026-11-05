@@ -4,12 +4,33 @@ don't compete for memory). State lives in st.session_state["runs"].
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
 import pandas as pd
 import streamlit as st
 
 from . import catalog, jobs, store
 
 READY, DOWNLOAD, RUN, SKIP = "ready", "download", "run", "skip"
+
+# Downloads use only file/network APIs. Session state is updated by tick on the UI thread.
+_download_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="forecast-download")
+_download_lock = threading.Lock()
+_downloads = {}
+
+
+def _download(model, name):
+    # Two sessions requesting the same destination must not write the same .part file.
+    with _download_lock:
+        key = (model, name)
+        pending = _downloads.get(key)
+        if pending is None or pending.done():
+            for old in [key for key, future in _downloads.items() if future.done()]:
+                del _downloads[old]
+            pending = _download_pool.submit(store.download, model, name)
+            _downloads[key] = pending
+        return pending
 
 
 def members_for(m: catalog.Model, members: int) -> int:
@@ -46,14 +67,16 @@ def signature(keys, init, lead_days, members) -> tuple:
 def state(sig) -> dict:
     """The run state for these settings (a fresh one when the settings change)."""
     ss = st.session_state
-    if ss.get("runs") is None or ss["runs"]["sig"] != sig:
+    if ss.get("runs") is None or (ss["runs"]["sig"] != sig and not busy(ss["runs"])):
         ss["runs"] = dict(sig=sig, started=False, paths={}, queue=[], running=None, job=None,
-                          failed={}, plan={})
+                          failed={}, plan={}, download=None)
     return ss["runs"]
 
 
 def start(s: dict, p: dict) -> None:
-    s.update(started=True, plan=p, failed={}, running=None, job=None,
+    if busy(s):
+        return
+    s.update(started=True, plan=p, failed={}, running=None, job=None, download=None,
              paths={k: info for k, (w, info, _) in p.items() if w == READY},
              queue=[k for k, (w, _, _) in p.items() if w in (DOWNLOAD, RUN)])
 
@@ -63,7 +86,16 @@ def busy(s: dict) -> bool:
 
 
 def tick(s: dict) -> None:
-    """Advance: collect a finished run, then start the next one (downloads happen right here)."""
+    """Poll without waiting; keep GPU runs sequential and download off the UI thread."""
+    download = s.get("download")
+    if download is not None:
+        if not download.done():
+            return
+        try:
+            s["paths"][s["running"]] = str(download.result())
+        except Exception as exc:
+            s["failed"][s["running"]] = f"download failed: {exc}"
+        s["running"] = s["download"] = None
     if s["running"]:
         js = jobs.status(s["job"])
         if js["state"] == "done":
@@ -76,13 +108,15 @@ def tick(s: dict) -> None:
         k = s["queue"].pop(0)
         what, info, req = s["plan"][k]
         if what == DOWNLOAD:
-            try:
-                with st.spinner(f"Downloading the saved {catalog.BY_KEY[k].name} run from the shared bucket…"):
-                    s["paths"][k] = str(store.download(k, info[0]))
-            except Exception as e:  # network or permission trouble
-                s["failed"][k] = f"download failed: {e}"
+            s["download"] = _download(k, info[0])
+            s["running"] = k
         else:
-            s["running"], s["job"] = k, jobs.launch(req)
+            try:
+                s["job"] = jobs.launch(req)
+                s["running"] = k
+            except Exception as exc:
+                s["failed"][k] = f"could not start: {exc}"
+
 
 
 def status_table(s: dict, p: dict) -> pd.DataFrame:
@@ -94,6 +128,8 @@ def status_table(s: dict, p: dict) -> pd.DataFrame:
             status = "loaded"
         elif what == SKIP:
             status = f"not included: {info}"
+        elif s.get("running") == k and s.get("download") is not None:
+            status = "Task running: downloading saved run in the background…"
         elif s.get("running") == k:
             js = jobs.status(s["job"])
             status = (f"running on the Spark: {js.get('message', '')} "
@@ -121,3 +157,43 @@ def button_label(p: dict) -> str:
         parts.append(f"run {n[RUN]} model{'s' if n[RUN] > 1 else ''}"
                      + (" one after another" if n[RUN] > 1 else ""))
     return (" and ".join(parts) or "nothing to run").capitalize()
+
+
+def launch_onset_movies(requests):
+    """Render movies in an isolated process; shared Matplotlib state stays out of the UI."""
+    import os
+    import pickle
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    folder = tempfile.TemporaryDirectory(prefix="forecast-onset-")
+    payload = Path(folder.name) / "request.pkl"
+    payload.write_bytes(pickle.dumps(requests))
+    log = (Path(folder.name) / "worker.log").open("w")
+    command = """
+import fcntl
+import pickle
+import sys
+from apps.forecasting import onset_view
+
+requests = pickle.load(open(sys.argv[1], 'rb'))
+onset_view.MOVIES.mkdir(parents=True, exist_ok=True)
+# Multiple sessions can request the same GIF; serialize writers across processes.
+with (onset_view.MOVIES / '.onset-render.lock').open('a') as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    for args in requests:
+        onset_view.make_movie(*args, progress=lambda i, n: print(f'Frame {i}/{n}', flush=True))
+"""
+    env = dict(os.environ, MPLBACKEND="Agg")
+    try:
+        process = subprocess.Popen([sys.executable, "-c", command, str(payload)],
+                                   cwd=Path(__file__).resolve().parents[2], env=env,
+                                   stdout=log, stderr=subprocess.STDOUT)
+    except Exception:
+        folder.cleanup()
+        raise
+    finally:
+        log.close()
+    return {"process": process, "folder": folder}

@@ -20,7 +20,7 @@ import xarray as xr
 import streamlit as st
 
 # Import from config
-from config import (
+from ai_weather.config import (
     APP_DIR,
     PROJECT_ROOT,
     ROMP_ROOT,
@@ -82,7 +82,7 @@ BENCHMARK_METHOD = {
     "wet_spell": 3,
     "dry_threshold": 1,
     "dry_spell": 7,
-    "dry_extent": 21,
+    "dry_extent": 0,
     "start_month_day": (5, 1),
     "end_month_day": (9, 30),
     "mok": None,
@@ -523,7 +523,7 @@ def compute_point_onset_history(dataset_key, lat0, lon0, onset_params, years):
             onset_params["start_month"], onset_params["start_day"],
             onset_params["end_month"], onset_params["end_day"]
         )
-        from config import get_operational_season_context
+        from ai_weather.config import get_operational_season_context
         season = get_operational_season_context()
         seas_total = float(df_year[df_year["month"].isin(season["months"])]["rain"].sum())
         history.append({"year": year, "onset_doy": int(pd.Timestamp(od).dayofyear) if od else np.nan, "season_total_mm": seas_total})
@@ -602,7 +602,7 @@ def compute_station_onset_history(lat0, lon0, onset_params, emi_meta, emi_ts, ye
             onset_params["start_month"], onset_params["start_day"],
             onset_params["end_month"], onset_params["end_day"]
         )
-        from config import get_operational_season_context
+        from ai_weather.config import get_operational_season_context
         season = get_operational_season_context()
         seas_total = float(df_year[pd.to_datetime(df_year["time"]).dt.month.isin(season["months"])]["rain"].sum())
         history.append({"year": year, "onset_doy": int(pd.Timestamp(od).dayofyear) if od else np.nan, "season_total_mm": seas_total})

@@ -260,9 +260,8 @@ def spatial_metrics_map(da, model_name, *, years, shpfile_dir, polygon, dir_fig,
 
 
 def doy_to_date_string(doy, date_filter_year=2024):
-    """Convert day of year to dd/mm format"""
-    # Assuming non-leap year for consistency
-    date = datetime(date_filter_year, 1, 1) + timedelta(days=int(doy) - 1)
+    """Convert day of year to dd/mm in the requested calendar year."""
+    date = pd.Timestamp(date_filter_year, 1, 1) + pd.Timedelta(days=int(doy) - 1)
     return date.strftime('%d/%m')
 
 def doy_to_mmm_dd(doy, date_filter_year=2024):

@@ -52,6 +52,22 @@ class PrecipitationUnitTests(unittest.TestCase):
             with self.subTest(units=units), self.assertRaises(ValueError):
                 precipitation_to_mm(xr.DataArray([1.0], attrs={"units": units}), 1000)
 
+    def test_daily_rates_integrate_only_with_explicit_sample_duration(self):
+        for units in ('mm/day', 'mm day-1', 'mm d**-1', 'mm/d'):
+            with self.subTest(units=units):
+                source = xr.DataArray([2., np.nan], attrs={'units': units})
+                actual = precipitation_to_mm(source, 1000, sample_duration_days=1)
+                np.testing.assert_allclose(actual, source)
+                self.assertEqual(actual.attrs['units'], 'mm')
+                self.assertEqual(source.attrs['units'], units)
+                np.testing.assert_allclose(precipitation_to_mm(actual, 1000), actual)
+                np.testing.assert_allclose(
+                    precipitation_to_mm(source, sample_duration_days=.5), source * .5)
+        for duration in (0, -1, np.nan, np.inf):
+            with self.subTest(duration=duration), self.assertRaises(ValueError):
+                precipitation_to_mm(xr.DataArray([1.], attrs={'units': 'mm/day'}),
+                                    sample_duration_days=duration)
+
     def test_ui_small_mm_values_stay_mm_and_conversion_is_idempotent(self):
         path = Path("ui/pages/short_medium_benchmarking.py")
         tree = ast.parse(path.read_text())

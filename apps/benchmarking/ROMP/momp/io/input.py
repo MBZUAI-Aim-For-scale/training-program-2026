@@ -52,13 +52,10 @@ def _resolve_data_variable(ds, requested_var, source):
 
     normalized = {str(name).strip().lower(): name for name in variables}
     requested_key = str(requested_var or "").strip().lower()
-    aliases = [requested_key, "rainfall", "precip", "precipitation", "pr", "tp", "total_precipitation"]
+    aliases = [requested_key, "rain", "rainfall", "precip", "precipitation", "pr", "tp", "total_precipitation"]
     for alias in aliases:
         if alias in normalized:
             return normalized[alias]
-
-    if len(variables) == 1:
-        return variables[0]
 
     raise KeyError(
         f"Could not resolve rainfall variable {requested_var!r} in {source}. "
@@ -204,7 +201,7 @@ def available_forecast_years(years, *, model_dir=None, file_pattern=None):
 
     available = []
     for year in years:
-        filename = file_pattern.format(year) if "{}" in file_pattern else f"{year}.nc"
+        filename = file_pattern.format(year) if "{}" in file_pattern else file_pattern
         forecast_path = storage.join(model_dir, filename)
         if storage.exists(forecast_path):
             available.append(year)
@@ -331,6 +328,8 @@ def load_imd_rainfall(year=None, *, obs_dir=None, obs_file_pattern=None, obs_var
         obs_file_pattern = getattr(params, "obs_file_pattern", ("{}.nc",))
     if obs_var is None:
         obs_var = getattr(params, "obs_var", "precip")
+    if obs_unit_cvt is None:
+        obs_unit_cvt = getattr(params, "obs_unit_cvt", None)
     if region is None:
         region = getattr(params, "region", "Ethiopia")
 
@@ -343,9 +342,9 @@ def load_imd_rainfall(year=None, *, obs_dir=None, obs_file_pattern=None, obs_var
 
     file_patterns = []
     if isinstance(obs_file_pattern, (list, tuple)):
-        file_patterns.extend(p.format(year) for p in obs_file_pattern if "{}" in p)
-    elif isinstance(obs_file_pattern, str) and "{}" in obs_file_pattern:
-        file_patterns.append(obs_file_pattern.format(year))
+        file_patterns.extend(p.format(year) if "{}" in p else p for p in obs_file_pattern)
+    elif isinstance(obs_file_pattern, str):
+        file_patterns.append(obs_file_pattern.format(year) if "{}" in obs_file_pattern else obs_file_pattern)
 
     fallbacks = [
         f"CHIRPS_{region_clean}_{year}.nc",
@@ -370,19 +369,21 @@ def load_imd_rainfall(year=None, *, obs_dir=None, obs_file_pattern=None, obs_var
             f"Tried patterns: {file_patterns}. Available files: {available_files[:5] if available_files else '[]'}"
         )
 
-    ds = storage.open_dataset(obs_file)
-    ds = dim_fmt(ds)
-    ds = region_select(ds, region=region, **kwargs_clean)
-
-    rainfall_var = _resolve_data_variable(ds, obs_var, obs_file)
-    rainfall = ds[rainfall_var]
-    if obs_unit_cvt:
-        rainfall *= obs_unit_cvt
-
-    if grid_point:
-        rainfall = rainfall.sel(lat=[lat_select], lon=[lon_select])
-
-    return rainfall
+    with storage.open_dataset(obs_file) as source:
+        ds = dim_fmt(source)
+        ds = region_select(ds, region=region, **kwargs_clean)
+        rainfall_var = _resolve_data_variable(ds, obs_var, obs_file)
+        data = ds[rainfall_var]
+        if 'time' not in data.dims or data.time.ndim != 1:
+            raise ValueError("Observed rainfall requires a one-dimensional daily time coordinate.")
+        dates = pd.DatetimeIndex(pd.to_datetime(data.time.values))
+        if dates.hasnans or (len(dates) > 1 and
+                not np.all(np.diff(dates.values) == np.timedelta64(1, 'D'))):
+            raise ValueError("Observed rainfall must have unique, consecutive daily timestamps.")
+        rainfall = precipitation_to_mm(data, obs_unit_cvt, sample_duration_days=1)
+        if grid_point:
+            rainfall = rainfall.sel(lat=[lat_select], lon=[lon_select])
+        return rainfall.load()
 
 
 def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_var=None, date_filter_year=None, init_days=None, 
@@ -416,7 +417,7 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
     if model_dir and config.is_uri(model_dir):
         model_dir = f"gs://{config._strip(model_dir)}"
 
-    fname = file_pattern.format(year) if "{}" in str(file_pattern) else f"{year}.nc"
+    fname = file_pattern.format(year) if "{}" in str(file_pattern) else str(file_pattern)
     file_path = storage.join(model_dir, fname)
 
     if not storage.exists(file_path):
@@ -424,43 +425,39 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
 
     filtered_dates_yr = get_initialization_dates(year, **kwargs_clean)
 
-    ds = storage.open_dataset(file_path)
-    admin_dim = next(
-        (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in ds.dims),
-        None,
-    )
-    ds = dim_fmt_model(ds, preserve_admin=admin_dim is not None)
-
-    available_init_times = pd.to_datetime(ds.init_time.values)
-    matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
-    if len(matching_times) == 0:
-        raise NoMatchingInitializationTimesError(
-            f"No matching initialization times found for year {year} in {file_path}"
+    with storage.open_dataset(file_path) as ds:
+        admin_dim = next(
+            (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in ds.dims),
+            None,
         )
-    ds = ds.sel(init_time=matching_times)
+        ds = dim_fmt_model(ds, preserve_admin=admin_dim is not None)
 
-    if admin_dim is None:
-        ds = region_select(ds, region=region, **kwargs_clean)
+        available_init_times = pd.to_datetime(ds.init_time.values)
+        matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
+        if len(matching_times) == 0:
+            raise NoMatchingInitializationTimesError(
+                f"No matching initialization times found for year {year} in {file_path}"
+            )
+        ds = ds.sel(init_time=matching_times)
 
-    # Detect or fallback 'step' dimension name
-    if 'step' not in ds.dims and 'step' not in ds.coords:
-        unrecognized_dims = [d for d in ds.dims if d not in ('init_time', 'lat', 'lon', 'member')]
-        if unrecognized_dims:
-            ds = ds.rename({unrecognized_dims[0]: 'step'})
+        if admin_dim is None:
+            ds = region_select(ds, region=region, **kwargs_clean)
 
-    if 'step' in ds.dims or 'step' in ds.coords:
-        if ds['step'][0].values == 0:
-            ds = ds.sel(step=slice(1, None))
-    else:
-        raise KeyError(f"'step' dimension not found in dataset. Active dimensions: {list(ds.dims)}")
+        # Detect or fallback 'step' dimension name
+        if 'step' not in ds.dims and 'step' not in ds.coords:
+            unrecognized_dims = [d for d in ds.dims if d not in ('init_time', 'lat', 'lon', 'member')]
+            if unrecognized_dims:
+                ds = ds.rename({unrecognized_dims[0]: 'step'})
 
-    p_model = ds[model_var]
+        if 'step' in ds.dims or 'step' in ds.coords:
+            if ds['step'][0].values == 0:
+                ds = ds.sel(step=slice(1, None))
+        else:
+            raise KeyError(f"'step' dimension not found in dataset. Active dimensions: {list(ds.dims)}")
 
-    try:
-        p_model = precipitation_to_mm(p_model, unit_cvt)
-    finally:
-        ds.close()
-    return p_model
+        p_model = ds[model_var]
+
+        return precipitation_to_mm(p_model, unit_cvt).load()
 
 
 def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_var=None, date_filter_year=None, init_days=None,
@@ -495,7 +492,7 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
     if model_dir and config.is_uri(model_dir):
         model_dir = f"gs://{config._strip(model_dir)}"
 
-    fname = file_pattern.format(year) if "{}" in str(file_pattern) else f"{year}.nc"
+    fname = file_pattern.format(year) if "{}" in str(file_pattern) else str(file_pattern)
     file_path = storage.join(model_dir, fname)
 
     if not storage.exists(file_path):
@@ -503,63 +500,59 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
 
     filtered_dates_yr = get_initialization_dates(year, **kwargs_clean)
 
-    ds = storage.open_dataset(file_path)
-    ds.load()
-    admin_dim = next(
-        (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in ds.dims),
-        None,
-    )
-    ds = dim_fmt_model_ensemble(ds, preserve_admin=admin_dim is not None)
-
-    if "member" not in ds.dims:
-        dimensions = tuple(ds.dims)
-        ds.close()
-        raise MissingEnsembleDimensionError(
-            f"Probabilistic forecast file has no ensemble member dimension: {file_path} "
-            f"(dimensions: {dimensions})"
+    with storage.open_dataset(file_path) as ds:
+        ds.load()
+        admin_dim = next(
+            (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in ds.dims),
+            None,
         )
+        ds = dim_fmt_model_ensemble(ds, preserve_admin=admin_dim is not None)
 
-    available_init_times = pd.to_datetime(ds.init_time.values)
-    matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
+        if "member" not in ds.dims:
+            dimensions = tuple(ds.dims)
+            ds.close()
+            raise MissingEnsembleDimensionError(
+                f"Probabilistic forecast file has no ensemble member dimension: {file_path} "
+                f"(dimensions: {dimensions})"
+            )
 
-    if len(matching_times) == 0:
-        ds.close()
-        raise NoMatchingInitializationTimesError(f"No matching initialization times found for year {year} in {file_path}")
+        available_init_times = pd.to_datetime(ds.init_time.values)
+        matching_times = available_init_times[available_init_times.isin(filtered_dates_yr)]
 
-    ds = ds.sel(init_time=matching_times)
+        if len(matching_times) == 0:
+            ds.close()
+            raise NoMatchingInitializationTimesError(f"No matching initialization times found for year {year} in {file_path}")
 
-    if 'step' not in ds.dims and 'step' not in ds.coords:
-        unrecognized_dims = [d for d in ds.dims if d not in ('init_time', 'lat', 'lon', 'member')]
-        if unrecognized_dims:
-            ds = ds.rename({unrecognized_dims[0]: 'step'})
+        ds = ds.sel(init_time=matching_times)
 
-    if 'step' in ds.dims or 'step' in ds.coords:
-        if ds['step'][0].values == 0:
-            ds = ds.sel(step=slice(1, None))
-    else:
-        raise KeyError(f"'step' dimension not found in dataset. Active dimensions: {list(ds.dims)}")
+        if 'step' not in ds.dims and 'step' not in ds.coords:
+            unrecognized_dims = [d for d in ds.dims if d not in ('init_time', 'lat', 'lon', 'member')]
+            if unrecognized_dims:
+                ds = ds.rename({unrecognized_dims[0]: 'step'})
 
-    if isinstance(members, str) and members.strip().lower() in ("all", ""):
-        members = None
+        if 'step' in ds.dims or 'step' in ds.coords:
+            if ds['step'][0].values == 0:
+                ds = ds.sel(step=slice(1, None))
+        else:
+            raise KeyError(f"'step' dimension not found in dataset. Active dimensions: {list(ds.dims)}")
 
-    if members:
-        ds = ds.sel(member=list(members))
+        if isinstance(members, str) and members.strip().lower() in ("all", ""):
+            members = None
 
-    if ds.sizes.get("member", 0) < 2:
-        member_count = ds.sizes.get("member", 0)
-        ds.close()
-        raise ValueError(
-            f"Probabilistic forecast requires at least two ensemble members; "
-            f"found {member_count} in {file_path}"
-        )
+        if members:
+            ds = ds.sel(member=list(members))
 
-    if admin_dim is None:
-        ds = region_select(ds, region=region, **kwargs_clean)
+        if ds.sizes.get("member", 0) < 2:
+            member_count = ds.sizes.get("member", 0)
+            ds.close()
+            raise ValueError(
+                f"Probabilistic forecast requires at least two ensemble members; "
+                f"found {member_count} in {file_path}"
+            )
 
-    p_model = ds[model_var]
+        if admin_dim is None:
+            ds = region_select(ds, region=region, **kwargs_clean)
 
-    try:
-        p_model = precipitation_to_mm(p_model, unit_cvt)
-    finally:
-        ds.close()
-    return p_model
+        p_model = ds[model_var]
+
+        return precipitation_to_mm(p_model, unit_cvt).load()

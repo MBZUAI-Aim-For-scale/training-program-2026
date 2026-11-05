@@ -12,10 +12,6 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-# Force gRPC fork-safety settings for multiprocessing
-os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "1"
-os.environ["GRPC_POLL_STRATEGY"] = "poll"
-
 from momp.stats.bins import (
     multi_year_climatological_forecast_obs_pairs,
     multi_year_forecast_obs_pairs,
@@ -72,6 +68,8 @@ def parallel_climatological_forecast_obs_pairs(clim_onset, **kwargs):
     if all_years is None:
         raise ValueError("The 'years' argument must be provided in kwargs.")
 
+    if len(all_years) == 0:
+        raise ValueError("'years' must contain at least one year.")
     cpu_count = os.cpu_count() or 1
     task_count = len(all_years)
     n_workers = min(cpu_count, task_count, 6)
@@ -107,6 +105,8 @@ def parallel_forecast_obs_pairs(**kwargs):
     if all_years is None:
         raise ValueError("The 'years' argument must be provided in kwargs.")
 
+    if len(all_years) == 0:
+        raise ValueError("'years' must contain at least one year.")
     cpu_count = os.cpu_count() or 1
     task_count = len(all_years)
     n_workers = min(cpu_count, task_count, 6)
@@ -145,7 +145,15 @@ def func_wrapper_climatology(chunk_and_args, dataset=False):
     local_kwargs["years_clim"] = chunk.tolist() if hasattr(chunk, "tolist") else chunk
 
     if dataset:
-        return compute_climatological_onset_dataset(**local_kwargs)
+        try:
+            return compute_climatological_onset_dataset(**local_kwargs)
+        except ValueError as exc:
+            # Serial climatology already skips unreadable years. An entirely
+            # missing chunk must not discard valid results from other chunks.
+            if str(exc) != "No years were successfully processed":
+                raise
+            print(f"Skipping climatology years {local_kwargs['years_clim']}: {exc}")
+            return None
     else:
         return compute_climatological_onset(**local_kwargs)
 
@@ -157,26 +165,17 @@ def parallel_climatological_onset(**kwargs):
     grid_point = kwargs.get("grid_point", False)
     years_clim = kwargs.get("years_clim")
 
+    if years_clim is None or len(years_clim) == 0:
+        raise ValueError("'years_clim' must contain at least one year.")
     if not grid_point and len(years_clim) > 1:
-        n_workers = min(os.cpu_count() or 1, len(years_clim), 6)
-        year_chunks = np.array_split(years_clim, n_workers)
-
-        print(f"\n\ncpu_count is {os.cpu_count()}")
-        print(f"task count is {len(years_clim)}")
-        print(f"Running on {n_workers} cores for {len(years_clim)} years...\n\n")
-
-        tasks = [(chunk, kwargs) for chunk in year_chunks]
-
-        print(f"Running in PARALLEL ({n_workers} cores) for non-grid-point task...")
-        with ThreadPoolExecutor(max_workers=n_workers) as executor:
-            results = list(executor.map(func_wrapper_climatology, tasks))
-
-        climatological_onset_doy = xr.concat(results, dim="chunk_idx").mean(dim="chunk_idx")
-        climatological_onset_doy = np.round(climatological_onset_doy)
-        return climatological_onset_doy
-    else:
-        print("Running in SINGLE-PROCESS mode (Grid Point = True or single year)...")
-        return compute_climatological_onset(**kwargs)
+        # Retain per-year values until the final reduction. A mean of chunk means
+        # biases uneven chunks and grid cells with different missing-year counts.
+        onsets = parallel_climatological_onset_dataset(**kwargs)
+        if np.issubdtype(onsets.dtype, np.datetime64):
+            onsets = onsets.dt.dayofyear.astype(float).where(onsets.notnull())
+        return np.round(onsets.mean(dim="year", skipna=True))
+    print("Running in SINGLE-PROCESS mode (Grid Point = True or single year)...")
+    return compute_climatological_onset(**kwargs)
 
 
 def parallel_climatological_onset_dataset(**kwargs):
@@ -185,6 +184,8 @@ def parallel_climatological_onset_dataset(**kwargs):
     """
     years_clim = kwargs.get("years_clim")
 
+    if years_clim is None or len(years_clim) == 0:
+        raise ValueError("'years_clim' must contain at least one year.")
     n_workers = min(os.cpu_count() or 1, len(years_clim), 6)
     year_chunks = np.array_split(years_clim, n_workers)
 
@@ -198,7 +199,12 @@ def parallel_climatological_onset_dataset(**kwargs):
         func_wrapper_forecast = partial(func_wrapper_climatology, dataset=True)
         list_of_results = list(executor.map(func_wrapper_forecast, tasks))
 
-    combined_da = xr.concat(list_of_results, dim="year")
+    successful = [result for result in list_of_results if result is not None]
+    if not successful:
+        raise ValueError("No years were successfully processed")
+    combined_da = xr.concat(successful, dim="year", join="exact")
+    combined_da.attrs["years_processed"] = combined_da.year.values.tolist()
+    combined_da.attrs["total_years"] = combined_da.sizes["year"]
     return combined_da
 
 
@@ -238,6 +244,8 @@ def parallel_metrics_multiple_years(ens=False, **kwargs):
             )
         kwargs["years"] = all_years
 
+    if len(all_years) == 0:
+        raise ValueError("'years' must contain at least one year.")
     cpu_count = os.cpu_count() or 1
     task_count = len(all_years)
     n_workers = min(cpu_count, task_count, 6)

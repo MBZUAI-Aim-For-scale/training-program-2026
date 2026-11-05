@@ -107,7 +107,7 @@ def extract_pd_bins(df, day_bins, method='merge', *kwargs):
     """
 
     if method == "merge":
-        bins_df = pd.DataFrame(day_bins, columns=["bin_start", "bin_end"])
+        bins_df = pd.DataFrame(day_bins, columns=["bin_start", "bin_end"]).drop_duplicates()
         # Use temporary float keys for comparison. This avoids pandas' warning
         # when forecast bins are floats and configured bins are integers, while
         # preserving the original key columns and their dtypes in the result.
@@ -125,7 +125,7 @@ def extract_pd_bins(df, day_bins, method='merge', *kwargs):
         )
 
     elif method == "series":
-        mask = pd.Series(zip(df["bin_start"], df["bin_end"])).isin(day_bins)
+        mask = pd.Series(list(zip(df["bin_start"], df["bin_end"])), index=df.index).isin(day_bins)
         return df[mask]
 
     else:

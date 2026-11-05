@@ -75,9 +75,6 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
     Computes spatial metrics (MAE, FAR, Miss Rate) across verification windows
     and exports NetCDF metrics and PNG maps to standardized model output directories.
     """
-    if getattr(cfg, "probabilistic", False):
-        return {}
-
     results = {}
     layout_pool = iter_list(vars(cfg))
 
@@ -151,6 +148,8 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
     # ------------------------------------------------------------------------
     # Baseline metrics (climatology or user-specified reference model)
     if not getattr(cfg, "ref_model", None):
+        if case_cfg.get("plot_panel_heatmap_error", False):
+            panel_portrait_mae_far_mr(results, **{**case_cfg, "model_list": cfg.model_list})
         return results
 
     cfg_ref = copy.copy(cfg)
@@ -254,8 +253,8 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         plot_spatial_climatology_onset(onset_da_dict, **case_cfg_ref)
 
     # Render panel portrait plot of MAE, FAR, and Miss Rate
-    if case_cfg_ref.get("plot_panel_heatmap_error", False):
-        panel_portrait_mae_far_mr(results, **case_cfg_ref)
+    if case_cfg.get("plot_panel_heatmap_error", False):
+        panel_portrait_mae_far_mr(results, **{**case_cfg, "model_list": cfg.model_list})
 
     return results
 

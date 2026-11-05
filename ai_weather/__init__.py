@@ -1,1 +1,1 @@
-from ai_weather import config  # noqa: F401
+"""Weather tools; configuration is loaded explicitly by consumers that need it."""

@@ -38,7 +38,7 @@ class BenchmarkSettingsStateTests(unittest.TestCase):
         exec(compile(ast.Module(body=[publisher], type_ignores=[]), "job_completion", "exec"), namespace)  # noqa: S102
 
         class ImmediateJob:
-            def __init__(self, execute, plans, signature):
+            def __init__(self, execute, plans, signature, **kwargs):
                 self.execute, self.plans, self.signature = execute, plans, signature
 
             def start(self):
@@ -55,9 +55,18 @@ class BenchmarkSettingsStateTests(unittest.TestCase):
             namespace["_record_finished_benchmark"](st.session_state["benchmark_active_job"])
 
         namespace.update(BenchmarkJob=ImmediateJob, render_benchmark_job=render_job,
+                         remember_benchmark=lambda state, params, job: state.update(benchmark_active_job=job),
                          cancellation_warning=cancellation_warning, execution_status=execution_status)
         exec(compile(ast.Module(body=page.body[start:end], type_ignores=[]),  # noqa: S102
                      "dashboard_actions", "exec"), namespace)
+        if st.session_state.get('benchmark_active_job') is not None:
+            render_job()  # The next rerun polls the fragment above input discovery.
+            result_start = next(i for i, node in enumerate(page.body[start:end], start)
+                                if isinstance(node, ast.Assign)
+                                and any(isinstance(t, ast.Name) and t.id == 'last_run'
+                                        for t in node.targets))
+            exec(compile(ast.Module(body=page.body[result_start:end], type_ignores=[]),
+                         'dashboard_completed_results', 'exec'), namespace)
         return st, runner
 
     def test_settings_edits_preserve_cache_on_repeated_interactions(self):

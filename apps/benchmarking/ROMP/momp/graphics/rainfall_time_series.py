@@ -12,34 +12,28 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-def rainfall_time_series(data: pd.DataFrame | xr.Dataset | np.ndarray | None = None, *args, **kwargs) -> go.Figure:
-    """
-    Renders interactive rainfall time series verification plots using Plotly.
-    Safely handles various data inputs or returns a dynamic interactive sample plot if none provided.
-    """
-    # Build robust sample or parsed interactive trace
-    if isinstance(data, pd.DataFrame) and not data.empty:
+def rainfall_time_series(data: pd.DataFrame | xr.Dataset | None = None, *args, **kwargs) -> go.Figure:
+    """Plot supplied rainfall traces; absent data is never replaced by sample values."""
+    if isinstance(data, xr.Dataset):
+        df = data.to_dataframe().reset_index()
+    elif isinstance(data, pd.DataFrame):
         df = data
+    elif data is None:
+        df = pd.DataFrame()
     else:
-        # Generate clean synthetic interactive verification timeseries
-        np.random.seed(42)
-        dates = pd.date_range(start="2026-05-01", periods=30, freq="D")
-        obs_rain = np.random.gamma(shape=2, scale=5, size=30)
-        model_rain = obs_rain + np.random.normal(loc=0, scale=3, size=30)
-        model_rain = np.clip(model_rain, 0, None)
-        
-        df = pd.DataFrame({
-            "Date": dates,
-            "Observed": obs_rain,
-            "Model Forecast": model_rain
-        })
+        raise TypeError("Rainfall data must be a DataFrame or Dataset with named rainfall variables.")
+
+    if not df.empty and not {"Observed", "Model Forecast"}.intersection(df.columns):
+        raise ValueError("No named rainfall columns: expected 'Observed' or 'Model Forecast'.")
+    time_values = (df["Date"] if "Date" in df.columns else
+                   df["time"] if "time" in df.columns else df.index)
 
     # Create dynamic interactive Plotly figure
     fig = go.Figure()
 
     if "Observed" in df.columns:
         fig.add_trace(go.Scatter(
-            x=df.iloc[:, 0] if "Date" not in df.columns else df["Date"],
+            x=time_values,
             y=df["Observed"],
             mode="lines+markers",
             name="Observed Reference",
@@ -48,12 +42,16 @@ def rainfall_time_series(data: pd.DataFrame | xr.Dataset | np.ndarray | None = N
 
     if "Model Forecast" in df.columns:
         fig.add_trace(go.Scatter(
-            x=df.iloc[:, 0] if "Date" not in df.columns else df["Date"],
+            x=time_values,
             y=df["Model Forecast"],
             mode="lines+markers",
-            name="AIFS Forecast",
+            name=kwargs.get("model_name", "Model Forecast"),
             line=dict(color="#f59e0b", width=2, dash="dash")
         ))
+
+    if df.empty:
+        fig.add_annotation(text="No rainfall data available.", x=0.5, y=0.5,
+                           xref="paper", yref="paper", showarrow=False)
 
     fig.update_layout(
         title=dict(text="<b>Interactive Rainfall Time Series Verification</b>", font=dict(size=14, color="#0f172a")),
@@ -123,8 +121,9 @@ def plot_rainfall_timeseries_with_onset_and_wetspell(pr, onset_date, wetspell_da
             color='dimgray', markerfacecolor='dimgray', markeredgecolor='dimgray',
             markeredgewidth=0.3, alpha=0.8, label='Climatology')
 
-        ax.axvline(x=onset_clim, color='grey', linewidth=1.5, linestyle='-',
-                    label=f'Onset clim: {onset_clim.strftime("%b %d")}', alpha=0.8)
+        if onset_clim is not None and not pd.isna(onset_clim):
+            ax.axvline(x=onset_clim, color='grey', linewidth=1.5, linestyle='-',
+                       label=f'Onset clim: {onset_clim.strftime("%b %d")}', alpha=0.8)
 
     # Mark wet spell date if it exists
     #if not pd.isna(wetspell_year.values):
