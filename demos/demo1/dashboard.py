@@ -19,6 +19,7 @@ from html import escape
 import streamlit as st
 
 import country_data
+import forecastcheck_data
 import spark_setup as setup
 
 # Every demo in the training program, in order. `setup` is its id in demos.toml (once it has a Docker
@@ -554,6 +555,69 @@ def demo_page(demo: dict):
         launch_card(demo)
         for tool in demo.get("tools", []):
             launch_card(tool)
+        if demo.get("setup") == "demo5":
+            forecastcheck_data_card()
+
+
+# --- Demo 5: download this Spark's country data for ForecastCheck ------------------------------
+
+def start_forecastcheck_download():
+    """Run forecastcheck_data.py in the background; it outlives this page, like a setup run."""
+    forecastcheck_data.LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(forecastcheck_data.LOG, "a") as log:
+        subprocess.Popen([sys.executable, str(setup.HERE / "forecastcheck_data.py")], cwd=setup.HERE,
+                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    time.sleep(0.5)  # lets it write its first status, so this page's next look already shows it running
+
+
+@st.fragment(run_every=3)
+def forecastcheck_data_card():
+    """Only for a Spark whose country ForecastCheck has (Kenya, Rwanda, Senegal, Sierra Leone)."""
+    host, countries = country_data.hostname(), forecastcheck_data.supported()
+    country = forecastcheck_data.spark_country()
+    names = ", ".join(forecastcheck_data.title(c) for c in countries)
+    with st.container(key="d1launch-fcdata"):
+        st.markdown('<div class="d1-launch-k">Country data for ForecastCheck</div>', unsafe_allow_html=True)
+        if not countries:
+            st.button("Download country data", key="fcdata-none", disabled=True, width="stretch")
+            st.markdown("<div class='d1-launch-note'>Launch Demo 5 first: its code isn't on this Spark yet.</div>",
+                        unsafe_allow_html=True)
+            return
+        if not country:
+            st.button("Download country data", key="fcdata-none", disabled=True, width="stretch")
+            st.markdown(f'<div class="d1-launch-note">ForecastCheck has data for {escape(names)}; this Spark '
+                        f'(<code>{escape(host)}</code>) isn\'t one of them. Pick a country to work with in the '
+                        f'lesson (<code>fcstcheck setup &lt;country&gt;</code>).</div>', unsafe_allow_html=True)
+            return
+        job = forecastcheck_data.read_status()
+        state = job["state"] if job and job.get("country") == country else None
+        tag, text, go = {"running": ("ready", "Downloading", None),
+                         "done": ("ok", "Downloaded", "Check for new data"),
+                         "failed": ("warn", "Not finished", "Try again"),
+                         "interrupted": ("warn", "Stopped", "Resume download"),
+                         }.get(state, ("off", "Not downloaded", f"Download {forecastcheck_data.title(country)} data"))
+        st.markdown(f'<div class="d1-launch-status"><span class="d1-tag {tag}">{text}</span></div>',
+                    unsafe_allow_html=True)
+        if state == "running":
+            st.button("Stop download", key="fcdata-stop", width="stretch", on_click=forecastcheck_data.stop,
+                      help="What's fetched stays; the next download fetches only what's missing")
+        elif not forecastcheck_data.image_ready():
+            st.button(go, key="fcdata-go", type="primary", width="stretch", disabled=True)
+            st.markdown('<div class="d1-launch-note">Launch Demo 5 first: the download runs in its image.</div>',
+                        unsafe_allow_html=True)
+        else:
+            st.button(go, key="fcdata-go", type="primary", width="stretch", on_click=start_forecastcheck_download,
+                      help="ForecastCheck's own fetch, for this Spark's country. Keeps going if you close this page.")
+        st.markdown(f'<div class="d1-launch-note">{escape(forecastcheck_data.title(country))}\'s forecasts and '
+                    'observations, from the program\'s bucket into Demo 5\'s data folder '
+                    '(<code>fcstcheck where</code>), the same as <code>fcstcheck fetch --apply</code>.</div>',
+                    unsafe_allow_html=True)
+        if job and state:
+            color = {"running": BLUE, "done": GREEN}.get(state, ORANGE if state == "interrupted" else RED)
+            st.markdown(f'<div class="d1-prog" style="--p:{color}"><div class="txt">'
+                        f'{escape(job.get("detail") or "")}</div></div>', unsafe_allow_html=True)
+            with st.expander("Command-line output"):
+                st.code(setup.tail(forecastcheck_data.LOG, 200) or "no output yet", language=None, height=320)
 
 
 @st.fragment(run_every=3)
