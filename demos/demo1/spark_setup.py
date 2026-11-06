@@ -13,6 +13,11 @@
   python3 spark_setup.py --no-dashboard       terminal output only
   python3 spark_setup.py status               print the last run's steps
   python3 spark_setup.py dashboard [--stop]   start (or stop) just the dashboard
+  python3 spark_setup.py dashboard --open     start it and open it in the browser (the
+                                              desktop's AI Weather Lab shortcut)
+
+Every run installs the command `spark-setup` ([setup] command in demos.toml) in ~/.local/bin:
+the same script from any folder, e.g. `spark-setup dashboard`, `spark-setup --only demo3`.
 
 Standard library only, so it runs on a fresh Spark before anything is installed; the
 dashboard's Streamlit goes into .venv/ here on first use. Progress goes to
@@ -25,6 +30,10 @@ context and Dockerfile), and a later run rebuilds when the checkout's fingerprin
 Uncommitted edits don't count (use --rebuild). An image built before this, or copied from
 another Spark without the label, is kept as it is until --rebuild.
 
+An app with a `checkout` in demos.toml (AI Almanac: its own repository in the home folder,
+which the fleet clones and sets up) builds itself when it starts: no build step here, and
+--build-only leaves it out. Its `run` runs in that checkout.
+
 A demo whose code lives in another repository (`source` in demos.toml: its url, branch and
 the folder here it goes in, which .gitignore leaves out) is cloned there on the first run
 and pulled (fast-forward only) on every run but the dashboard's Launch (--no-pull), so it
@@ -34,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -248,11 +258,17 @@ class Run:
             print(f"         fix: {s['hint']}", flush=True)
 
 
-def sh(cmd: list[str], log, *, env: dict | None = None, timeout: float | None = None, on_line=None):
-    """Run a command from the repo root, streaming its output into the step log."""
+def checkout_dir(demo: dict) -> Path | None:
+    """An app's own checkout (`checkout` in demos.toml, e.g. ~/ai-almanac), if it has one."""
+    return Path(demo["checkout"]).expanduser() if demo.get("checkout") else None
+
+
+def sh(cmd: list[str], log, *, env: dict | None = None, timeout: float | None = None, on_line=None,
+       cwd: Path | None = None):
+    """Run a command from the repo root (or `cwd`), streaming its output into the step log."""
     log.write(f"$ {' '.join(cmd)}\n")
     log.flush()
-    proc = subprocess.Popen(cmd, cwd=REPO, env={**os.environ, **(env or {})}, text=True, errors="replace",
+    proc = subprocess.Popen(cmd, cwd=cwd or REPO, env={**os.environ, **(env or {})}, text=True, errors="replace",
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
     timer = threading.Timer(timeout, proc.kill) if timeout else None
     if timer:
@@ -386,14 +402,15 @@ def step_source(run, sid, log, demo, pull):
 LAUNCHER_MARK = "# Installed by training-program-2026's spark_setup.py"
 
 
-def install_shortcuts(demo, log) -> list[str]:
-    """A demo's command in ~/.local/bin (`command`: name, script), which works from any folder.
-    A file of the same name that isn't ours is left alone (and said so)."""
+def install_command(cmd: dict | None, owner: str, log) -> list[str]:
+    """A command in ~/.local/bin (`command`: name, script, also), which works from any folder:
+    it runs the repo's script (python3 for a .py, else bash). A file of the same name that
+    isn't ours is left alone (and said so). `log` gets a line per file (re)written."""
     notes = []
-    cmd = demo.get("command")
     if cmd:
         bin_dir = Path.home() / ".local" / "bin"
-        text = f"#!/bin/sh\n{LAUNCHER_MARK} (demos.toml: {demo['id']})\nexec bash {REPO / cmd['script']} \"$@\"\n"
+        runner = "python3" if cmd["script"].endswith(".py") else "bash"
+        text = f"#!/bin/sh\n{LAUNCHER_MARK} (demos.toml: {owner})\nexec {runner} {REPO / cmd['script']} \"$@\"\n"
         for name in [cmd["name"], *cmd.get("also", [])]:  # (`also`: other names for it)
             path = bin_dir / name
             if path.exists() and LAUNCHER_MARK not in path.read_text(errors="replace"):
@@ -407,6 +424,24 @@ def install_shortcuts(demo, log) -> list[str]:
         if str(bin_dir) not in os.environ.get("PATH", "").split(":"):
             notes.append(f"`{cmd['name']}` works after logging in again (or: source ~/.profile)")
     return notes
+
+
+def install_shortcuts(demo, log) -> list[str]:
+    """A demo's command (`command` in its [[demo]] block)."""
+    return install_command(demo.get("command"), demo["id"], log)
+
+
+def install_setup_command() -> None:
+    """This script's own command (`[setup] command`: spark-setup), on every run. Never fails
+    the run, and only speaks when it (re)installed it or couldn't."""
+    out = io.StringIO()
+    try:
+        notes = install_command(load_config().get("setup", {}).get("command"), "setup", out)
+    except (OSError, KeyError, ValueError, SystemExit) as e:
+        print(f"note: the spark-setup command wasn't installed ({e})", file=sys.stderr)
+        return
+    if out.getvalue() or any("something else" in n for n in notes):
+        print(out.getvalue() + "".join(f"note: {n}\n" for n in notes), end="", file=sys.stderr)
 
 
 def source_fingerprint(demo: dict) -> str | None:
@@ -490,8 +525,13 @@ def step_start(run, sid, log, demo):
     if c:  # stopped or crashed: recreate so it picks up the current image and settings
         log.write(f"container {name} exists but is {c['State']['Status']}; recreating it\n")
         sh(["docker", "rm", "-f", name], log, timeout=60)
+    # An app in its own checkout (AI Almanac) builds itself as it starts; it has to be there.
+    where = checkout_dir(demo)
+    if where and not (where / ".git").exists():
+        raise Failed(f"{demo['checkout']} isn't on this Spark (the fleet clones it into the home folder)")
     # Its host port comes from demos.toml (the only place ports are set), as PORT.
-    rc, out = sh(demo["run"], log, env={"PORT": str(demo["port"]), **(demo.get("env") or {})}, timeout=300)
+    rc, out = sh(demo["run"], log, env={"PORT": str(demo["port"]), **(demo.get("env") or {})},
+                 timeout=demo.get("start_timeout", 300), cwd=where)
     if rc:
         raise Failed(f"start failed: {last_line(out)}")
     time.sleep(3)
@@ -529,17 +569,23 @@ def dashboard_port(cfg: dict) -> int:
     return int(os.environ.get("DASHBOARD_PORT") or cfg.get("dashboard", {}).get("port", 8500))
 
 
+def ensure_streamlit() -> Path:
+    """The dashboard's Streamlit, in .venv/ here (installed on first use)."""
+    streamlit = VENV / "bin" / "streamlit"
+    if not streamlit.exists():
+        print("Installing Streamlit for the dashboard (first run only)…", flush=True)
+        subprocess.run([sys.executable, "-m", "venv", str(VENV)], check=True)
+        subprocess.run([str(VENV / "bin" / "pip"), "install", "-q", "streamlit==1.61.0"], check=True)
+    return streamlit
+
+
 def start_dashboard(cfg: dict) -> str:
     """Start dashboard.py in the background unless it's already up; return its URL."""
     port = dashboard_port(cfg)
     url = f"http://localhost:{port}"
     if healthy(port):
         return url
-    streamlit = VENV / "bin" / "streamlit"
-    if not streamlit.exists():
-        print("Installing Streamlit for the dashboard (first run only)…", flush=True)
-        subprocess.run([sys.executable, "-m", "venv", str(VENV)], check=True)
-        subprocess.run([str(VENV / "bin" / "pip"), "install", "-q", "streamlit==1.61.0"], check=True)
+    streamlit = ensure_streamlit()
     STATE.mkdir(parents=True, exist_ok=True)
     with open(STATE / "dashboard.log", "a") as log:
         proc = subprocess.Popen(
@@ -564,8 +610,29 @@ def cmd_dashboard(args, _argv):
             print("dashboard stopped")
         DASHBOARD_PID.unlink(missing_ok=True)
         return 0
-    print(f"Progress dashboard: {start_dashboard(load_config())}")
+    if not args.open:
+        print(f"Progress dashboard: {start_dashboard(load_config())}")
+        return 0
+    # --open, from the desktop shortcut: there's no terminal, so it says so on the desktop.
+    cfg = load_config()
+    if not healthy(dashboard_port(cfg)):
+        notify("Starting the dashboard…")
+    try:
+        url = start_dashboard(cfg)
+    except Exception as e:
+        notify(f"The dashboard didn't start: {e}")
+        raise
+    print(f"Progress dashboard: {url}")
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
     return 0
+
+
+def notify(text: str) -> None:
+    """A desktop notification, when there's a desktop (and notify-send)."""
+    if shutil.which("notify-send") and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        subprocess.run(["notify-send", "--app-name=AI Weather Lab", "AI Weather Lab", text], check=False)
 
 
 # --- Main ---------------------------------------------------------------------------------
@@ -587,10 +654,13 @@ def plan(cfg: dict, only: list[str] | None, host_only: bool,
     if only and not host_only and len(demos) != len(only):
         sys.exit(f"unknown demo id(s): {set(only) - {d['id'] for d in demos}}")
     steps = [{"id": sid, "group": "demo1", "title": title} for sid, title, _ in HOST_STEPS]
+    if build_only:  # (an app in its own checkout builds itself when it starts)
+        demos = [d for d in demos if not d.get("checkout")]
     for d in demos:
         if d.get("source"):
             steps.append({"id": f"{d['id']}.source", "group": d["id"], "title": f"Get the code (`{d['source']['url']}`)"})
-        steps.append({"id": f"{d['id']}.build", "group": d["id"], "title": f"Build image `{d['image']}`"})
+        if not d.get("checkout"):
+            steps.append({"id": f"{d['id']}.build", "group": d["id"], "title": f"Build image `{d['image']}`"})
         if not build_only:  # (--build-only: the dashboard's Launch starts it, one demo at a time)
             steps += [{"id": f"{d['id']}.start", "group": d["id"], "title": f"Start container `{d['container']}`"},
                       {"id": f"{d['id']}.health", "group": d["id"], "title": f"Page answers on :{d['port']}"}]
@@ -606,6 +676,12 @@ def cmd_run(args, argv):
     try:
         demos, steps = plan(cfg, args.only, args.host_only, args.build_only)
         run = Run(steps, argv)
+        if args.no_dashboard and args.build_only:
+            # (unattended setup: the dashboard opens fast from the desktop later)
+            try:
+                ensure_streamlit()
+            except (OSError, subprocess.CalledProcessError) as e:
+                print(f"(couldn't install the dashboard's Streamlit: {e})", flush=True)
         if not args.no_dashboard:
             try:
                 url = start_dashboard(cfg)
@@ -639,8 +715,17 @@ def cmd_run(args, argv):
                     run.skip(ids[0], "Docker isn't running")
                 continue
             if not docker_ok:
-                for sid in ids:
+                for sid in ids[1:] if d.get("checkout") else ids:
                     run.skip(sid, "Docker isn't running")
+                continue
+            if d.get("checkout"):  # (builds itself as it starts)
+                if not gpu_ok and not (inspect("container", d["container"]) or {}).get("State", {}).get("Running"):
+                    run.skip(ids[1], "containers can't see the GPU (see host checks)")
+                    run.skip(ids[2], "container not started")
+                elif run.step(ids[1], step_start, d) == "failed":
+                    run.skip(ids[2], "container not running")
+                else:
+                    run.step(ids[2], step_health, d)
                 continue
             if run.step(ids[0], step_build, d, args.rebuild) == "failed":
                 run.skip(ids[1], "image build failed")
@@ -694,10 +779,13 @@ def main(argv=None):
                    help="don't update demos whose code is in another repository (the dashboard's Launch)")
     sub.add_parser("status", help="print the last run's steps")
     dash = sub.add_parser("dashboard", help="start just the progress dashboard")
-    dash.add_argument("--stop", action="store_true", help="stop it instead")
+    how_dash = dash.add_mutually_exclusive_group()
+    how_dash.add_argument("--stop", action="store_true", help="stop it instead")
+    how_dash.add_argument("--open", action="store_true", help="and open it in the browser")
     if not argv or argv[0] not in ("run", "status", "dashboard", "-h", "--help"):
         argv = ["run", *argv]
     args = p.parse_args(argv)
+    install_setup_command()
     return {"run": cmd_run, "status": cmd_status, "dashboard": cmd_dashboard}[args.cmd](args, argv)
 
 

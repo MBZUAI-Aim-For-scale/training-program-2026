@@ -100,11 +100,9 @@ check_gpu_availability() {
 start_compose() {
   check_gpu_availability
   echo "Starting AI Weather services via Docker Compose..."
- # docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120
-  echo "[SUCCESS] Streamlit is healthy on the remote host: http://127.0.0.1:8503"
-  echo "[INFO] SSH tunnel: ssh -N -L 8503:127.0.0.1:8503 <you>@country-spark"
   docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" up -d
-  echo "[SUCCESS] AI Forecasting operational: http://localhost:${PORT:-8503}"
+  echo "[SUCCESS] AI Forecasting started: http://localhost:${PORT:-8503}"
+  echo "[INFO] From another machine: ssh -N -L ${PORT:-8503}:127.0.0.1:${PORT:-8503} <you>@<country>-spark"
 }
 
 # ----------------------------------------------------------------------
@@ -121,9 +119,6 @@ case "${1:-start}" in
 
   restart)
     echo "Restarting AI Weather services..."
-    #docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" restart
-    #docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120
-=======
     docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" restart
     echo "[SUCCESS] Services restarted."
     ;;
@@ -132,13 +127,6 @@ case "${1:-start}" in
     echo "Pulling latest git updates..."
     git -C "$here" pull
     if [ "${DEV:-0}" = "1" ]; then
-#<<<<<<< HEAD
-#      echo "DEV=1 enabled; recreating services with live code mounts..."
-#      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --wait --wait-timeout 120
-#    else
-#      echo "Updating container with incremental build cache..."
-#      docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --build --wait --wait-timeout 120
-#=======
       echo "DEV=1 enabled; restarting services..."
       docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" restart
     else
@@ -149,10 +137,6 @@ case "${1:-start}" in
 
   rebuild)
     echo "Rebuilding image from scratch..."
-#<<<<<<< HEAD
-#    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build --no-cache
-#    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --force-recreate --wait --wait-timeout 120
-#=======
     docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" build --no-cache
     docker compose ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} -f "$COMPOSE_FILE" up -d --force-recreate
     ;;

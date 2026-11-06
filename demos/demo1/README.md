@@ -13,7 +13,8 @@ python3 demos/demo1/spark_setup.py dashboard
 
 It starts the dashboard in the background and prints its link (http://localhost:8500). It
 doesn't start any demo. The dashboard's **Run checks** and **Launch** buttons run the steps below
-and show their progress, flag errors, and suggest fixes.
+and show their progress, flag errors, and suggest fixes. A Launch link only starts its demo for
+2 minutes after the page offers it, so an old or restored browser tab can't start or stop a demo.
 
 The same steps from the terminal, printed as they run:
 
@@ -28,6 +29,17 @@ python3 spark_setup.py dashboard [--stop] # start or stop just the dashboard
 python3 country_data.py [--plan]          # download this Spark's country data (or just show its size)
 bash shutdown.sh                          # stop any setup run, download, the dashboard and all containers
 ```
+
+**AI Almanac:** the dashboard's AI Almanac tab launches [AI Almanac](https://github.com/AI-Almanac/ai-almanac)
+from its own checkout, `~/ai-almanac` (the fleet clones and sets it up on the demo Sparks), with
+`scripts/spark.sh up`, and shows it with its access token. It counts as a demo: one at a time.
+
+**AI Weather Lab:** on the fleet's demo Sparks, the desktop has an **AI Weather Lab** shortcut
+(icon: `ai-weather-lab.svg`) that runs `spark_setup.py dashboard --open`: it starts the dashboard
+and opens it in the browser.
+
+**`spark-setup`:** every run also installs this command (in `~/.local/bin`), the same script from
+any folder: `spark-setup dashboard`, `spark-setup --only demo3`, `spark-setup status`, ...
 
 **Rebuilds:** an image is rebuilt when the code it's built from changed (after a `git pull`,
 say), not on every run. Each build is labelled with a fingerprint of its committed sources,

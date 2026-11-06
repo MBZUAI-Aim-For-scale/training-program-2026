@@ -7,6 +7,7 @@
 #   8501  the repo's top-level app    8505  Demo 5 (ForecastCheck)
 #   8502  Demo 3                      8888  Demo 4's Jupyter Lab (demos/demo4/docker)
 #   8503  Demo 4                      8889  Demo 1's JupyterLab sandbox (docker-compose.yml)
+#   8765  AI Almanac (its own default)
 # A new demo takes the next free one (8506, ...).
 # Paths are relative to the ai_weather repo root. Add a [[demo]] block to track a new demo.
 #
@@ -24,6 +25,11 @@
 
 [dashboard]
 port = 8500
+
+# The command `spark-setup` (in ~/.local/bin): this setup, demos/demo1/spark_setup.py, from
+# any folder (`spark-setup dashboard`, `spark-setup --only demo3`, ...). Every run installs it.
+[setup]
+command = { name = "spark-setup", script = "demos/demo1/spark_setup.py" }
 
 # Smoke test from Untitled.ipynb: CUDA matmul + flash-attention inside an NGC container
 [smoke_test]
@@ -80,3 +86,25 @@ source = { url = "https://github.com/africlimate-research/forecastcheck.git", br
 # The command `fcstcheck` (in ~/.local/bin): demos/demo5/run.sh, from any folder; also
 # installed as `forecastcheck`, its long name.
 command = { name = "fcstcheck", also = ["forecastcheck"], script = "demos/demo5/run.sh" }
+
+# AI Almanac: its own repository, which the fleet clones into the home folder (`checkout`) and
+# sets up after each pull (scripts/spark.sh update: its image, environments and local model,
+# then stopped). Launch starts it with scripts/spark.sh up, which builds it if its code changed,
+# so it has no build step here (and --build-only leaves it out). Its page needs the access token
+# in its data folder (`token`: that file's KEY=value line), which the dashboard adds to its link.
+# Its port is its own default, 8765 (spark.sh reads ALMANAC_PORT).
+[[demo]]
+id = "almanac"
+title = "AI Almanac"
+image = "ai-almanac:spark"
+container = "ai-almanac-spark-almanac-1"
+checkout = "~/ai-almanac"
+# (what the dashboard tells you to run when it isn't there)
+get = "git clone -b hcwf-demo-spark https://github.com/AI-Almanac/ai-almanac ~/ai-almanac"
+run = ["sh", "scripts/spark.sh", "up"]
+port = 8765
+env = { ALMANAC_PORT = "8765" }
+health = "/health"
+token = { file = "~/.local/share/ai-almanac-spark/secrets.env", key = "SERVE_ACCESS_TOKEN" }
+# (a fresh install sets itself up first: downloads of tens of GB, unless the fleet did it already)
+start_timeout = 7200
