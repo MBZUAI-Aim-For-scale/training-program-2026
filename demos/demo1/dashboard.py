@@ -377,6 +377,17 @@ def last_run() -> dict | None:
     return run
 
 
+def building(run: dict | None) -> bool:
+    """A --build-only run is going: the Spark's own setup, after an update (fleet), building every demo's
+    image ahead. It starts none of them, so none is Starting; Launch waits for it."""
+    return bool(run and run["state"] == "running" and "--build-only" in run.get("args", []))
+
+
+def busy_note(run: dict | None, then: str) -> str:
+    return ("This Spark is building the demos' images after an update; " if building(run)
+            else "Another demo is being set up; ") + then
+
+
 def steps_for(demo: dict, run: dict | None) -> list[dict]:
     return [s for s in run["steps"] if s["group"] == demo.get("setup")] if run and demo.get("setup") else []
 
@@ -483,7 +494,9 @@ def status_button(demo: dict, kind: str, text: str, run: dict | None, busy: bool
     """The demo's status in the Launch button's place; clicking it opens the demo's page (where Launch is)."""
     steps = steps_for(tracked(demo), run)
     tag = KINDS[kind][1]
-    if busy and run and run["state"] == "running" and steps:
+    if building(run) and any(s["status"] == "running" for s in steps):
+        tag, text = "ready", "Building…"
+    elif busy and run and run["state"] == "running" and steps and not building(run):
         tag, text = "ready", "Starting…"
     elif steps and run["state"] != "running" and any(s["status"] == "failed" for s in steps):
         tag, text = "failed", "Setup failed"
@@ -743,15 +756,17 @@ def launch_card(demo: dict):
     kind, text, link = status(demo)
     run = last_run()
     steps = steps_for(demo, run)
-    mine = setup_running() and run and run["state"] == "running" and bool(steps)  # this demo is starting
+    mine = setup_running() and run and run["state"] == "running" and bool(steps) and not building(run)  # starting
     key, name = uid(demo), label(demo)
     go = f"Launch {name} ↗" if demo.get("tool") else "Launch ↗"
     heading = f"{demo['title']} ({name})" if demo.get("tool") else "On this Spark"
+    tag_text = ("Starting" if mine else
+                "Building" if building(run) and any(s["status"] == "running" for s in steps) else text)
     with st.container(key=f"d1launch-{key}"):
         st.markdown(f'<style>.st-key-d1launch-{key} {{ border-left-color: {KINDS[kind][0]} !important; }}</style>'
                     f'<div class="d1-launch-k">{escape(heading)}</div>'
                     f'<div class="d1-launch-status"><span class="d1-tag {KINDS[kind][1]}">'
-                    f'{escape(text if not mine else "Starting")}</span></div>',
+                    f'{escape(tag_text)}</span></div>',
                     unsafe_allow_html=True)
         with st.container(key=f"launch-page-{key}"):
             if kind == "running" and link:
@@ -771,7 +786,7 @@ def launch_card(demo: dict):
             elif setup_running() and not mine:
                 st.button(go, key=f"busy-{key}", disabled=True, width="stretch",
                           help="Wait for the current setup run to finish")
-                note = "Another demo is being set up; this one can start when it finishes."
+                note = busy_note(run, "this one can start when it finishes.")
             elif (others := [] if mine else running_others(demo)) and not st.session_state.get(f"confirm-{key}"):
                 # Another demo is running: ask first, since launching this one stops it
                 st.button(go, key=f"ask-{key}", type="primary", width="stretch",
@@ -880,7 +895,8 @@ def follow(demo: dict):
     run = last_run()
     since = st.session_state.get(key)
     # Only a run started from this tab, or one setting up this demo right now; not an old run's leftovers
-    if run and not ((since and run["started"] >= since - 5) or (run["state"] == "running" and steps_for(demo, run))):
+    if run and not ((since and run["started"] >= since - 5)
+                    or (run["state"] == "running" and steps_for(demo, run) and not building(run))):
         run = None
     steps = steps_for(demo, run)
     with st.container(key="d1launch"):
@@ -891,7 +907,7 @@ def follow(demo: dict):
         elif kind == "running":
             note = "The container is running; waiting for its page to answer …"
         elif setup_running() and not steps:
-            note = "Another demo is being set up; this one starts when it finishes."
+            note = busy_note(last_run(), "this one starts when it finishes.")
         else:
             note = "Getting ready …"
         st.markdown(f'<div class="d1-launch-note">{note}</div>', unsafe_allow_html=True)
