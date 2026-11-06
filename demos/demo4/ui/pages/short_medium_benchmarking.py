@@ -3355,7 +3355,7 @@ def page() -> None:
             unsafe_allow_html=True,
         )
 
-    with guide_column:
+    with guide_column, st.container(key="benchmark_parameter_guide"):
         with st.popover("Parameter guide", width="stretch"):
             st.markdown(
                 "[Weather model benchmarking guide]"

@@ -48,6 +48,19 @@
 /* --------------------------------------------------------------------------
    2. Page Header
    -------------------------------------------------------------------------- */
+/* Keep help accessible while scrolling through settings and results. */
+.st-key-benchmark_parameter_guide {
+    position: fixed;
+    top: 4.5rem;
+    right: 1.5rem;
+    width: 12rem;
+    max-width: calc(100vw - 3rem);
+    z-index: 100;
+    background: var(--background-color, #ffffff);
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-md);
+}
+
 .page-title {
     font-size: 1.75rem;
     font-weight: 800;
