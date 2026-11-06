@@ -145,7 +145,7 @@ When running AI weather models, Docker manages two primary storage locations:
 
 | Asset Type | Location | Size | Purpose |
 | --- | --- | --- | --- |
-| Saved forecasts, event movies, job logs | `training-program-2026/outputs/` | Grows with use | Persistent results |
+| Saved forecasts, event movies, job logs | `demos/demo4/outputs/` | Grows with use | Persistent results |
 | Model weights (downloaded on first run) | `~/.cache/ai_weather/` | Up to ~75 GB | Model parameters |
 
 > #### Storage Best Practices
@@ -234,6 +234,8 @@ The Demo 1 dashboard is how you set up and start the demos. These steps are for 
    python3 demos/demo1/spark_setup.py dashboard
    ```
 
+   After that, `spark-setup dashboard` does the same from any folder (`spark-setup --help` for the rest).
+
 2. Open a web browser on the Spark and go to **http://localhost:8500**.
 
 3. In the dashboard:
@@ -268,7 +270,7 @@ Prepend these flags to `bash demos/demo4/docker/run.sh` to customize behavior:
 | --- | --- | --- | --- |
 | `DEV=1` | Mount local code for live development | `DEV=1 bash demos/demo4/docker/run.sh` | Disabled |
 | `DEMO_CACHE=/path` | Redirect model weight cache location | `DEMO_CACHE=/shared/cache bash demos/demo4/docker/run.sh` | `~/.cache/ai_weather/` |
-| `DEMO_OUTPUTS=/path` | Redirect saved forecasts, movies and logs | `DEMO_OUTPUTS=/data/outputs bash demos/demo4/docker/run.sh` | `training-program-2026/outputs/` |
+| `DEMO_OUTPUTS=/path` | Redirect saved forecasts, movies and logs | `DEMO_OUTPUTS=/data/outputs bash demos/demo4/docker/run.sh` | `demos/demo4/outputs/` |
 
 Demo 3 has its own flags, which go before `bash demos/demo3/docker/run.sh`:
 
@@ -483,7 +485,7 @@ python run_momp.py --mode det --model GraphCast
 > #### Output Persistence
 > 
 > 
-> All benchmark results (spatial 2D maps, CSV skill tables, and NetCDF metric grids) generated inside `/app/ai_weather/data/ROMP_OUT/` are automatically mirrored to `./ai_weather/data/ROMP_OUT/` on your host server.
+> All benchmark results (spatial 2D maps, CSV skill tables, and NetCDF metric grids) generated inside `/app/ai_weather/data/ROMP_OUT/` are automatically mirrored to `demos/demo4/ai_weather/data/ROMP_OUT/` on the Spark.
 > {: .note}
 
 
@@ -561,9 +563,9 @@ Pinned in `demos/demo4/docker/locks/` for reproducibility. Key versions:
 | `docker run` fails: `unresolvable CDI devices` | Docker started before GPU registry populated | `systemctl --user restart docker`, then `bash demos/demo4/docker/run.sh restart` |
 | `docker run` fails: `failed to fulfil mount request ... libnvidia-...: no such file` | NVIDIA libraries updated since boot | An admin runs `sudo systemctl start nvidia-cdi-refresh.service`, or reboot (section 1.1) |
 | Port 8503 already in use when starting | Another container holds it | `docker ps`, then `docker stop <name>` and `bash demos/demo4/docker/run.sh` |
-| Port 8502 already in use when starting Demo 3 | Another container holds it (ForecastCheck, Demo 5, also defaults to 8502) | `docker ps`, then `docker stop <name>`; or start Demo 5 with `PORT=8505` |
+| Port 8502 already in use when starting Demo 3 | Another container holds it (ForecastCheck started by hand, without `fcstcheck`, also defaults to 8502) | `docker ps`, then `docker stop <name>`; start Demo 5 with `fcstcheck start` (port 8505) |
 | A code change doesn't show (with `DEV=1`) | The page keeps imported modules loaded | `bash demos/demo4/docker/run.sh restart` |
-| Browser can't reach `localhost:8503` | SSH tunnel not open or port conflict | Use `-L 8502:localhost:8503` and navigate to `:8502` |
+| Browser can't reach `localhost:8503` | SSH tunnel not open, or 8503 is taken on your laptop | Reconnect with `ssh -N -L 8503:127.0.0.1:8503 <you>@<country>-spark`; if 8503 is taken on your laptop, use another local port (`-L 9503:127.0.0.1:8503`, then `localhost:9503`) |
 | Run fails during starting condition download | ECMWF mirrors throttled ("503 Service Unavailable") | Demo 3 tries the other mirror by itself after a few retries; if both fail, try again later |
 | First model run is exceptionally slow | Downloading model weights (~30 min for Atlas CRPS) | Expected behavior; subsequent runs are fast |
 | ROMP run stops after switching tracks | DET and PROB mixed in one run | Set mode in config or with `--mode`, run separately |

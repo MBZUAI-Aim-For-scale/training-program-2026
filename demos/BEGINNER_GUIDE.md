@@ -98,17 +98,17 @@ To stop a demo, click **Stop** on its page in the dashboard.
 
 ### Useful Demo 1 commands
 
-First type `cd ~/training-program-2026/demos/demo1`, then any of these:
+`spark-setup` is the setup script (`python3 ~/training-program-2026/demos/demo1/spark_setup.py`), from any folder:
 
 | Command | What it does |
 |---|---|
-| `python3 spark_setup.py status` | Shows the result of the last setup, with fixes for anything that failed |
-| `python3 spark_setup.py --host-only` | Runs only the Spark health checks |
-| `python3 spark_setup.py --only demo3` | Health checks, then sets up just one demo (`demo3` or `demo4`) |
-| `python3 spark_setup.py --build-only` | Health checks, then builds the demos whose code changed, without starting any |
-| `python3 spark_setup.py --rebuild` | Rebuilds every demo, even if its code didn't change |
-| `python3 verify_bucket_access.py` | Checks only that the Spark can read the program's data bucket |
-| `bash shutdown.sh` | Stops everything: setup runs, the dashboard and all demos. Nothing is deleted. |
+| `spark-setup status` | Shows the result of the last setup, with fixes for anything that failed |
+| `spark-setup --host-only` | Runs only the Spark health checks |
+| `spark-setup --only demo3` | Health checks, then sets up just one demo (`demo2` to `demo5`) |
+| `spark-setup --build-only` | Health checks, then builds the demos whose code changed, without starting any |
+| `spark-setup --rebuild` | Rebuilds every demo, even if its code didn't change |
+| `python3 ~/training-program-2026/demos/demo1/verify_bucket_access.py` | Checks only that the Spark can read the program's data bucket |
+| `bash ~/training-program-2026/demos/demo1/shutdown.sh` | Stops everything: setup runs, the dashboard and all demos. Nothing is deleted. |
 
 ### If something goes wrong
 
@@ -264,7 +264,7 @@ python run_momp.py --mode prob --model AIFS_ENS     # one ensemble (probabilisti
 exit                                                # leave the container
 ```
 
-Results are saved on the Spark in `~/data/ROMP_OUT/` and show up in the web page.
+Results are saved on the Spark in `~/training-program-2026/demos/demo4/ai_weather/data/ROMP_OUT/` and show up in the web page.
 
 ### If something goes wrong
 
@@ -282,4 +282,4 @@ Results are saved on the Spark in `~/data/ROMP_OUT/` and show up in the web page
   running on the Spark for next time.
 - **Shutting everything down** (organisers): in the terminal, type
   `bash ~/training-program-2026/demos/demo1/shutdown.sh`. Nothing is deleted. Start again with
-  `python3 ~/training-program-2026/demos/demo1/spark_setup.py dashboard`.
+  `spark-setup dashboard`.

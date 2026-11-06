@@ -158,7 +158,7 @@ Then:
 ```bash
 # 1. Get the code, the image and the `fcstcheck` command (about 5 minutes the first
 #    time; skip this if the Demo 1 dashboard already shows Demo 5 as ready)
-python3 ~/training-program-2026/demos/demo1/spark_setup.py --only demo5 --build-only
+spark-setup --only demo5 --build-only
 
 # 2. Everything else, for your country (senegal, sierra-leone, kenya or rwanda):
 fcstcheck setup senegal
@@ -798,13 +798,13 @@ Every number in the dashboard is true *for a given truth product, year, area and
 | Symptom | Likely cause | What to do |
 | --- | --- | --- |
 | `python: command not found`, or `ModuleNotFoundError` | The command ran in the Spark's terminal, not inside ForecastCheck | Open `fcstcheck shell` first, or prefix it with `fcstcheck run` |
-| *"no 'forecastcheck' image yet"* | The image is not built or loaded on this Spark | `python3 ~/training-program-2026/demos/demo1/spark_setup.py --only demo5 --build-only` (or `fcstcheck load` your trainer's file) |
+| *"no 'forecastcheck' image yet"* | The image is not built or loaded on this Spark | `spark-setup --only demo5 --build-only` (or `fcstcheck load` your trainer's file) |
 | *"Docker is not answering"*, or `Cannot connect to the Docker daemon` | Docker is not running in your account | `systemctl --user restart docker`, as in Demo 1 |
 | *"port is already allocated"* or *"address already in use"* on `start` | Something else uses 8505 (another dashboard, or an SSH tunnel on this machine) | `PORT=8506 fcstcheck start`, and tunnel 8506 instead |
 | *"the data bucket needs a Google Cloud key"* | This Spark has no `/etc/fleet-gcs-key.json`, and no key is set in this terminal | Ask your trainer, or `export GOOGLE_APPLICATION_CREDENTIALS=<key>.json` (Section 4.2) |
 | *"cannot read gs://…"* when fetching | The key cannot read the bucket, or the path you exported is wrong | Check the path in your `export` line, if any (Section 4.2) |
 | *"no country selected"* | No country chosen yet | `fcstcheck country senegal` (or `sierra-leone`, `kenya`, `rwanda`) |
-| `fcstcheck: command not found` | The command is new since you logged in, or Demo 5 isn't set up on this Spark | Log out and in again (or `source ~/.profile`); if it's still missing, `python3 ~/training-program-2026/demos/demo1/spark_setup.py --only demo5 --build-only` |
+| `fcstcheck: command not found` | The command is new since you logged in, or Demo 5 isn't set up on this Spark | Log out and in again (or `source ~/.profile`); if it's still missing, `spark-setup --only demo5 --build-only` |
 | *"… holds 2 truth products and none is configured"* | `--product` is missing (Heat track) | Add `--product chirts` or `--product era5` |
 | *"unknown truth product …"* | A misspelt `--product` | Use one of the products the message lists (`chirps` for the Rainfall track) |
 | A Heat-track run looks for `precipitation` files | `--variable` is missing | Add `--variable temperature_max` or `temperature_min` |
