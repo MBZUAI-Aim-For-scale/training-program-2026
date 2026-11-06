@@ -177,6 +177,8 @@ The interactive dashboard provides a visual interface to configure, execute, and
    - **Forecast Window**: Choose the lead time window (1-15 days or 16-30 days).
 3. **Select Models**:
    - The UI auto-detects available models from your data directories.
+   - Initialization dates and forecast horizons warm once for all detected models in the background. You can use the controls while this runs; selecting models or changing evaluation years reuses the metadata for the rest of the session.
+   - After replacing or adding input files, click **Refresh model data** to reload the inventory and metadata. **Refresh saved results** reloads outputs without repeating input validation.
    - Use the "Filter by category" radio buttons to view Deterministic or Probabilistic models.
    - Click the rows in the table to select the models you want to benchmark.
 4. **Adjust Model Run Windows & Settings**:

@@ -2994,7 +2994,6 @@ def render_reference_figure_gallery(paths, view_mode, filter_key):
 # ======================================================================
 # Main Page
 # ======================================================================
-@st.cache_data(show_spinner=False, ttl=300, max_entries=32)
 def inspect_model_temporal_coverage(model_key, first_year, last_year):
     """Read only initialization/lead coordinates, never load forecast fields."""
     meta = CONFIG_BENCHMARK_MODEL_CATALOG.get(model_key, {})
@@ -3029,6 +3028,25 @@ def inspect_model_temporal_coverage(model_key, first_year, last_year):
         except Exception as exc:
             failures.append(f"{year}: {type(exc).__name__}: {exc}")
     return {"dates": dates, "horizons": horizons, "failures": failures}
+
+
+def _benchmark_coverage_key(row):
+    return (row["_exec_key"], row["_start_date"].year, row["_end_date"].year,
+            json.dumps(CONFIG_BENCHMARK_MODEL_CATALOG.get(row["_exec_key"], {}),
+                       sort_keys=True, default=str))
+
+
+def _coverage_for_years(coverage, first_year, last_year):
+    def relevant_failure(failure):
+        year = str(failure).split(":", 1)[0]
+        return not year.isdigit() or first_year <= int(year) <= last_year
+
+    return {
+        "dates": [parts for parts in coverage["dates"] if first_year <= parts[0] <= last_year],
+        "horizons": {year: end for year, end in coverage["horizons"].items()
+                     if first_year <= year <= last_year},
+        "failures": [failure for failure in coverage["failures"] if relevant_failure(failure)],
+    }
 
 
 def render_verification_window_settings(row_key, forecast_window):
@@ -3217,7 +3235,7 @@ def render_benchmark_coverage():
         return
     snapshot = job.snapshot()
     if not snapshot["done"]:
-        st.info("Checking selected forecast metadata in the background. Run Benchmark will be available when validation finishes.")
+        st.info("Preparing forecast metadata for all models in the background. You can select models and adjust settings while it loads.")
         return
     cache = st.session_state.setdefault("benchmark_coverage_cache", {})
     keys = st.session_state.pop("benchmark_coverage_keys", [])
@@ -3322,13 +3340,12 @@ def page() -> None:
 
     inventory_cache = st.session_state.setdefault("benchmark_inventory_cache", {})
     if st.button("Refresh model data", key="benchmark_refresh_inventory",
-                 disabled=st.session_state.get("benchmark_inventory_task") is not None,
-                 help="Rescan forecast files and observation years."):
+                 disabled=st.session_state.get("benchmark_inventory_task") is not None
+                 or st.session_state.get("benchmark_coverage_task") is not None,
+                 help="Rescan forecast files, metadata and observation years when inputs change."):
         inventory_cache.clear()
         st.session_state.pop("benchmark_coverage_cache", None)
     inventory = inventory_cache.get(ground_truth)
-    if inventory and not inventory.get("error") and time.time() - inventory["loaded_at"] > 600:
-        inventory = None
     if inventory is None:
         if st.session_state.get("benchmark_inventory_task") is None:
             st.session_state["benchmark_inventory_ground_truth"] = ground_truth
@@ -3349,6 +3366,17 @@ def page() -> None:
     # Finish a previous ground-truth inventory without replacing current controls.
     render_benchmark_inventory()
     model_registry = inventory["models"]
+    # Warm each model's entire available year range once, before selection.
+    # Session data remains valid until an explicit input refresh, so changing
+    # models, schedules or evaluation years never opens the same files again.
+    coverage_cache = st.session_state.setdefault("benchmark_coverage_cache", {})
+    pending_coverage = [_benchmark_coverage_key(row) for row in model_registry
+                        if _benchmark_coverage_key(row) not in coverage_cache]
+    if pending_coverage and st.session_state.get("benchmark_coverage_task") is None:
+        st.session_state["benchmark_coverage_keys"] = pending_coverage
+        st.session_state["benchmark_coverage_task"] = BackgroundTask(
+            _load_benchmark_coverage, pending_coverage).start()
+    render_benchmark_coverage()
     active_rows: List[Dict[str, Any]] = []
 
     if not model_registry:
@@ -3506,21 +3534,19 @@ def page() -> None:
 
     # Run Benchmark Action
     observation_problems = []
-    coverage_cache = st.session_state.setdefault("benchmark_coverage_cache", {})
     missing_coverage = []
     for row in active_rows:
         window = model_run_windows[row["_row_key"]]
         errors = temporal_settings_errors({**window, "probabilistic": row.get("_probabilistic", False)}, observation_years)
         observation_problems.extend(f"{row['Model']}: {error}" for error in errors)
         if not errors:
-            coverage_key = (row["_exec_key"], window["eval_start"].year, window["eval_end"].year,
-                            json.dumps(CONFIG_BENCHMARK_MODEL_CATALOG.get(row["_exec_key"], {}),
-                                       sort_keys=True, default=str))
+            coverage_key = _benchmark_coverage_key(row)
             cached_coverage = coverage_cache.get(coverage_key)
-            if cached_coverage is None or time.time() - cached_coverage["loaded_at"] > 300:
+            if cached_coverage is None:
                 missing_coverage.append(coverage_key)
                 continue
-            coverage = cached_coverage["data"]
+            coverage = _coverage_for_years(cached_coverage["data"],
+                                           window["eval_start"].year, window["eval_end"].year)
             if coverage["failures"]:
                 observation_problems.append(f"{row['Model']}: cannot read forecast metadata: {'; '.join(coverage['failures'])}")
             elif not coverage["dates"]:
@@ -3542,11 +3568,6 @@ def page() -> None:
                     f"These criteria support verification only through day {latest}. "
                     "Choose a shorter verification window, supply longer forecasts, or explicitly "
                     "change the onset criteria; 0 disables dry confirmation in the reference configuration.")
-    if missing_coverage and st.session_state.get("benchmark_coverage_task") is None:
-        st.session_state["benchmark_coverage_keys"] = missing_coverage
-        st.session_state["benchmark_coverage_task"] = BackgroundTask(
-            _load_benchmark_coverage, missing_coverage).start()
-    render_benchmark_coverage()
     for problem in observation_problems + verification_problems:
         st.error(problem)
     run_clicked = render_benchmark_run_controls(
@@ -3620,8 +3641,6 @@ def page() -> None:
         return
     if st.button("Refresh saved results", key="benchmark_refresh_results",
                  help="Reload saved metrics, maps and figures after a benchmark completes."):
-        st.session_state.pop("benchmark_inventory_cache", None)
-        st.session_state.pop("benchmark_coverage_cache", None)
         st.session_state.pop("onset_years_result", None)
         st.cache_data.clear()
         st.rerun()
