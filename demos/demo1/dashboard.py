@@ -33,13 +33,6 @@ import streamlit as st
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
 # launches with their own button (named by `label`); they count towards the one-demo-at-a-time rule too.
 DEMOS = [
-    # (first: "read first". Not a numbered demo; its lesson is 00-intro-to-spark.md)
-    {"n": "intro", "label": "Intro to Spark", "badge": "0", "lesson": 0, "path": "/lab",
-     "title": "Intro to DGX Spark: AI weather for Africa",
-     "about": "What a DGX Spark is and what it can do for weather, climate and agriculture, then fourteen "
-              "hands-on labs, all about Africa, in JupyterLab: forecasts, verification against stations, "
-              "farm advisories, crop stress, cyclone tracks, solar energy and the data behind a forecast.",
-     "setup": "intro"},
     {"n": 1, "title": "Setting up your AI weather forecasting lab",
      "about": "Check the Spark and get a working environment before diving into the models.", "setup": "demo1"},
     {"n": 2, "title": "Observational data readiness",
