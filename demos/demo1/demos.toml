@@ -25,6 +25,11 @@
 [dashboard]
 port = 8500
 
+# The command `spark-setup` (in ~/.local/bin): this setup, demos/demo1/spark_setup.py, from
+# any folder (`spark-setup dashboard`, `spark-setup --only demo3`, ...). Every run installs it.
+[setup]
+command = { name = "spark-setup", script = "demos/demo1/spark_setup.py" }
+
 # Smoke test from Untitled.ipynb: CUDA matmul + flash-attention inside an NGC container
 [smoke_test]
 image = "nvcr.io/nvidia/pytorch:25.03-py3"

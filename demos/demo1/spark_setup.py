@@ -14,6 +14,9 @@
   python3 spark_setup.py status               print the last run's steps
   python3 spark_setup.py dashboard [--stop]   start (or stop) just the dashboard
 
+Every run installs the command `spark-setup` ([setup] command in demos.toml) in ~/.local/bin:
+the same script from any folder, e.g. `spark-setup dashboard`, `spark-setup --only demo3`.
+
 Standard library only, so it runs on a fresh Spark before anything is installed; the
 dashboard's Streamlit goes into .venv/ here on first use. Progress goes to
 state/status.json and each step's output to state/logs/<step>.log; dashboard.py reads both.
@@ -34,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
@@ -386,14 +390,15 @@ def step_source(run, sid, log, demo, pull):
 LAUNCHER_MARK = "# Installed by training-program-2026's spark_setup.py"
 
 
-def install_shortcuts(demo, log) -> list[str]:
-    """A demo's command in ~/.local/bin (`command`: name, script), which works from any folder.
-    A file of the same name that isn't ours is left alone (and said so)."""
+def install_command(cmd: dict | None, owner: str, log) -> list[str]:
+    """A command in ~/.local/bin (`command`: name, script, also), which works from any folder:
+    it runs the repo's script (python3 for a .py, else bash). A file of the same name that
+    isn't ours is left alone (and said so). `log` gets a line per file (re)written."""
     notes = []
-    cmd = demo.get("command")
     if cmd:
         bin_dir = Path.home() / ".local" / "bin"
-        text = f"#!/bin/sh\n{LAUNCHER_MARK} (demos.toml: {demo['id']})\nexec bash {REPO / cmd['script']} \"$@\"\n"
+        runner = "python3" if cmd["script"].endswith(".py") else "bash"
+        text = f"#!/bin/sh\n{LAUNCHER_MARK} (demos.toml: {owner})\nexec {runner} {REPO / cmd['script']} \"$@\"\n"
         for name in [cmd["name"], *cmd.get("also", [])]:  # (`also`: other names for it)
             path = bin_dir / name
             if path.exists() and LAUNCHER_MARK not in path.read_text(errors="replace"):
@@ -407,6 +412,24 @@ def install_shortcuts(demo, log) -> list[str]:
         if str(bin_dir) not in os.environ.get("PATH", "").split(":"):
             notes.append(f"`{cmd['name']}` works after logging in again (or: source ~/.profile)")
     return notes
+
+
+def install_shortcuts(demo, log) -> list[str]:
+    """A demo's command (`command` in its [[demo]] block)."""
+    return install_command(demo.get("command"), demo["id"], log)
+
+
+def install_setup_command() -> None:
+    """This script's own command (`[setup] command`: spark-setup), on every run. Never fails
+    the run, and only speaks when it (re)installed it or couldn't."""
+    out = io.StringIO()
+    try:
+        notes = install_command(load_config().get("setup", {}).get("command"), "setup", out)
+    except (OSError, KeyError, ValueError, SystemExit) as e:
+        print(f"note: the spark-setup command wasn't installed ({e})", file=sys.stderr)
+        return
+    if out.getvalue() or any("something else" in n for n in notes):
+        print(out.getvalue() + "".join(f"note: {n}\n" for n in notes), end="", file=sys.stderr)
 
 
 def source_fingerprint(demo: dict) -> str | None:
@@ -698,6 +721,7 @@ def main(argv=None):
     if not argv or argv[0] not in ("run", "status", "dashboard", "-h", "--help"):
         argv = ["run", *argv]
     args = p.parse_args(argv)
+    install_setup_command()
     return {"run": cmd_run, "status": cmd_status, "dashboard": cmd_dashboard}[args.cmd](args, argv)
 
 
