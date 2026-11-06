@@ -4,8 +4,9 @@
   python3 forecastcheck_data.py      download it (the Demo 5 page's button runs this in the background)
 
 Only for the countries ForecastCheck has (its deployments/: Kenya, Rwanda, Senegal and Sierra
-Leone), and only this Spark's own, from its name (senegal-spark: Senegal), as country_data.py
-finds it. It runs ForecastCheck's own `fetch --apply` (demos/demo5/run.sh, the course's
+Leone): this Spark's own, from its name (senegal-spark: Senegal), as country_data.py finds it, or
+on a Spark whose country ForecastCheck doesn't have, the one chosen for Demo 5 (the Demo 5 page's
+picker, or `fcstcheck country <name>`: ForecastCheck's .deployment). It runs ForecastCheck's own `fetch --apply` (demos/demo5/run.sh, the course's
 `fcstcheck`), so the data lands in Demo 5's data folder in ForecastCheck's layout, ready for its
 pipeline. The country is given to that one command (VERIFICATION_DEPLOYMENT), so the country a
 trainee chose with `fcstcheck country` stays as it is. Running it again fetches only what's missing.
@@ -50,6 +51,37 @@ def spark_country() -> str | None:
     return name if name in supported() else None
 
 
+def chosen_country() -> str | None:
+    """The country chosen for Demo 5 (ForecastCheck's .deployment, which `fcstcheck country` and the
+    Demo 5 page's picker set), if ForecastCheck has it."""
+    try:
+        lines = (CHECKOUT / ".deployment").read_text().splitlines()
+    except OSError:
+        return None
+    name = next((l.strip() for l in lines if l.strip() and not l.strip().startswith("#")), None)
+    return name if name in supported() else None
+
+
+def demo_country() -> str | None:
+    """The country Demo 5's data is downloaded for: this Spark's own if ForecastCheck has it, else the
+    one chosen for Demo 5."""
+    return spark_country() or chosen_country()
+
+
+def choose(name: str) -> tuple[bool, str]:
+    """Chooses Demo 5's country, as `fcstcheck country <name>` does (and a running Demo 5 restarts
+    with it). (ok, message)"""
+    if name not in supported():
+        return False, f"ForecastCheck has no {name}"
+    try:
+        r = subprocess.run(["bash", str(RUN), "country", name], cwd=REPO, capture_output=True, text=True,
+                           timeout=300, stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return False, str(e)
+    out = (r.stdout + r.stderr).strip().splitlines()
+    return r.returncode == 0, out[-1] if out else ""
+
+
 def title(name: str) -> str:
     return name.replace("-", " ").title()
 
@@ -69,10 +101,11 @@ def write_status(**fields):
 
 
 def main() -> int:
-    country = spark_country()
+    country = demo_country()
     if not country:
-        print(f"ForecastCheck has no data for this Spark ({country_data.hostname()}); "
-              f"it has: {', '.join(title(c) for c in supported()) or 'nothing yet (set up Demo 5 first)'}",
+        print(f"ForecastCheck has no data for this Spark ({country_data.hostname()}) and no country was chosen "
+              f"for Demo 5 (the Demo 5 page, or fcstcheck country <name>); it has: "
+              f"{', '.join(title(c) for c in supported()) or 'nothing yet (set up Demo 5 first)'}",
               file=sys.stderr)
         return 2
     LOG.parent.mkdir(parents=True, exist_ok=True)
