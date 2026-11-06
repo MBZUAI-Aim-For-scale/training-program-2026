@@ -29,6 +29,9 @@ python3 country_data.py [--plan]          # download this Spark's country data (
 bash shutdown.sh                          # stop any setup run, download, the dashboard and all containers
 ```
 
+**`spark-setup`:** every run also installs this command (in `~/.local/bin`), the same script from
+any folder: `spark-setup dashboard`, `spark-setup --only demo3`, `spark-setup status`, ...
+
 **Rebuilds:** an image is rebuilt when the code it's built from changed (after a `git pull`,
 say), not on every run. Each build is labelled with a fingerprint of its committed sources,
 its `watch` paths in `demos.toml` (by default its build context and Dockerfile); uncommitted
