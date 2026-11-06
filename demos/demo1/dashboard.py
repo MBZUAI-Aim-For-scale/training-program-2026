@@ -40,11 +40,7 @@ DEMOS = [
      "setup": "demo3"},
     {"n": 4, "title": "The AI weather model scorecard",
      "about": "Compare models across evaluation metrics and explore the AI Almanac for your use case.",
-<<<<<<< HEAD
-     "container": "ai_weather", "setup": "demo4", "path": "/?page=SM_Benchmarking"},
-=======
      "setup": "demo4", "path": "/?page=SM_Benchmarking"},
->>>>>>> a3069a729169017a7198e049f26cbb2bd4bf3fc7
     {"n": 5, "title": "Putting your forecast to the test",
      "about": "Evaluate the forecasts you ran in Demo 3 against different metrics.",
      "setup": "demo5"},

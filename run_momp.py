@@ -268,7 +268,9 @@ def apply_base_paths(cfg):
 
     cfg.obs_dir = resolve_path(obs_dir) if obs_dir else resolve_path(EXTERNAL_DATA_DIR / "CHIRPS")
     cfg.ref_model_dir = resolve_path(ref_dir) if ref_dir else cfg.obs_dir
-    cfg.nc_mask = resolve_path(mask_file) if mask_file else resolve_path(EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc")
+    cfg.nc_mask = (resolve_path(mask_file) if mask_file else
+                   resolve_path(EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc")
+                   if getattr(config, "region", "Ethiopia") == "Ethiopia" else None)
 
     cfg.verification_window_list = ((1, 15), (16, 30))
     cfg.tolerance_days_list = (3, 5)
@@ -284,10 +286,11 @@ def apply_base_paths(cfg):
     if hasattr(config, "region"):
         cfg.region = config.region
 
-    if getattr(cfg, "shpfile_dir", None):
+    if getattr(cfg, "shpfile_dir", None) not in (None, "", "None", "none"):
         cfg.shpfile_dir = resolve_path(cfg.shpfile_dir)
     else:
-        cfg.shpfile_dir = resolve_path(EXTERNAL_DATA_DIR / "shapefile")
+        cfg.shpfile_dir = (resolve_path(EXTERNAL_DATA_DIR / "shapefile")
+                           if getattr(config, "region", "Ethiopia") == "Ethiopia" else None)
 
     cfg.ref_model = getattr(config, "ref_model", "climatology")
     cfg.layout = ("model", "verification_window")

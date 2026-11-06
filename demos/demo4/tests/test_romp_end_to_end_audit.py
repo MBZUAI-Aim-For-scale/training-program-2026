@@ -24,21 +24,26 @@ PYTHON = str(ROOT / '.venv' / 'bin' / 'python')
 
 
 class ROMPEndToEndAuditTests(unittest.TestCase):
-    def fixture(self, root, probabilistic, *, daily_rates=False, parallel=False):
+    def fixture(self, root, probabilistic, *, daily_rates=False, parallel=False, country='Ethiopia'):
         external = root / 'external'
-        observations = external / 'CHIRPS_regridded_025' / 'Ethiopia'
-        model = external / ('aifs_ens' if probabilistic else 'aifs_single')
+        model_folder = 'AIFS_ENS_v2' if probabilistic else 'AIFS_v2'
+        observations = (external / 'CHIRPS_regridded_025' / country if country == 'Ethiopia' else
+                        external / 'CHIRPSv3_Country_0p25deg' / country)
+        model = (external / ('aifs_ens' if probabilistic else 'aifs_single') if country == 'Ethiopia' else
+                 external / 'Forecasts_Country_0p25deg' / model_folder / 'tp' / country)
         boundary = external / 'shapefile'
         for folder in (observations, model, boundary):
             folder.mkdir(parents=True)
-        coordinates = {'lat': [8., 9.], 'lon': [38., 39.]}
+        coordinates = ({'lat': [8., 9.], 'lon': [38., 39.]} if country == 'Ethiopia' else
+                       {'lat': [-12., -11.], 'lon': [-77., -76.]})
         for year in (2021, 2022, 2023):
             times = pd.date_range(f'{year}-05-01', f'{year}-07-31')
             amounts = np.zeros((len(times), 2, 2))
             amounts[times >= f'{year}-05-20'] = 10.
             rainfall = xr.DataArray(amounts, dims=('time', 'lat', 'lon'),
                                     coords={'time': times, **coordinates}, attrs={'units': 'mm/day'})
-            xr.Dataset({'RAINFALL': rainfall}).to_netcdf(observations / f'{year}.nc')
+            observation_file = f'{year}.nc' if country == 'Ethiopia' else f'CHIRPSv3_{country}_{year}_box025.nc'
+            xr.Dataset({'RAINFALL': rainfall}).to_netcdf(observations / observation_file)
         initialization = pd.to_datetime(['2023-05-15', '2023-05-18'])
         steps = np.arange(1, 37)
         if probabilistic:
@@ -62,17 +67,20 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
         if daily_rates:
             rainfall = rainfall * 1000
             rainfall.attrs['units'] = 'mm/day'
-        xr.Dataset({'tp': rainfall}).to_netcdf(model / '2023.nc')
+        model_file = '2023.nc' if country == 'Ethiopia' else f'{model_folder}_tp_{country}_2023_box025.nc'
+        xr.Dataset({'tp': rainfall}).to_netcdf(model / model_file)
         mask = external / 'jjas_100mm_rainfall_mask_0p25.nc'
         xr.Dataset({'mask': xr.DataArray(np.ones((2, 2)), dims=('lat', 'lon'),
                                          coords=coordinates)}).to_netcdf(mask)
-        boundary.joinpath('ETH_Zones.geojson').write_text(json.dumps({
+        box = ([[37, 7], [40, 7], [40, 10], [37, 10], [37, 7]] if country == 'Ethiopia' else
+               [[-78, -13], [-75, -13], [-75, -10], [-78, -10], [-78, -13]])
+        boundary.joinpath('ETH_Zones.geojson' if country == 'Ethiopia' else 'Peru.geojson').write_text(json.dumps({
             'type': 'FeatureCollection', 'features': [{'type': 'Feature', 'properties': {},
             'geometry': {'type': 'Polygon', 'coordinates': [
-                [[37, 7], [40, 7], [40, 10], [37, 10], [37, 7]]]}}]}))
+                box]}}]}))
         shared = {'wet_day_threshold': 20., 'minimum_wet_day_rainfall': 1.,
                   'wet_spell_length': 3, 'dry_spell_limit': 3,
-                  'dry_spell_search_extension': 5, 'area_mask_file': str(mask),
+                  'dry_spell_search_extension': 5, 'area_mask_file': str(mask) if country == 'Ethiopia' else '',
                   'onset_threshold_file': '', 'baseline_forecast': 'climatology'}
         schedule = {'eval_start': '2023-05-15', 'eval_end': '2023-05-18',
                     'baseline_start_year': 2021, 'baseline_end_year': 2022,
@@ -84,19 +92,25 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
         spec = root / 'spec.json'
         spec.write_text(json.dumps({'forecast_window': '1-15', 'shared': shared,
                                     'models': [{'exec_key': key, **schedule}]}))
-        return key, spec, {**shared, **schedule, 'forecast_window': '1-15'}
+        return key, spec, {**shared, **schedule, 'forecast_window': '1-15', 'benchmark_coverage': country}
 
-    def run_interfaces(self, root, probabilistic, *, daily_rates=False, parallel=False):
-        key, spec, settings = self.fixture(root, probabilistic, daily_rates=daily_rates, parallel=parallel)
+    def run_interfaces(self, root, probabilistic, *, daily_rates=False, parallel=False, country='Ethiopia'):
+        key, spec, settings = self.fixture(root, probabilistic, daily_rates=daily_rates, parallel=parallel, country=country)
         env = dict(os.environ)
         # A developer's shell overrides must not change this controlled experiment.
         for name in list(env):
             if name.startswith('ROMP_'):
                 del env[name]
         env.update(DEMO_DATA_DIR=str(root), DEMO_DATA_SOURCE='local',
+                   ROMP_REGION=country,
                    ROMP_PYTHON=PYTHON, MPLCONFIGDIR=str(ROOT / '.mplcache'), MPLBACKEND='Agg',
                    OMP_NUM_THREADS='2', OPENBLAS_NUM_THREADS='2', MKL_NUM_THREADS='2')
         cli_env = {**env, 'ROMP_OUT_DIR': str(root / 'cli'), 'ROMP_FIG_DIR': str(root / 'cli-figures')}
+        if country != 'Ethiopia':
+            env['ROMP_SHAPEFILE_URI'] = str(root / 'external/shapefile/Peru.geojson')
+            cli_env.update(env)
+            cli_env['ROMP_OUT_DIR'] = str(root / 'cli/countries' / country)
+            cli_env['ROMP_FIG_DIR'] = str(root / 'cli-figures/countries' / country)
         cli = subprocess.run([PYTHON, str(ROOT / 'run_momp.py'), '--mode',
                               'prob' if probabilistic else 'det', '--model', key, '--spec', str(spec)],
                              cwd=ROOT, env=cli_env, capture_output=True, text=True, timeout=120)
@@ -113,6 +127,8 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
         for interface in ('cli', 'dashboard'):
             self.assertTrue(list((root / f'{interface}-figures').rglob('*.png')),
                             f'{interface} did not produce actual figures')
+        if country != 'Ethiopia':
+            return root / 'cli/countries' / country, root / 'dashboard/countries' / country
         return root / 'cli', root / 'dashboard'
 
     def assert_netcdf_parity(self, cli, dashboard):
@@ -146,6 +162,19 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
                         np.testing.assert_allclose(result.mean_mae, 0.)
                     else:
                         np.testing.assert_allclose(result.mean_mae, [[0., 1.], [np.nan, 2.5]], equal_nan=True)
+
+    def test_peru_country_boxes_run_without_ethiopian_masks(self):
+        for probabilistic in (False, True):
+            with self.subTest(probabilistic=probabilistic), tempfile.TemporaryDirectory(prefix='romp-e2e-peru-') as folder:
+                cli, dashboard = self.run_interfaces(Path(folder), probabilistic=probabilistic, country='Peru')
+                self.assert_netcdf_parity(cli, dashboard)
+                model = 'aifs_ens' if probabilistic else 'aifs_single'
+                with xr.open_dataset(dashboard / f'{model}/spatial_metrics_{model}_1-15.nc') as result:
+                    self.assertEqual(result.attrs['region'], 'Peru')
+                    self.assertTrue((result.lat < 0).all())
+                    self.assertTrue((result.lon < 0).all())
+                    self.assertTrue(result.mean_mae.notnull().any())
+                self.assertFalse((Path(folder) / 'dashboard' / model).exists())
 
     def test_probabilistic_cli_and_dashboard_match_with_disjoint_baseline_years(self):
         with tempfile.TemporaryDirectory(prefix='romp-e2e-prob-') as folder:

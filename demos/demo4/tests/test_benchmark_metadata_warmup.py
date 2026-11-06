@@ -60,7 +60,7 @@ class BenchmarkMetadataWarmupTests(unittest.TestCase):
             result = original_table(*args, **kwargs)
             return SimpleNamespace(selection=SimpleNamespace(rows=selected)) if kwargs.get("key") == "model_table_selection" else result
 
-        def inspect(model, first, last):
+        def inspect(model, first, last, model_meta=None):
             calls.append((model, first, last, threading.current_thread().name))
             entered.set()
             release.wait(10)

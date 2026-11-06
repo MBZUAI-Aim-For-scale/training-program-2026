@@ -74,8 +74,6 @@ def lon_swap(ds_tag, *, region=None, **kwargs):
     if region is None:
         region = kwargs.get("region") or getattr(params, "region", "Ethiopia")
 
-    lats, latn, lonw, lone = domain(region, **kwargs_clean)
-
     coord_list = list(ds_tag.coords.keys())
 
     if "lon" not in coord_list and "longitude" in coord_list:
@@ -89,6 +87,16 @@ def lon_swap(ds_tag, *, region=None, **kwargs):
         lon_coords = [variable for variable in coord_list if "lon" in variable]
         if lat_coords and lon_coords:
             ds_tag = ds_tag.rename({lat_coords[0]: "lat", lon_coords[0]: "lon"})
+
+    if "coordinate_bounds" not in kwargs_clean and {"lat", "lon"}.issubset(ds_tag.coords):
+        latitudes = np.asarray(ds_tag.lat.values, dtype=float)
+        longitudes = np.asarray(ds_tag.lon.values, dtype=float)
+        latitudes = latitudes[np.isfinite(latitudes)]
+        longitudes = longitudes[np.isfinite(longitudes)]
+        if latitudes.size and longitudes.size:
+            kwargs_clean["coordinate_bounds"] = (latitudes.min(), latitudes.max(),
+                                                  longitudes.min(), longitudes.max())
+    lats, latn, lonw, lone = domain(region, **kwargs_clean)
 
     if "lon" in ds_tag.coords and np.issubdtype(ds_tag.lon.dtype, np.number) and np.min(ds_tag.lon) < 0:
         lonw = ((lonw + 180) % 360) - 180
@@ -149,7 +157,7 @@ def region_select(ds, *, region=None, nc_mask=None, land_only=False, shp_only=Fa
 
     if region is None:
         region = kwargs.get("region") or getattr(params, "region", "Ethiopia")
-    if nc_mask is None:
+    if nc_mask is None and region == getattr(params, "region", "Ethiopia"):
         nc_mask = kwargs.get("nc_mask") or getattr(params, "nc_mask", None)
 
     ds = _dedup_coords(ds)

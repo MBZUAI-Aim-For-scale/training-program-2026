@@ -531,13 +531,13 @@ def _render_variable_plot(ds: xr.Dataset, var_name: str, title: str):
             da = da.isel(time=0)
         
         is_map = {"lat", "lon"}.issubset(da.dims)
-        if is_map:
+        if is_map and str(ds.attrs.get("region", "Ethiopia")).casefold() == "ethiopia":
             zones = load_boundary_frame(climatology_boundary_path(config))
             da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
             da = clip_to_boundary(da, climatology_boundary_path(config))
         fig, ax = plt.subplots(figsize=(8, 4))
         image = da.plot(ax=ax, cmap="YlGnBu")
-        if is_map:
+        if is_map and str(ds.attrs.get("region", "Ethiopia")).casefold() == "ethiopia":
             west, south, east, north = zones.total_bounds
             extent = geographic_extent(da.lon, da.lat, region_bounds=(west, east, south, north))
             clip_map_artist(image, ax, climatology_boundary_path(config))
@@ -755,12 +755,12 @@ def _detect_model_data_date_range(model_dir: str):
     return _scan_filename_date_range([Path(str(p)) for p in files_sorted])
 
 
-def detect_benchmark_models(force_refresh: bool = False) -> List[Dict[str, Any]]:
+def detect_benchmark_models(force_refresh: bool = False, catalog=None) -> List[Dict[str, Any]]:
     # The session inventory owns the cache. A second cache here can replay an
     # empty scan after inputs become available, even when inventory is retried.
     detected: List[Dict[str, Any]] = []
     current_year = datetime.now().year
-    catalog = CONFIG_BENCHMARK_MODEL_CATALOG or {}
+    catalog = (CONFIG_BENCHMARK_MODEL_CATALOG if catalog is None else catalog) or {}
 
     for raw_key, meta in catalog.items():
         key = _clean(raw_key)
@@ -820,8 +820,9 @@ def detect_benchmark_models(force_refresh: bool = False) -> List[Dict[str, Any]]
     return detected
 
 
-def available_observation_years(ground_truth: str) -> List[int]:
-    meta = BENCHMARK_OBS_CATALOG.get(ground_truth) or getattr(config, "_OBS_SETS", {}).get(ground_truth, {})
+def available_observation_years(ground_truth: str, observation_meta=None) -> List[int]:
+    meta = observation_meta if observation_meta is not None else (
+        BENCHMARK_OBS_CATALOG.get(ground_truth) or getattr(config, "_OBS_SETS", {}).get(ground_truth, {}))
     folder = meta.get("dir")
     if not folder:
         return []
@@ -921,12 +922,15 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
 
 
 @st.cache_data(show_spinner=False, ttl=300)
-def discover_map_outputs(force_refresh: bool = False) -> List[Dict[str, Any]]:
+def discover_map_outputs(force_refresh: bool = False, output_root=None) -> List[Dict[str, Any]]:
     outputs: List[Dict[str, Any]] = []
-    if not ROMP_DEMO_OUT_DIR.exists():
+    output_root = Path(output_root) if output_root is not None else ROMP_DEMO_OUT_DIR
+    if not output_root.exists():
         return outputs
 
-    for nc_path in sorted(ROMP_DEMO_OUT_DIR.rglob("*.nc")):
+    for nc_path in sorted(output_root.rglob("*.nc")):
+        if nc_path.relative_to(output_root).parts[0] == "countries":
+            continue
         first_var = None
         try:
             mtime = nc_path.stat().st_mtime
@@ -1143,6 +1147,7 @@ def load_map_da_cached(
     al: str = "",
     an: str = "",
     file_mtime: float = 0.0,
+    country: str = "Ethiopia",
 ) -> Optional[xr.DataArray]:
     try:
         path = Path(nc_path_str)
@@ -1159,8 +1164,9 @@ def load_map_da_cached(
                 return None
 
             da = _map_select_window(ds[var], wl)
-            da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
-            da = clip_to_boundary(da, climatology_boundary_path(config))
+            if country == "Ethiopia":
+                da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
+                da = clip_to_boundary(da, climatology_boundary_path(config))
             while len(da.dims) > 2:
                 da = da.isel({da.dims[0]: 0})
 
@@ -1168,7 +1174,7 @@ def load_map_da_cached(
                 try:
                     from momp.utils.land_mask import shp_mask
 
-                    da = shp_mask(da, region=getattr(config, "region", "Ethiopia"))
+                    da = shp_mask(da, region=country)
                 except Exception:
                     pass
 
@@ -1182,6 +1188,7 @@ def load_map_da_cached(
                 if bbox:
                     da = _map_clip_bbox(da, bbox)
 
+            da.attrs["benchmark_country"] = country
             return da.load()
     except Exception:
         return None
@@ -1198,12 +1205,13 @@ def plot_map(
     cbar_kwargs=None,
     admin_gdf=None,
     boundary_path=None,
+    country=None,
 ):
     fig, ax = plt.subplots(figsize=(7, 4.5), dpi=140)
     try:
         lon, lat = _map_lon_lat_names(da)
         zones = None
-        if lon and lat:
+        if lon and lat and (country or da.attrs.get("benchmark_country", "Ethiopia")) == "Ethiopia":
             boundary_path = boundary_path or climatology_boundary_path(config)
             zones = load_boundary_frame(boundary_path)
             da = clip_to_boundary(apply_jjas_mask(da, getattr(config, "nc_mask", None)), boundary_path)
@@ -1234,8 +1242,9 @@ def plot_map(
                 vmax=vmax,
                 **kwargs,
             )
-            clip_map_artist(image, ax, boundary_path)
-            zones.boundary.plot(ax=ax, color="black", linewidth=1.0, zorder=10)
+            if zones is not None:
+                clip_map_artist(image, ax, boundary_path)
+                zones.boundary.plot(ax=ax, color="black", linewidth=1.0, zorder=10)
 
             # Overlay Admin Boundary Polygon Line
             if admin_gdf is not None and not admin_gdf.empty:
@@ -1245,8 +1254,10 @@ def plot_map(
             lons_v = da[lon].values
             lats_v = da[lat].values
             frame = admin_gdf if admin_gdf is not None and not admin_gdf.empty else zones
-            west, south, east, north = frame.total_bounds
-            region_bounds = (west, east, south, north)
+            region_bounds = None
+            if frame is not None:
+                west, south, east, north = frame.total_bounds
+                region_bounds = (west, east, south, north)
             west, east, south, north = geographic_extent(lons_v, lats_v, da.transpose(lat, lon).values, region_bounds=region_bounds)
             ax.set_xlim(west, east)
             ax.set_ylim(south, north)
@@ -1343,8 +1354,8 @@ def subtract_maps(da_a, da_b):
 
 
 @st.cache_data(show_spinner=False, ttl=300)
-def compute_model_comparison_cached(ml, wl, al, an):
-    outs = discover_map_outputs()
+def compute_model_comparison_cached(ml, wl, al, an, output_root=None, country="Ethiopia"):
+    outs = discover_map_outputs(output_root=output_root)
     ual = al if al and al != "All" else ""
     uan = an if an and an != "All" else ""
     recs: Dict[str, List[float]] = {}
@@ -1352,7 +1363,7 @@ def compute_model_comparison_cached(ml, wl, al, an):
     for item in outs:
         if wl not in item.get("windows", []):
             continue
-        da = load_map_da_cached(item["path"], ml, wl, ual, uan, file_mtime=item.get("mtime", 0.0))
+        da = load_map_da_cached(item["path"], ml, wl, ual, uan, file_mtime=item.get("mtime", 0.0), country=country)
         if da is None:
             continue
         arr = np.asarray(da.values, dtype=float)
@@ -1608,8 +1619,8 @@ def _distribution_cell_style(value, baseline_value, scale, higher_better, is_bas
 
 
 @st.cache_data(show_spinner=False, ttl=120)
-def compute_metric_distribution_stats() -> pd.DataFrame:
-    outs = discover_map_outputs()
+def compute_metric_distribution_stats(output_root=None, country="Ethiopia") -> pd.DataFrame:
+    outs = discover_map_outputs(output_root=output_root)
     unique_outputs = {}
     for item in outs:
         model_label = item.get("model_label")
@@ -1650,8 +1661,8 @@ def compute_metric_distribution_stats() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, ttl=60)
-def compute_metric_distribution_stats() -> pd.DataFrame:
-    outs = discover_map_outputs()
+def compute_metric_distribution_stats(output_root=None, country="Ethiopia") -> pd.DataFrame:
+    outs = discover_map_outputs(output_root=output_root)
     unique_outputs = {}
     for item in outs:
         model_label = item.get("model_label")
@@ -1664,7 +1675,7 @@ def compute_metric_distribution_stats() -> pd.DataFrame:
     rows = []
     for (model_label, wl), (path, mtime) in unique_outputs.items():
         for metric_key, metric_meta in MAP_METRICS.items():
-            da = load_map_da_cached(path, metric_key, wl, "", "", file_mtime=mtime)
+            da = load_map_da_cached(path, metric_key, wl, "", "", file_mtime=mtime, country=country)
             if da is None:
                 continue
             arr = np.asarray(da.values, dtype=float).ravel()
@@ -1900,11 +1911,14 @@ def classify_reference_asset(path: Path) -> str:
 
 
 @st.cache_data(show_spinner=False, ttl=300)
-def collect_reference_figures() -> Dict[str, List[str]]:
+def collect_reference_figures(figure_root=None) -> Dict[str, List[str]]:
     grouped = {cat: [] for cat in REFERENCE_CATEGORY_ORDER}
-    if not ROMP_DEMO_FIG_DIR.exists():
+    figure_root = Path(figure_root) if figure_root is not None else ROMP_DEMO_FIG_DIR
+    if not figure_root.exists():
         return grouped
-    for path in sorted(ROMP_DEMO_FIG_DIR.rglob("*.png")):
+    for path in sorted(figure_root.rglob("*.png")):
+        if path.relative_to(figure_root).parts[0] == "countries":
+            continue
         cat = classify_reference_asset(path)
         grouped.setdefault(cat, []).append(str(path.resolve()))
     return grouped
@@ -2348,8 +2362,14 @@ def run_momp_benchmark(
             env["ROMP_FORECAST_WINDOW"] = str(run_config["forecast_window"]).replace(" days", "")
         if run_config.get("ground_truth"):
             env["ROMP_GROUND_TRUTH"] = str(run_config["ground_truth"])
+            if run_config["ground_truth"] in {"CHIRPS", "IMERG"}:
+                env["ROMP_OBS"] = str(run_config["ground_truth"])
         if run_config.get("benchmark_coverage"):
             env["ROMP_BENCHMARK_COVERAGE"] = str(run_config["benchmark_coverage"])
+            env["ROMP_REGION"] = "_".join(str(run_config["benchmark_coverage"]).split())
+            output_dir, figure_dir = _benchmark_output_dirs(
+                run_config["benchmark_coverage"], env.get("ROMP_OUT_DIR"), env.get("ROMP_FIG_DIR"))
+            env["ROMP_OUT_DIR"], env["ROMP_FIG_DIR"] = str(output_dir), str(figure_dir)
 
         for key, env_name in [
             ("wet_day_threshold", "ROMP_WET_THRESHOLD"),
@@ -2412,7 +2432,7 @@ def run_momp_benchmark(
         return {
             "mode": mode,
             "returncode": returncode,
-            "runtime_dir": str(ROMP_DEMO_OUT_DIR),
+            "runtime_dir": env.get("ROMP_OUT_DIR", str(ROMP_DEMO_OUT_DIR)),
             "stdout": text,
             "stderr": "",
             "ok": (not timed_out) and returncode == 0 and not (cancel_event is not None and cancel_event.is_set()),
@@ -2426,7 +2446,7 @@ def run_momp_benchmark(
         return {
             "mode": mode, "returncode": 130 if cancelled else 1, "ok": False, "cancelled": cancelled,
             "stop_warning": "The operating system denied worker shutdown. Some processes may still be running." if cancelled and isinstance(e, PermissionError) else "",
-            "runtime_dir": str(ROMP_DEMO_OUT_DIR),
+            "runtime_dir": env.get("ROMP_OUT_DIR", str(ROMP_DEMO_OUT_DIR)),
             "stdout": "",
             "stderr": f"Could not run benchmark process: {type(e).__name__}: {e!r}\n" + traceback.format_exc(),
             "command": " ".join(cmd),
@@ -2456,7 +2476,30 @@ BENCHMARK_COVERAGE_COUNTRIES = (
     ("🇨🇱", "Chile"), ("🇧🇩", "Bangladesh"),
 )
 DEFAULT_BENCHMARK_COVERAGE = "Ethiopia"
-CONFIGURED_COVERAGE = {"Ethiopia"}
+
+
+def _benchmark_output_dirs(country, output_root=None, figure_root=None):
+    output_root = Path(output_root) if output_root is not None else ROMP_DEMO_OUT_DIR
+    figure_root = Path(figure_root) if figure_root is not None else ROMP_DEMO_FIG_DIR
+    token = "_".join(str(country).split())
+    if token == "Ethiopia":
+        return output_root, figure_root
+    if output_root.parts[-2:] != ("countries", token):
+        output_root = output_root / "countries" / token
+    if figure_root.parts[-2:] != ("countries", token):
+        figure_root = figure_root / "countries" / token
+    return output_root, figure_root
+
+
+def _benchmark_inventory_key(country, ground_truth):
+    return ground_truth if country == "Ethiopia" else (country, ground_truth)
+
+
+def _benchmark_sources(country, ground_truth="CHIRPS"):
+    sources = config.benchmark_country_sources(country, ground_truth)
+    if country == "Ethiopia" and getattr(config, "region", "Ethiopia") == "Ethiopia":
+        sources["models"] = {key: dict(meta) for key, meta in CONFIG_BENCHMARK_MODEL_CATALOG.items()}
+    return sources
 
 
 def _coverage_label(name: str) -> str:
@@ -2491,7 +2534,8 @@ def render_kpi_row(models: int, presets: int, status: str, runtime: str) -> None
     )
 
 
-def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None, run_windows_renderer=None) -> Dict[str, Any]:
+def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None, run_windows_renderer=None,
+                           benchmark_country="Ethiopia") -> Dict[str, Any]:
     section_header("Shared settings", "sky")
     st.markdown("Optional settings applied to every selected model in this benchmark.")
 
@@ -2514,14 +2558,16 @@ def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None,
         seasonal_mask = EXTERNAL_DATA_DIR / "jjas_seasonal_mask_0p25.nc"
         mask_options = {
             "No mask": "",
-            "JJAS 100mm rainfall mask": str(default_mask),
-            "JJAS seasonal 0.25 mask": str(seasonal_mask),
-            "Custom path": "__custom__",
         }
-        configured_mask = str(getattr(config, "nc_mask", None) or "")
+        if benchmark_country == "Ethiopia":
+            mask_options.update({"JJAS 100mm rainfall mask": str(default_mask),
+                                 "JJAS seasonal 0.25 mask": str(seasonal_mask)})
+        mask_options["Custom path"] = "__custom__"
+        configured_mask = str(getattr(config, "nc_mask", None) or "") if benchmark_country == "Ethiopia" else ""
+        mask_key = "shared_area_mask_from_config" + ("" if benchmark_country == "Ethiopia" else f"_{benchmark_country}")
         default_mask_choice = next((label for label, value in mask_options.items() if value == configured_mask), "Custom path")
         area_mask_choice = st.selectbox("Area mask file", list(mask_options.keys()),
-                                       index=list(mask_options).index(default_mask_choice), key="shared_area_mask_from_config")
+                                       index=list(mask_options).index(default_mask_choice), key=mask_key)
         area_mask_file = mask_options[area_mask_choice]
         if area_mask_choice == "Custom path":
             area_mask_file = st.text_input("Area mask file path", value=configured_mask, key="shared_area_mask_custom")
@@ -2529,9 +2575,10 @@ def render_shared_settings(ground_truth: str = "CHIRPS", advanced_renderer=None,
         default_threshold = ONSET_REFERENCE_DIR / "thresholds_df.csv"
         threshold_options = {
             "Dataset default": "",
-            "Reference thresholds CSV": str(default_threshold),
-            "Custom path": "__custom__",
         }
+        if benchmark_country == "Ethiopia":
+            threshold_options["Reference thresholds CSV"] = str(default_threshold)
+        threshold_options["Custom path"] = "__custom__"
         onset_threshold_choice = st.selectbox("Onset threshold file", list(threshold_options.keys()), index=0, key="shared_onset_thresh")
         onset_threshold_file = threshold_options[onset_threshold_choice]
         if onset_threshold_choice == "Custom path":
@@ -2994,9 +3041,9 @@ def render_reference_figure_gallery(paths, view_mode, filter_key):
 # ======================================================================
 # Main Page
 # ======================================================================
-def inspect_model_temporal_coverage(model_key, first_year, last_year):
+def inspect_model_temporal_coverage(model_key, first_year, last_year, model_meta=None):
     """Read only initialization/lead coordinates, never load forecast fields."""
-    meta = CONFIG_BENCHMARK_MODEL_CATALOG.get(model_key, {})
+    meta = CONFIG_BENCHMARK_MODEL_CATALOG.get(model_key, {}) if model_meta is None else model_meta
     folder, pattern = meta.get("dir"), meta.get("file_pattern", "{}.nc")
     dates, horizons, failures = [], {}, []
     for year in range(first_year, last_year + 1):
@@ -3030,9 +3077,10 @@ def inspect_model_temporal_coverage(model_key, first_year, last_year):
     return {"dates": dates, "horizons": horizons, "failures": failures}
 
 
-def _benchmark_coverage_key(row):
+def _benchmark_coverage_key(row, catalog=None):
+    catalog = CONFIG_BENCHMARK_MODEL_CATALOG if catalog is None else catalog
     return (row["_exec_key"], row["_start_date"].year, row["_end_date"].year,
-            json.dumps(CONFIG_BENCHMARK_MODEL_CATALOG.get(row["_exec_key"], {}),
+            json.dumps(catalog.get(row["_exec_key"], {}),
                        sort_keys=True, default=str))
 
 
@@ -3187,12 +3235,19 @@ def render_benchmark_run_controls(*, disabled=True):
     return clicked
 
 
-def _load_benchmark_inventory(ground_truth):
+def _load_benchmark_inventory(ground_truth, country=None):
     import time
 
-    return {"ground_truth": ground_truth, "models": detect_benchmark_models(),
-            "observation_years": available_observation_years(ground_truth),
-            "loaded_at": time.time()}
+    country = country or getattr(config, "region", "Ethiopia")
+    if country == "Ethiopia" and getattr(config, "region", "Ethiopia") == "Ethiopia":
+        return {"ground_truth": ground_truth, "country": country,
+                "models": detect_benchmark_models(), "catalog": CONFIG_BENCHMARK_MODEL_CATALOG,
+                "observation_years": available_observation_years(ground_truth), "loaded_at": time.time()}
+    sources = config.benchmark_country_sources(country, ground_truth)
+    return {"ground_truth": ground_truth, "country": country, "catalog": sources["models"],
+            "models": detect_benchmark_models(catalog=sources["models"]) if sources["available"] else [],
+            "observation_years": available_observation_years(ground_truth, sources["observations"])
+            if sources["available"] else [], "loaded_at": time.time()}
 
 
 @st.fragment(run_every=1)
@@ -3216,12 +3271,18 @@ def render_benchmark_inventory():
 
 
 def _load_benchmark_coverage(keys):
+    import json
     import time
 
     loaded = {}
     for key in keys:
         try:
-            coverage = inspect_model_temporal_coverage(*key[:3])
+            try:
+                model_meta = json.loads(key[3])
+            except (ValueError, TypeError):
+                model_meta = None
+            coverage = (inspect_model_temporal_coverage(*key[:3]) if model_meta is None else
+                        inspect_model_temporal_coverage(*key[:3], model_meta=model_meta))
         except Exception as exc:
             coverage = {"dates": [], "horizons": {}, "failures": [f"{type(exc).__name__}: {exc}"]}
         loaded[key] = {"data": coverage, "loaded_at": time.time()}
@@ -3271,6 +3332,10 @@ def render_onset_years():
 
 def page() -> None:
     _inject_theme_css()
+    country_hint = st.session_state.get("benchmark_country", DEFAULT_BENCHMARK_COVERAGE)
+    sources = _benchmark_sources(country_hint)
+    CONFIG_BENCHMARK_MODEL_CATALOG = sources["models"]
+    ROMP_DEMO_OUT_DIR, ROMP_DEMO_FIG_DIR = _benchmark_output_dirs(country_hint)
     reconnect_benchmark(st.session_state, st.query_params)
     if st.session_state.get('benchmark_reconnect_error'):
         st.warning(st.session_state['benchmark_reconnect_error'])
@@ -3284,7 +3349,7 @@ def page() -> None:
         st.markdown(
             '<div class="page-subtitle">'
             "Evaluate AI weather model skill against observational references "
-            "across the Ethiopian highlands."
+            "for the selected country."
             "</div>",
             unsafe_allow_html=True,
         )
@@ -3327,11 +3392,15 @@ def page() -> None:
         coverage_options,
         index=coverage_options.index(DEFAULT_BENCHMARK_COVERAGE),
         format_func=_coverage_label,
+        key="benchmark_country",
     )
 
-    coverage_ready = benchmark_coverage in CONFIGURED_COVERAGE or benchmark_coverage in preset_names
+    sources = _benchmark_sources(benchmark_coverage, ground_truth)
+    CONFIG_BENCHMARK_MODEL_CATALOG = sources["models"]
+    ROMP_DEMO_OUT_DIR, ROMP_DEMO_FIG_DIR = _benchmark_output_dirs(benchmark_coverage)
+    coverage_ready = sources["available"] or benchmark_coverage in preset_names
     if not coverage_ready:
-        bi2.caption(f"⚠️ No data configured for {benchmark_coverage} yet. Run Benchmark is disabled.")
+        bi2.caption(f"⚠️ {sources['reason']} Run Benchmark is disabled.")
     forecast_window = bi3.selectbox("Forecast window", ["1-15 days", "16-30 days"])
 
     # Models
@@ -3345,12 +3414,13 @@ def page() -> None:
                  help="Rescan forecast files, metadata and observation years when inputs change."):
         inventory_cache.clear()
         st.session_state.pop("benchmark_coverage_cache", None)
-    inventory = inventory_cache.get(ground_truth)
+    inventory_key = _benchmark_inventory_key(benchmark_coverage, ground_truth)
+    inventory = inventory_cache.get(inventory_key)
     if inventory is None:
         if st.session_state.get("benchmark_inventory_task") is None:
-            st.session_state["benchmark_inventory_ground_truth"] = ground_truth
+            st.session_state["benchmark_inventory_ground_truth"] = inventory_key
             st.session_state["benchmark_inventory_task"] = BackgroundTask(
-                _load_benchmark_inventory, ground_truth).start()
+                _load_benchmark_inventory, ground_truth, benchmark_coverage).start()
         render_benchmark_inventory()
         if st.session_state.get("benchmark_active_job") is not None:
             render_benchmark_run_controls()
@@ -3358,7 +3428,7 @@ def page() -> None:
     if inventory.get("error"):
         st.error(f"Could not load benchmark inputs: {inventory['error']}")
         if st.button("Retry benchmark inputs", key="benchmark_retry_inventory"):
-            inventory_cache.pop(ground_truth, None)
+            inventory_cache.pop(inventory_key, None)
             st.rerun()
         if st.session_state.get("benchmark_active_job") is not None:
             render_benchmark_run_controls()
@@ -3366,12 +3436,13 @@ def page() -> None:
     # Finish a previous ground-truth inventory without replacing current controls.
     render_benchmark_inventory()
     model_registry = inventory["models"]
+    CONFIG_BENCHMARK_MODEL_CATALOG = inventory.get("catalog", CONFIG_BENCHMARK_MODEL_CATALOG)
     # Warm each model's entire available year range once, before selection.
     # Session data remains valid until an explicit input refresh, so changing
     # models, schedules or evaluation years never opens the same files again.
     coverage_cache = st.session_state.setdefault("benchmark_coverage_cache", {})
-    pending_coverage = [_benchmark_coverage_key(row) for row in model_registry
-                        if _benchmark_coverage_key(row) not in coverage_cache]
+    pending_coverage = [_benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG) for row in model_registry
+                        if _benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG) not in coverage_cache]
     if pending_coverage and st.session_state.get("benchmark_coverage_task") is None:
         st.session_state["benchmark_coverage_keys"] = pending_coverage
         st.session_state["benchmark_coverage_task"] = BackgroundTask(
@@ -3507,7 +3578,9 @@ def page() -> None:
                 window_label = ", ".join(f"{start}–{end}" for start, end in windows)
                 st.caption(f"Next run: {initialization['init_type'].title()} · Days {window_label} · Horizon {verification['max_forecast_day']} days")
 
-    shared_settings = render_shared_settings(ground_truth, advanced_renderer=render_advanced_settings, run_windows_renderer=render_model_run_windows)
+    shared_settings = render_shared_settings(ground_truth, advanced_renderer=render_advanced_settings,
+                                             run_windows_renderer=render_model_run_windows,
+                                             benchmark_country=benchmark_coverage)
     dry_extension = shared_settings["dry_spell_search_extension"]
     if 0 < dry_extension < shared_settings["dry_spell_limit"]:
         verification_problems.append("Dry spell search extension must be 0 (disabled) or at least the dry spell limit.")
@@ -3540,7 +3613,7 @@ def page() -> None:
         errors = temporal_settings_errors({**window, "probabilistic": row.get("_probabilistic", False)}, observation_years)
         observation_problems.extend(f"{row['Model']}: {error}" for error in errors)
         if not errors:
-            coverage_key = _benchmark_coverage_key(row)
+            coverage_key = _benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG)
             cached_coverage = coverage_cache.get(coverage_key)
             if cached_coverage is None:
                 missing_coverage.append(coverage_key)
@@ -3655,7 +3728,10 @@ def page() -> None:
         tab_labels.append("Benchmark Report & Export")
 
     res_tabs = st.tabs(tab_labels, key="benchmark_result_tabs", on_change="rerun")
-    map_outputs = discover_map_outputs() if any(
+    result_args = {} if benchmark_coverage == "Ethiopia" else {"output_root": ROMP_DEMO_OUT_DIR}
+    distribution_args = {} if benchmark_coverage == "Ethiopia" else {
+        "output_root": ROMP_DEMO_OUT_DIR, "country": benchmark_coverage}
+    map_outputs = discover_map_outputs(**result_args) if any(
         tab.open and label in {"Metric Map", "All Metrics", "Benchmark Report & Export"}
         for tab, label in zip(res_tabs, tab_labels)) else []
 
@@ -3673,7 +3749,7 @@ def page() -> None:
                 wl = c2.selectbox("Lead Time", sorted(list(all_w)), key="m_wl")
                 m_opts = sorted({o["model_label"] for o in map_outputs if wl in o["windows"]})
                 model_label = c3.selectbox("Model", m_opts, key="m_mod")
-                sf_avail = _map_load_admin_shapefile() is not None
+                sf_avail = benchmark_coverage == "Ethiopia" and _map_load_admin_shapefile() is not None
                 al = c4.selectbox("Subregion level", ["All", "Admin1", "Admin2", "Admin3"] if sf_avail else ["All"], disabled=not sf_avail, key="m_al")
                 an = "All"
                 if al != "All":
@@ -3685,7 +3761,8 @@ def page() -> None:
                 if sel_out:
                     ual = "" if al == "All" else al
                     uan = "" if an == "All" else an
-                    base_da = load_map_da_cached(sel_out["path"], ml, wl, ual, uan, file_mtime=sel_out.get("mtime", 0.0))
+                    base_da = load_map_da_cached(sel_out["path"], ml, wl, ual, uan,
+                                                 file_mtime=sel_out.get("mtime", 0.0), country=benchmark_coverage)
                     admin_sub = _get_admin_subset(ual, uan)
 
                     if base_da is not None:
@@ -3701,12 +3778,13 @@ def page() -> None:
                                     f"{ml} - {model_label} - {wl}",
                                     cmap=mm["cmap"],
                                     unit=mm["unit"],
-                                    admin_gdf=admin_sub
+                                    admin_gdf=admin_sub,
+                                    country=benchmark_coverage,
                                 )
                                 if fig:
                                     st.pyplot(fig)
                                     plt.close(fig)
-                                df = compute_model_comparison_cached(ml, wl, ual, uan)
+                                df = compute_model_comparison_cached(ml, wl, ual, uan, **distribution_args)
                                 if not df.empty:
                                     df["Selected"] = np.where(df["Model"] == model_label, "Yes", "")
                                     st.dataframe(df, width='stretch', hide_index=True)
@@ -3730,7 +3808,9 @@ def page() -> None:
                                     vmax=1,
                                     cbar_kwargs=cbar_kw,
                                     admin_gdf=admin_sub,
-                                    boundary_path=climatology_boundary_path(config) if "climatology" in model_label.casefold() else None,
+                                    boundary_path=climatology_boundary_path(config)
+                                    if benchmark_coverage == "Ethiopia" and "climatology" in model_label.casefold() else None,
+                                    country=benchmark_coverage,
                                 )
                                 if fig:
                                     st.pyplot(fig)
@@ -3762,7 +3842,8 @@ def page() -> None:
                                 else:
                                     cout = next((o for o in map_outputs if o["model_label"] == cm and cw in o["windows"]), None)
                                     if cout:
-                                        cda = load_map_da_cached(cout["path"], ml, cw, ual, uan, file_mtime=cout.get("mtime", 0.0))
+                                        cda = load_map_da_cached(cout["path"], ml, cw, ual, uan,
+                                                                 file_mtime=cout.get("mtime", 0.0), country=benchmark_coverage)
                                         if cda is not None:
                                             dda = subtract_maps(base_da, cda)
                                             if dda is not None:
@@ -3770,7 +3851,8 @@ def page() -> None:
                                                     dda,
                                                     f"Difference - {model_label} minus {cm}",
                                                     diverging=True,
-                                                    admin_gdf=admin_sub
+                                                    admin_gdf=admin_sub,
+                                                    country=benchmark_coverage,
                                                 )
                                                 if fig:
                                                     st.pyplot(fig)
@@ -3803,7 +3885,8 @@ def page() -> None:
                                 else:
                                     rout = next((o for o in map_outputs if o["model_label"] == rm and rw in o["windows"]), None)
                                     if rout:
-                                        rda = load_map_da_cached(rout["path"], ml, rw, ual, uan, file_mtime=rout.get("mtime", 0.0))
+                                        rda = load_map_da_cached(rout["path"], ml, rw, ual, uan,
+                                                                 file_mtime=rout.get("mtime", 0.0), country=benchmark_coverage)
                                         if rda is not None:
                                             sp = st.slider("Drag to swipe", 0, 100, 50, key="s_sp")
                                             vmin, vmax = _shared_vmin_vmax(base_da.values, rda.values)
@@ -3815,7 +3898,8 @@ def page() -> None:
                                                 unit=mm["unit"],
                                                 vmin=vmin,
                                                 vmax=vmax,
-                                                admin_gdf=admin_sub
+                                                admin_gdf=admin_sub,
+                                                country=benchmark_coverage,
                                             )
                                             rf = plot_map(
                                                 rda,
@@ -3824,7 +3908,8 @@ def page() -> None:
                                                 unit=mm["unit"],
                                                 vmin=vmin,
                                                 vmax=vmax,
-                                                admin_gdf=admin_sub
+                                                admin_gdf=admin_sub,
+                                                country=benchmark_coverage,
                                             )
 
                                             if lf and rf:
@@ -3918,7 +4003,7 @@ def page() -> None:
                 "Spatial means can differ from the pooled scores above."
             )
             spatial_models = {metric_model_label(output["model_label"]) for output in map_outputs}
-            stats_df = compute_metric_distribution_stats() if om and ow and set(om) & spatial_models else pd.DataFrame()
+            stats_df = compute_metric_distribution_stats(**distribution_args) if om and ow and set(om) & spatial_models else pd.DataFrame()
             probabilistic_models = [model for model in om if categories[model] == "Probabilistic"]
             if probabilistic_models and ow:
                 probability_stats, grid_errors = load_probabilistic_distribution_stats(
@@ -4104,7 +4189,7 @@ def page() -> None:
     if res_tabs[2].open:
         with res_tabs[2]:
             st.markdown("MOMP benchmark output figures and datasets.")
-            momp_figures = collect_reference_figures()
+            momp_figures = collect_reference_figures() if benchmark_coverage == "Ethiopia" else collect_reference_figures(ROMP_DEMO_FIG_DIR)
 
             if not momp_figures:
                 info_box("No MOMP output figures found. Run a benchmark first.", "amber")
@@ -4185,7 +4270,8 @@ def page() -> None:
             st.divider()
             section_header("NetCDF Data Explorer", "sky")
             if st.checkbox("Load NetCDF Data Explorer", value=False, key="load_nc_explorer"):
-                nc_files = sorted(str(p.resolve()) for p in ROMP_DEMO_OUT_DIR.rglob("*.nc"))
+                nc_files = sorted(str(p.resolve()) for p in ROMP_DEMO_OUT_DIR.rglob("*.nc")
+                                  if p.relative_to(ROMP_DEMO_OUT_DIR).parts[0] != "countries")
 
                 if nc_files:
                     sel = st.selectbox("Dataset", nc_files, format_func=format_nc_label, key="nc_explorer_sel")
@@ -4412,13 +4498,13 @@ def page() -> None:
 
                                 # Collect distribution statistics
                                 try:
-                                    distribution_stats = compute_metric_distribution_stats()
+                                    distribution_stats = compute_metric_distribution_stats(**distribution_args)
                                 except Exception:
                                     distribution_stats = pd.DataFrame()
 
                                 # Collect benchmark figures
                                 try:
-                                    report_figures = collect_reference_figures()
+                                    report_figures = collect_reference_figures() if benchmark_coverage == "Ethiopia" else collect_reference_figures(ROMP_DEMO_FIG_DIR)
                                 except Exception:
                                     report_figures = {}
 

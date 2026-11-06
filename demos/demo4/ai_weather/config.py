@@ -1,3 +1,4 @@
+import copy
 import os
 import logging
 # Workers use spawn and create their own clients. Opting into gRPC's fork
@@ -88,7 +89,7 @@ ENACTS_DIR = EXTERNAL_DATA_DIR / "ENACTS"
 CHIRPS_025_DIR = EXTERNAL_DATA_DIR / "CHIRPS_regridded_025"
 
 # Region (country) and observation dataset
-region = os.getenv("ROMP_REGION", "Ethiopia").strip()
+region = "_".join(os.getenv("ROMP_REGION", "Ethiopia").strip().split())
 obs = os.getenv("ROMP_OBS", "CHIRPS").upper()
 
 # ==============================================================================
@@ -506,39 +507,47 @@ LOCAL_MODEL_DIRS = {
 
 
 def _model_dir(key: str):
-    return _pick(f"model {key}", [(LOCAL_MODEL_DIRS[key], True)], _model_uri(key))
+    if region.casefold() == "ethiopia":
+        candidates = [(LOCAL_MODEL_DIRS[key], True)]
+    else:
+        folder = COUNTRY_BOX_MODEL_FOLDERS.get(key, key)
+        candidates = [(EXTERNAL_DATA_DIR / "Forecasts_Country_0p25deg" / folder / "tp" / region, True),
+                      (LOCAL_MODEL_DIRS[key] / region, True)]
+    return _pick(f"model {key}", candidates, _model_uri(key))
 
 
 def _model_file_pattern(key: str, folder: str) -> str:
     country_folder = COUNTRY_BOX_MODEL_FOLDERS.get(MODEL_FOLDERS.get(key, key))
-    if country_folder and is_uri(folder):
+    if country_folder and (is_uri(folder) or "Forecasts_Country_0p25deg" in Path(str(folder)).parts):
         return f"{country_folder}_tp_{region}_{{}}_box025.nc"
     return "{}.nc"
 
 
-# Prioritize 0.25-degree regridded CHIRPS data directories
-OBS_DIR = _pick(
-    "observations",
-    [
+# Prioritize 0.25-degree regridded CHIRPS data directories. Flat historical
+# directories belong to Ethiopia; country changes must not reuse those files.
+_OBS_LOCAL_CANDIDATES = [
+        (EXTERNAL_DATA_DIR / "CHIRPSv3_Country_0p25deg" / region, False),
         (EXTERNAL_DATA_DIR / f"{obs}_regridded_025" / region, True),
-        (EXTERNAL_DATA_DIR / f"{obs}_regridded_025", False),
         (EXTERNAL_DATA_DIR / "CHIRPS_regridded_025" / region, True),
-        (EXTERNAL_DATA_DIR / "CHIRPS_regridded_025", False),
         (EXTERNAL_DATA_DIR / "CHIRPS_025" / region, True),
-        (EXTERNAL_DATA_DIR / "CHIRPS_025", False),
         (EXTERNAL_DATA_DIR / obs / region, True),
+]
+if region.casefold() == "ethiopia":
+    _OBS_LOCAL_CANDIDATES += [
+        (EXTERNAL_DATA_DIR / f"{obs}_regridded_025", False),
+        (EXTERNAL_DATA_DIR / "CHIRPS_regridded_025", False),
+        (EXTERNAL_DATA_DIR / "CHIRPS_025", False),
         (EXTERNAL_DATA_DIR / obs, False),
         (EXTERNAL_DATA_DIR / "CHIRPS", False),
-    ],
-    OBS_URI
-)
+    ]
+OBS_DIR = _pick("observations", _OBS_LOCAL_CANDIDATES, OBS_URI)
 CHIRPS_DIR = OBS_DIR
 
 JJAS_MASK_FILE = _pick(
     "region mask",
     [(EXTERNAL_DATA_DIR / "jjas_100mm_rainfall_mask_0p25.nc", False)],
     os.getenv("ROMP_MASK_URI") or f"{BUCKET_ROOT}/DATA/{region}/jjas_100mm_rainfall_mask_0p25.nc"
-)
+) if region.casefold() == "ethiopia" else (os.getenv("ROMP_MASK_URI") or None)
 JJAS_DIR = JJAS_MASK_FILE
 MONSOON_DIR = PROCESSED_DATA_DIR / "Monsoon" / "2026"
 
@@ -546,7 +555,7 @@ SHAPEFILE_MASK_FILE = _pick_shapefile_dir(
     EXTERNAL_DATA_DIR / "shapefile",
     os.getenv("ROMP_SHAPEFILE_URI")
     or f"{BUCKET_ROOT}/DATA/{region}/shapefile",
-)
+) if region.casefold() == "ethiopia" else (os.getenv("ROMP_SHAPEFILE_URI") or None)
 shapefile = SHAPEFILE_MASK_FILE
 def _find_apps_dir(proj_root: Path) -> Path:
     marker = Path("benchmarking") / "ROMP" / "momp" / "driver.py"
@@ -713,12 +722,93 @@ ref_model_dir = obs_dir
 ref_model_file_pattern = _obs["pattern"]
 ref_model_var = _obs["var"]
 ref_model_unit_cvt = None
-nc_mask = resolve_path(JJAS_MASK_FILE)
+nc_mask = resolve_path(JJAS_MASK_FILE) if JJAS_MASK_FILE else None
 shpfile_dir = SHAPEFILE_MASK_FILE
-CLIMATOLOGY_SHAPEFILE = join(shpfile_dir, "ETH_Zones_woreda.geojson")
-ETH_GEOJSON_PATH = join(shpfile_dir, "eth_admbnda_admin3_csa_bofedb_2021.geojson")
-ZONE_WOREDA_SHP = join(shpfile_dir, "ETH_Zones_Woreda.geojson")
+CLIMATOLOGY_SHAPEFILE = (join(shpfile_dir, "ETH_Zones_woreda.geojson") if region.casefold() == "ethiopia"
+                        else (os.getenv("ROMP_CLIMATOLOGY_SHAPEFILE") or None))
+ETH_GEOJSON_PATH = join(shpfile_dir, "eth_admbnda_admin3_csa_bofedb_2021.geojson") if region.casefold() == "ethiopia" else None
+ZONE_WOREDA_SHP = join(shpfile_dir, "ETH_Zones_Woreda.geojson") if region.casefold() == "ethiopia" else None
 polygon = False
+
+
+def benchmark_country_sources(country: str, ground_truth: str = "CHIRPS") -> Dict[str, Any]:
+    """Return an independent country catalog without probing cloud storage.
+
+    Discovery checks the returned paths in the background. The source profile
+    itself only consults configuration and, in local-only fallback mode, checks
+    country-qualified local files. It never changes startup configuration.
+    """
+    country = "_".join(str(country).strip().split())
+    ground_truth = str(ground_truth).strip().upper()
+    profile = {"region": country, "models": {}, "observations": {},
+               "available": False, "reason": ""}
+    if not country or country in {".", ".."} or "/" in country or "\\" in country:
+        profile["reason"] = "Choose a country name without path separators."
+        return profile
+    is_current = country.casefold() == region.casefold()
+    is_ethiopia = country.casefold() == "ethiopia"
+    if ground_truth != "CHIRPS":
+        observations = (globals().get("BENCHMARK_OBS_CATALOG", {}).get(ground_truth)
+                        or _OBS_SETS.get(ground_truth)) if is_current else None
+        if not observations:
+            profile["reason"] = f"{ground_truth} sources are not configured for {country.replace('_', ' ')}."
+            return profile
+        observations = copy.deepcopy(observations)
+    elif is_current:
+        observations = copy.deepcopy(_OBS_SETS["CHIRPS"])
+    else:
+        observations = {
+            "dir": f"gs://{DEMO_BUCKET}/CHIRPSv3_Country_0p25deg/{country}",
+            "pattern": (f"CHIRPSv3_{country}_{{}}_box025.nc",),
+            "var": _OBS_SETS["CHIRPS"].get("var", "RAINFALL"),
+        }
+
+    models = {}
+    for key, metadata in BENCHMARK_MODEL_CATALOG.items():
+        local_key = metadata.get("model_name", MODEL_FOLDERS.get(key, key))
+        folder = COUNTRY_BOX_MODEL_FOLDERS.get(local_key)
+        if not is_ethiopia and not folder:
+            continue
+        item = copy.deepcopy(metadata)
+        if not is_current:
+            if not folder:
+                continue
+            item["dir"] = f"gs://{DEMO_BUCKET}/Forecasts_Country_0p25deg/{folder}/tp/{country}"
+            item["file_pattern"] = f"{folder}_tp_{country}_{{}}_box025.nc"
+        models[key] = item
+
+    use_bucket = BUCKET_OK and DATA_MODE != "local"
+    if not use_bucket and is_current and not is_ethiopia:
+        models = {key: item for key, item in models.items()
+                  if DATA_SOURCES.get(f"model {item['model_name']}") in {"local", "country data"}}
+        if DATA_SOURCES.get("observations") not in {"local", "country data"}:
+            observations["dir"] = ""
+    if not use_bucket and not is_current:
+        observation_dir = EXTERNAL_DATA_DIR / "CHIRPSv3_Country_0p25deg" / country
+        if _has_nc(observation_dir, recursive=False):
+            observations["dir"] = str(observation_dir)
+        else:
+            observations["dir"] = ""
+        local_models = {}
+        for key, item in models.items():
+            folder = COUNTRY_BOX_MODEL_FOLDERS[item["model_name"]]
+            local_dir = EXTERNAL_DATA_DIR / "Forecasts_Country_0p25deg" / folder / "tp" / country
+            if _has_nc(local_dir, recursive=False):
+                item["dir"] = str(local_dir)
+                local_models[key] = item
+        models = local_models
+
+    patterns = observations.get("pattern", observations.get("file_pattern", ("{}.nc",)))
+    if isinstance(patterns, str):
+        patterns = (patterns,)
+    observations["pattern"] = tuple(patterns)
+    observations["file_pattern"] = tuple(patterns)
+    profile.update(models=models, observations=observations,
+                   available=bool(models and observations.get("dir")))
+    if not profile["available"]:
+        profile["reason"] = f"Configure a bucket or country-specific local sources for {country.replace('_', ' ')}."
+    return profile
+
 
 wet_init = 1
 wet_threshold = 20
@@ -846,7 +936,9 @@ def _explain_error(e: Exception) -> str:
 
 
 def check_data() -> int:
-    items = [("observations", obs_dir), ("region mask", nc_mask)]
+    items = [("observations", obs_dir)]
+    if nc_mask:
+        items.append(("region mask", nc_mask))
     items += [(f"model {k}", resolve_path(m["dir"])) for k, m in BENCHMARK_MODEL_CATALOG.items()]
     missing = errors = 0
     for label, where in items:

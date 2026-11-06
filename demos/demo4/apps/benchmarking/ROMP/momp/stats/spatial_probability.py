@@ -102,7 +102,8 @@ def save_spatial_probability_scores(results, *, model, verification_window, dir_
     if not dataset.data_vars:
         return None
     start, end = verification_window
-    dataset.attrs.update(model=str(model), verification_window=f"{start}-{end}",
+    dataset.attrs.update(model=str(model), region=str(kwargs.get("region", "Ethiopia")),
+                         verification_window=f"{start}-{end}",
                          evaluation_years=str(kwargs.get("years", "")),
                          reference_years=str(kwargs.get("years_clim", "")))
     destination = Path(dir_out) / f"probabilistic_metrics_{model}_{start}-{end}.nc"

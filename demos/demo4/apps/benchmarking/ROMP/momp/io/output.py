@@ -143,7 +143,7 @@ def load_ref_score_results(ref_score_file, results_dict):
 
 
 def save_metrics_to_netcdf(spatial_metrics, attrs_dict, desc_dict=None, fname='spatial_metrics',
-                           allowed_attrs=('model', 'years', 'tolerance_days', 'verification_window',
+                           allowed_attrs=('model', 'region', 'years', 'tolerance_days', 'verification_window',
                                           'max_forecast_day', 'mok', 'wet_init', 'wet_threshold',
                                           'wet_spell', 'dry_threshold', 'dry_spell', 'dry_extent',
                                           'onset_percentage_threshold', 'members', 'years_clim',

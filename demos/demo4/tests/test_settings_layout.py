@@ -32,6 +32,7 @@ class OpenTab:
     def __exit__(self, *args): return False
 res_tabs = [None, OpenTab()]
 config = SimpleNamespace(ref_model='climatology')
+distribution_args = {}
 CONFIG_BENCHMARK_MODEL_CATALOG = {
     'AIFS': {'model_name': 'aifs_single'}, 'FuXi': {'model_name': 'fuxi'}}
 ROMP_DEMO_OUT_DIR = Path('/nonexistent/metrics-test')

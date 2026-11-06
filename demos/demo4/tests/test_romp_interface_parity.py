@@ -13,7 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 
-SOURCE = Path('run_momp.py')
+SOURCE = Path(__file__).resolve().parents[3] / 'run_momp.py'
 
 
 def functions(*names, **namespace):

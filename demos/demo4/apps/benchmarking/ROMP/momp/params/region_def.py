@@ -1,47 +1,23 @@
 import numpy as np
 
 
-# define rectangular domain
 def domain(region, **kwargs):
-    # swap = False
-
-    if region == "Ethiopia":
-        lats = 3
-        latn = 15
-        lonw = 33
-        lone = 48
-
-#    if region == "Sub_Ethiopia":
-#        lats = 8
-#        latn = 12
-#        lonw = 38
-#        lone = 42
-
-    if region == "Sub_Ethiopia":
-        lats = 7.5 
-        latn = 13.5
-        lonw = 37.5
-        lone = 40
-
-#    if region == "Sub_Ethiopia":
-#        lats = 10.5 #7.5 
-#        latn = 12 #13.5
-#        lonw = 38 #37.5 
-#        lone = 39 #38.75
-
-    if region == "India":
-        lats = 6.46
-        latn = 35.51
-        lonw = 68.11
-        lone = 91.4
-
-    if region == "rect_boundary":
-        lats = 999#8
-        latn = 12# - 0.75
-        lonw = 38
-        lone = 42# -1
-
-    return lats, latn, lonw, lone
+    """Return configured bounds, or the supplied country-box coordinate extent."""
+    configured = {
+        "Ethiopia": (3, 15, 33, 48),
+        "Sub_Ethiopia": (7.5, 13.5, 37.5, 40),
+        "India": (6.46, 35.51, 68.11, 91.4),
+        "rect_boundary": (999, 12, 38, 42),
+    }
+    if region in configured:
+        return configured[region]
+    bounds = kwargs.get("coordinate_bounds")
+    if bounds is None:
+        raise ValueError(f"No geographic bounds configured for {region!r}; supply dataset coordinate_bounds.")
+    bounds = np.asarray(bounds, dtype=float)
+    if bounds.shape != (4,) or not np.isfinite(bounds).all():
+        raise ValueError("Dataset coordinate_bounds must contain four finite latitude/longitude bounds.")
+    return tuple(bounds)
 
 
 def polygon_boundary(da):

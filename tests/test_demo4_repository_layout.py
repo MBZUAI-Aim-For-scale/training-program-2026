@@ -6,7 +6,10 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from types import SimpleNamespace
 import unittest
+
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -57,6 +60,14 @@ class Demo4RepositoryLayoutTests(unittest.TestCase):
                           if isinstance(node, ast.Assign) and any(
                               isinstance(target, ast.Name) and target.id == "DEMOS" for target in node.targets))
         demos = ast.literal_eval(assignment.value)
+        config = tomllib.loads((ROOT / "demos/demo1/demos.toml").read_text())
+        nodes = [node for node in ast.parse(path.read_text()).body
+                 if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name)
+                    and target.id == "_IN_TOML" for target in node.targets)
+                 or isinstance(node, ast.For) and isinstance(node.target, ast.Name)
+                 and node.target.id == "_d"]
+        namespace = {"DEMOS": demos, "setup": SimpleNamespace(load_config=lambda: config)}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)  # noqa: S102
         self.assertEqual(next(demo for demo in demos if demo["n"] == 4)["container"], "ai_weather")
 
     def test_related_documentation_has_no_merge_markers_or_stale_demo4_commands(self):

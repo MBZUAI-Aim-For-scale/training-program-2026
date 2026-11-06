@@ -103,6 +103,7 @@ class OpenTab:
     def __exit__(self, *args): return False
 res_tabs = [None, OpenTab()]
 config = SimpleNamespace(ref_model='climatology')
+distribution_args = {}
 CONFIG_BENCHMARK_MODEL_CATALOG = {
     'AIFS_ENS': {'model_name': 'aifs_ens', 'probabilistic': True}}
 ROMP_DEMO_OUT_DIR = Path(st.session_state['test_output_root'])

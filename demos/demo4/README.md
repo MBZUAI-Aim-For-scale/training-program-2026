@@ -5,6 +5,7 @@ Use the Docker setup below for the full benchmark. It includes the Python enviro
 
 The CHIRPS v3 and updated forecast country boxes use these paths directly under
 `gs://<DEMO_BUCKET>` (without `DEMO_BUCKET_PREFIX`). The country comes from
+the **Benchmark coverage** selection in the dashboard. CLI runs use
 `ROMP_REGION`, which defaults to `Ethiopia`.
 
 | Dataset | Bucket-relative file path | Supplied years |
@@ -24,6 +25,14 @@ the bucket otherwise. Listings (which years and models there are) still come fro
 partial download can't hide any; only if the bucket can't be reached does the country data stand in.
 
 Local fallback retains the existing model directories and `{year}.nc` files.
+
+**Environment configuration (optional)**: without a `.env`, `docker/run.sh` uses the
+program's bucket (`DEMO_BUCKET=aim4scale_training_2026`) and, on a Spark, its key at
+`/etc/fleet-gcs-key.json`. To use another bucket:
+```bash
+cp .env.example .env    # then set DEMO_BUCKET=<bucket> in it
+```
+
 
 ### Remote Server Setup with Docker
 You will need two terminal windows: one connected to the remote server to run the Docker container, and one on your local machine to create the SSH tunnel.
@@ -46,67 +55,8 @@ or
 
 
 
-<<<<<<< HEAD
    *(Tip: If you are actively editing the code and want changes to reflect live without rebuilding the image, use `DEV=1 bash demos/demo4/docker/run.sh` instead).*
-=======
-```
 
-
-3. **Environment configuration (optional)**: without a `.env`, `docker/run.sh` uses the
-program's bucket (`DEMO_BUCKET=aim4scale_training_2026`) and, on a Spark, its key at
-`/etc/fleet-gcs-key.json`. To use another bucket:
-```bash
-cp .env.example .env    # then set DEMO_BUCKET=<bucket> in it
-```
-
-
-4. **Start the container stack**:
-```bash
-bash demos/demo4/docker/run.sh rebuild
-
-```
-
-
-*(For subsequent runs without rebuilding, use `bash demos/demo4/docker/run.sh start` or `DEV=1 bash demos/demo4/docker/run.sh start` for live code editing).*
-5. **Create the SSH tunnel** (from your local machine):
-```bash
-ssh -L 8503:localhost:8503  <you>@country-spark
-
-```
-
-
-6. **Access dashboards**:
-  * **Streamlit UI**: `http://localhost:8503`
-  * **Jupyter Lab**: `http://localhost:8888`
-
-
-## Command-Line Execution (`run_momp.py`)
-
-The `run_momp.py` script is the execution engine. Execute commands inside the Docker container:
-
-1. **Enter the Docker container**:
-```bash
-docker exec -it ai_weather bash
-
-```
-
-
-2. **Run a Deterministic Model** (e.g., GraphCast, FuXi, AIFS Single v2):
-```bash
-python run_momp.py --mode det --model GraphCast
-
-```
-
-
-3. **Run a Probabilistic (Ensemble) Model** (e.g., AIFS Ensemble v2, GenCast):
-```bash
-python run_momp.py --mode prob --model AIFS_ENS
-
-```
->>>>>>> 3e0f7a15957d9bbcb53b0d3f64d9ab09dea9db9a
-
-   *(Tip: If you are actively editing the code and want changes to reflect live without rebuilding the image, use `DEV=1 bash docker/run.sh` instead).*
->>>>>>> a3069a729169017a7198e049f26cbb2bd4bf3fc7
 4. **Create the SSH Tunnel** (Local Machine): Open a new terminal window on your local laptop. Set up port forwarding so your local browser can access the remote Streamlit server:
    ```bash
    ssh -N -L 8503:127.0.0.1:8503 <you>@country-spark
@@ -173,7 +123,9 @@ The interactive dashboard provides a visual interface to configure, execute, and
 1. **Open Benchmarking**: In your local browser at `http://localhost:8503`, click **Benchmarking** in the top menu. Use that menu rather than Streamlit's hidden sidebar.
 2. **Configure Benchmark Inputs**:
    - **Ground Truth**: Select the observational dataset (e.g., CHIRPS or ENACTS).
-   - **Benchmark Coverage**: Select the region (e.g., Ethiopia). Note: The run button will be disabled if the region's data or masks are not configured in `config.py`.
+   - **Benchmark Coverage**: Select the country. CHIRPS and AIFS v2, AIFS Ensemble v2, and GraphCast use that country's folders. Discovery and metadata checks run in the background and are cached separately by country.
+   - Countries outside Ethiopia default to **No mask** and use their country-box coordinates. You can supply a custom mask; the Ethiopian JJAS masks are not applied automatically.
+   - Results outside Ethiopia are saved under `countries/{Country}/` within the configured output and figure directories. Switching countries displays that country's results and preserves earlier runs.
    - **Forecast Window**: Choose the lead time window (1-15 days or 16-30 days).
 3. **Select Models**:
    - The UI auto-detects available models from your data directories.
