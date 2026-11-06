@@ -648,11 +648,21 @@ def start_forecastcheck_download():
     time.sleep(0.5)  # lets it write its first status, so this page's next look already shows it running
 
 
+def choose_forecastcheck_country():
+    """The picker's on_change: Demo 5's country, as `fcstcheck country <name>` sets it."""
+    name = st.session_state.get("fcdata-country")
+    if name:
+        ok, msg = forecastcheck_data.choose(name)
+        st.session_state["fcdata-country-msg"] = None if ok else msg or "couldn't set the country"
+
+
 @st.fragment(run_every=3)
 def forecastcheck_data_card():
-    """Only for a Spark whose country ForecastCheck has (Kenya, Rwanda, Senegal, Sierra Leone)."""
+    """This Spark's country, if ForecastCheck has it (Kenya, Rwanda, Senegal, Sierra Leone); on any
+    other Spark, a picker for the country Demo 5 uses (the same as `fcstcheck country <name>`)."""
     host, countries = country_data.hostname(), forecastcheck_data.supported()
-    country = forecastcheck_data.spark_country()
+    spark = forecastcheck_data.spark_country()
+    country = spark or forecastcheck_data.chosen_country()
     names = ", ".join(forecastcheck_data.title(c) for c in countries)
     with st.container(key="d1launch-fcdata"):
         st.markdown('<div class="d1-launch-k">Country data for ForecastCheck</div>', unsafe_allow_html=True)
@@ -661,13 +671,23 @@ def forecastcheck_data_card():
             st.markdown("<div class='d1-launch-note'>Launch Demo 5 first: its code isn't on this Spark yet.</div>",
                         unsafe_allow_html=True)
             return
+        job = forecastcheck_data.read_status()
+        if not spark:
+            # ForecastCheck doesn't have this Spark's country: Demo 5 works with the one picked here
+            st.selectbox("Country for Demo 5", countries, key="fcdata-country",
+                         index=countries.index(country) if country in countries else None,
+                         placeholder="Choose a country", format_func=forecastcheck_data.title,
+                         on_change=choose_forecastcheck_country,
+                         disabled=bool(job and job.get("state") == "running"),
+                         help="The same as fcstcheck country <name>. A running Demo 5 restarts with it.")
+            st.markdown(f'<div class="d1-launch-note">ForecastCheck has data for {escape(names)}; this Spark '
+                        f'(<code>{escape(host)}</code>) isn\'t one of them, so Demo 5 uses the country you '
+                        f'pick.</div>', unsafe_allow_html=True)
+            if msg := st.session_state.get("fcdata-country-msg"):
+                st.error(f"The country wasn't changed: {msg}")
         if not country:
             st.button("Download country data", key="fcdata-none", disabled=True, width="stretch")
-            st.markdown(f'<div class="d1-launch-note">ForecastCheck has data for {escape(names)}; this Spark '
-                        f'(<code>{escape(host)}</code>) isn\'t one of them. Pick a country to work with in the '
-                        f'lesson (<code>fcstcheck setup &lt;country&gt;</code>).</div>', unsafe_allow_html=True)
             return
-        job = forecastcheck_data.read_status()
         state = job["state"] if job and job.get("country") == country else None
         tag, text, go = {"running": ("ready", "Downloading", None),
                          "done": ("ok", "Downloaded", "Check for new data"),
@@ -685,7 +705,8 @@ def forecastcheck_data_card():
                         unsafe_allow_html=True)
         else:
             st.button(go, key="fcdata-go", type="primary", width="stretch", on_click=start_forecastcheck_download,
-                      help="ForecastCheck's own fetch, for this Spark's country. Keeps going if you close this page.")
+                      help=f"ForecastCheck's own fetch, for {forecastcheck_data.title(country)}. "
+                           "Keeps going if you close this page.")
         st.markdown(f'<div class="d1-launch-note">{escape(forecastcheck_data.title(country))}\'s forecasts and '
                     'observations, from the program\'s bucket into Demo 5\'s data folder '
                     '(<code>fcstcheck where</code>), the same as <code>fcstcheck fetch --apply</code>.</div>',
