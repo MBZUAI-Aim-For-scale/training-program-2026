@@ -9,10 +9,19 @@ The CHIRPS v3 and updated forecast country boxes use these paths directly under
 
 | Dataset | Bucket-relative file path | Supplied years |
 | --- | --- | --- |
-| CHIRPS | `CHIRPSv3_Country_Boxes_025deg/{Country}/CHIRPSv3_{Country}_{year}_box025.nc` | 1998–2025 |
+| CHIRPS | `CHIRPSv3_Country_0p25deg/{Country}/CHIRPSv3_{Country}_{year}_box025.nc` | 2000– |
 | AIFS | `Forecasts_Country_0p25deg/AIFS_v2/tp/{Country}/AIFS_v2_tp_{Country}_{year}_box025.nc` | 2000–2025 |
 | AIFS Ensemble | `Forecasts_Country_0p25deg/AIFS_ENS_v2/tp/{Country}/AIFS_ENS_v2_tp_{Country}_{year}_box025.nc` | 2000–2025 |
 | GraphCast | `Forecasts_Country_0p25deg/graphcast/tp/{Country}/graphcast_tp_{Country}_{year}_box025.nc` | 2000–2025 |
+
+All four are on one 0.25° grid (cells on whole and quarter degrees; longitudes 0..360 for countries
+west of Greenwich, as in the files), so observed and forecast onsets compare point for point. The
+older `CHIRPSv3_Country_Boxes_025deg` files are on CHIRPS's own grid, half a cell off, and aren't used.
+
+On a Spark, these files are read from its country data first (what Demo 1's country-data button
+downloaded, at the bucket's paths; `docker/run.sh` mounts it read-only at `/country_data`), and from
+the bucket otherwise. Listings (which years and models there are) still come from the bucket, so a
+partial download can't hide any; only if the bucket can't be reached does the country data stand in.
 
 Local fallback retains the existing model directories and `{year}.nc` files.
 
@@ -37,7 +46,67 @@ or
 
 
 
+<<<<<<< HEAD
    *(Tip: If you are actively editing the code and want changes to reflect live without rebuilding the image, use `DEV=1 bash demos/demo4/docker/run.sh` instead).*
+=======
+```
+
+
+3. **Environment configuration (optional)**: without a `.env`, `docker/run.sh` uses the
+program's bucket (`DEMO_BUCKET=aim4scale_training_2026`) and, on a Spark, its key at
+`/etc/fleet-gcs-key.json`. To use another bucket:
+```bash
+cp .env.example .env    # then set DEMO_BUCKET=<bucket> in it
+```
+
+
+4. **Start the container stack**:
+```bash
+bash demos/demo4/docker/run.sh rebuild
+
+```
+
+
+*(For subsequent runs without rebuilding, use `bash demos/demo4/docker/run.sh start` or `DEV=1 bash demos/demo4/docker/run.sh start` for live code editing).*
+5. **Create the SSH tunnel** (from your local machine):
+```bash
+ssh -L 8503:localhost:8503  <you>@country-spark
+
+```
+
+
+6. **Access dashboards**:
+  * **Streamlit UI**: `http://localhost:8503`
+  * **Jupyter Lab**: `http://localhost:8888`
+
+
+## Command-Line Execution (`run_momp.py`)
+
+The `run_momp.py` script is the execution engine. Execute commands inside the Docker container:
+
+1. **Enter the Docker container**:
+```bash
+docker exec -it ai_weather bash
+
+```
+
+
+2. **Run a Deterministic Model** (e.g., GraphCast, FuXi, AIFS Single v2):
+```bash
+python run_momp.py --mode det --model GraphCast
+
+```
+
+
+3. **Run a Probabilistic (Ensemble) Model** (e.g., AIFS Ensemble v2, GenCast):
+```bash
+python run_momp.py --mode prob --model AIFS_ENS
+
+```
+>>>>>>> 3e0f7a15957d9bbcb53b0d3f64d9ab09dea9db9a
+
+   *(Tip: If you are actively editing the code and want changes to reflect live without rebuilding the image, use `DEV=1 bash docker/run.sh` instead).*
+>>>>>>> a3069a729169017a7198e049f26cbb2bd4bf3fc7
 4. **Create the SSH Tunnel** (Local Machine): Open a new terminal window on your local laptop. Set up port forwarding so your local browser can access the remote Streamlit server:
    ```bash
    ssh -N -L 8503:127.0.0.1:8503 <you>@country-spark

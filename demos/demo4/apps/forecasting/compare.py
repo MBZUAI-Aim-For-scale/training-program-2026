@@ -20,7 +20,7 @@ COLORS = ["#2563eb", "#dc2626", "#059669", "#d97706"]
 
 @st.cache_data(max_entries=32, show_spinner=False)
 def _area_series(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead_days: int,
-                 var: str) -> xr.DataArray:
+                 var: str, region: str = "") -> xr.DataArray:
     """Daily area-mean series (ensemble, time): rain (mm/day) over CHIRPS land points, or daily
     maximum 2 m temperature (°C, from the 6-hourly values)."""
     box = Box(*box_t)
@@ -30,8 +30,8 @@ def _area_series(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead
     if var == "tp":
         fc = onset.forecast_daily(sub, init)
         try:
-            last = obs.last_day()
-            like = obs.daily(box, last, last).isel(time=0, drop=True)
+            last = obs.last_day(region)
+            like = obs.daily(box, last, last, region).isel(time=0, drop=True)
             fc = onset.to_grid(fc, like)
         except (OSError, FileNotFoundError):
             fc = fc.sel(lat=slice(box.lat_min, box.lat_max), lon=slice(box.lon_min, box.lon_max))
@@ -44,12 +44,13 @@ def _area_series(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead
 
 
 @st.cache_data(max_entries=16, show_spinner="Getting observations…")
-def _obs_series(box_t: tuple, init: pd.Timestamp, lead_days: int, var: str) -> xr.DataArray | None:
+def _obs_series(box_t: tuple, init: pd.Timestamp, lead_days: int, var: str,
+                region: str = "") -> xr.DataArray | None:
     box = Box(*box_t)
     end = init.normalize() + pd.Timedelta(days=lead_days - 1)
     if var == "tp":
         try:
-            return onset.area_mean(obs.daily(box, init.normalize(), end))
+            return onset.area_mean(obs.daily(box, init.normalize(), end, region))
         except (OSError, FileNotFoundError):
             return None
     # ERA5 2 m temperature from Google's copy (as in the event movie), daily max of 6-hourly values
@@ -68,7 +69,7 @@ def chart(paths, keys, init, lead_days, box, region_name, var):
     unit = "mm/day" if var == "tp" else "°C"
     for i, k in enumerate(k for k in keys if k in paths):
         p = Path(paths[k])
-        ser = _area_series(str(p), p.stat().st_mtime, box_t, init, lead_days, var)
+        ser = _area_series(str(p), p.stat().st_mtime, box_t, init, lead_days, var, region_name)
         name, color = catalog.BY_KEY[k].name, COLORS[i % len(COLORS)]
         mean = ser.mean("ensemble") if "ensemble" in ser.dims else ser
         if "ensemble" in ser.dims and ser.sizes["ensemble"] > 1:
@@ -84,7 +85,7 @@ def chart(paths, keys, init, lead_days, box, region_name, var):
     want_obs = var == "tp" or st.checkbox("Add ERA5 observations", key="cmp_obs",
                                           help="Fetched from the cloud: a minute or two the first time.")
     if want_obs:
-        o = _obs_series(box_t, init, lead_days, var)
+        o = _obs_series(box_t, init, lead_days, var, region_name)
         if o is not None and o.sizes.get("time", 0):
             fig.add_scatter(x=o.time.values, y=o.values, mode="lines+markers", name=f"Observed ({obs_name})",
                             line=dict(color="black", width=2, dash="dash"))
@@ -108,7 +109,7 @@ def onset_table(paths, keys, init, lead_days, box, region_name, defn, search_fro
         if k not in paths:
             continue
         try:
-            r = result(paths[k], box, init, lead_days, defn, search_from)
+            r = result(paths[k], box, init, lead_days, defn, search_from, region_name)
         except (OSError, FileNotFoundError):
             continue
         land = r["land"]

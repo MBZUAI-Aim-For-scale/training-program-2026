@@ -66,25 +66,25 @@ def pick_definition(region_name: str, key: str = "onset") -> onset.Definition:
 
 @st.cache_data(max_entries=16, show_spinner="Working out onset dates…")
 def compute(path: str, mtime: float, box_t: tuple, init: pd.Timestamp, lead_days: int,
-            defn: onset.Definition, search_from: pd.Timestamp) -> dict:
+            defn: onset.Definition, search_from: pd.Timestamp, region: str = "") -> dict:
     box = Box(*box_t)
     with xr.open_dataset(path) as ds:
         sub = crop(ds, Box(box.lat_min - 1, box.lat_max + 1, box.lon_min - 1, box.lon_max + 1),
                    lead_days * 24).load()
     fc = onset.forecast_daily(sub, init)
     fc_end = pd.Timestamp(fc.time.values[-1])
-    obs_last = obs.last_day()
+    obs_last = obs.last_day(region)
     if pd.isna(obs_last):
         obs_last = None
     # observations: the season so far, the forecast days, and enough after them to confirm onset
     want_end = fc_end + pd.Timedelta(days=defn.needs_after)
     end = min(want_end, obs_last) if obs_last is not None else want_end
     try:
-        o = obs.daily(box, min(search_from, end), end)
+        o = obs.daily(box, min(search_from, end), end, region)
     except FileNotFoundError:
         if obs_last is None:
             raise
-        o = obs.daily(box, obs_last, obs_last)
+        o = obs.daily(box, obs_last, obs_last, region)
     if obs_last is None:
         obs_last = pd.Timestamp(o.time.values[-1]).normalize()
     template = o.isel(time=-1, drop=True)
@@ -243,7 +243,8 @@ def usable(full, m, box) -> str | None:
     if "tp" in catalog.missing_in_run(full):
         return f"{m.name} does not forecast rainfall, so it can't forecast onset."
     if not obs.covers(box):
-        return "Onset needs observed rainfall from CHIRPS, which covers 50°S–50°N only."
+        return (f"Onset needs observed rainfall from {obs.NAME}, which covers "
+                f"{obs.LAT_LIMIT:.0f}°S–{obs.LAT_LIMIT:.0f}°N only.")
     return None
 
 
@@ -260,10 +261,10 @@ def controls(region_name: str, init: pd.Timestamp):
     return defn, search_from
 
 
-def result(path, box: Box, init, lead_days, defn, search_from):
+def result(path, box: Box, init, lead_days, defn, search_from, region: str = ""):
     p = Path(path)
     return compute(path, p.stat().st_mtime, (box.lat_min, box.lat_max, box.lon_min, box.lon_max),
-                   init, lead_days, defn, search_from)
+                   init, lead_days, defn, search_from, region or "")
 
 
 def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, search_from) -> None:
@@ -273,7 +274,7 @@ def view(path, full, m, init, box: Box, region_name: str, lead_days: int, defn, 
         st.info(why)
         return
     try:
-        r = result(path, box, init, lead_days, defn, search_from)
+        r = result(path, box, init, lead_days, defn, search_from, region_name)
     except (OSError, FileNotFoundError) as e:
         st.error(f"Couldn't get CHIRPS observations: {e}")
         return
@@ -349,7 +350,7 @@ def make_movie(path, m, box, region_name, init, lead_days, defn, search_from, pr
     gif = movie_path(path, box, defn, init, lead_days)
     if gif.exists():
         return gif
-    r = result(path, box, init, lead_days, defn, search_from)
+    r = result(path, box, init, lead_days, defn, search_from, region_name)
     n_days = (r["fc_end"] - r["init_day"]).days + 1
     frames = render_frames(r, m, box, region_name, n_days, progress)
     MOVIES.mkdir(parents=True, exist_ok=True)

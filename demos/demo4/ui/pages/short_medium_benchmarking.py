@@ -2087,7 +2087,15 @@ def _snap_to_grid(lat, lon, data_dir_str):
             if not lat_key or not lon_key:
                 return lat, lon
             nlat = ds[lat_key].sel({lat_key: lat}, method="nearest").values.item()
-            nlon = ds[lon_key].sel({lon_key: lon}, method="nearest").values.item()
+            # The point's longitude in the data's own convention first: the bucket's country
+            # files are 0..360 (Chile 250..294, Senegal 342..349), a typed one -180..180.
+            lons = ds[lon_key].values
+            want = float(lon)
+            if float(lons.max()) > 180 and want < 0:
+                want %= 360
+            elif float(lons.min()) < 0 and want > 180:
+                want -= 360
+            nlon = ds[lon_key].sel({lon_key: want}, method="nearest").values.item()
         return float(nlat), float(nlon)
     except Exception:
         return lat, lon

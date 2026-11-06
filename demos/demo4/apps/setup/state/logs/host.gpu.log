@@ -1,3 +1,0 @@
-$ nvidia-smi -L
-
-[failed] FileNotFoundError: [Errno 2] No such file or directory: 'nvidia-smi'

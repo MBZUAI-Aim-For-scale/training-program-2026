@@ -3,6 +3,7 @@
 
   python3 country_data.py          download it (the dashboard's button runs this in the background)
   python3 country_data.py --plan   show the country, file count and size, and download nothing
+  python3 country_data.py --path   print where this Spark's country data goes (the demos read it there)
 
 The country comes from the Spark's name: kenya-spark -> Kenya, sierra-leone-spark -> Sierra_Leone.
 "The data" is the country's 312 files in the bucket layout (see layout_names): CHIRPS v3 rainfall,
@@ -102,10 +103,10 @@ def request(token: Token, url: str) -> urllib.request.Request:
     return urllib.request.Request(url, headers={"Authorization": f"Bearer {token.get()}"})
 
 
-def list_objects(token: Token) -> list[dict]:
+def list_objects(token: Token, prefix: str) -> list[dict]:
     objects, page = [], None
     while True:
-        query = {"maxResults": 1000, "fields": "nextPageToken,items(name,size,updated,md5Hash)"}
+        query = {"prefix": prefix, "maxResults": 1000, "fields": "nextPageToken,items(name,size,updated,md5Hash)"}
         if page:
             query["pageToken"] = page
         with urllib.request.urlopen(request(token, f"{API}/{BUCKET}/o?{urllib.parse.urlencode(query)}"),
@@ -137,7 +138,12 @@ def select(objects: list[dict], country: str) -> list[dict]:
 
 
 def plan(country: str, token: Token | None = None) -> list[dict]:
-    return select(list_objects(token or Token()), country)
+    """The country's files in the bucket. Lists only its folders: the whole bucket takes about 15 times as long."""
+    token = token or Token()
+    folders = sorted({name.rsplit("/", 1)[0] + "/" for name in layout_names(country)})
+    with ThreadPoolExecutor(WORKERS) as pool:
+        listings = pool.map(lambda folder: list_objects(token, folder), folders)
+        return select([o for listing in listings for o in listing], country)
 
 
 # --- Downloading --------------------------------------------------------------------------
@@ -299,6 +305,7 @@ def download(job: Job, token: Token, country: str, dest: Path, objects: list[dic
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--plan", action="store_true", help="show what would be downloaded, and download nothing")
+    p.add_argument("--path", action="store_true", help="print where this Spark's country data goes, and stop")
     args = p.parse_args(argv)
 
     country = country_from_hostname(hostname())
@@ -306,6 +313,9 @@ def main(argv=None) -> int:
         print(f"No single country in this Spark's name ({hostname()}). Known: {', '.join(COUNTRIES)}",
               file=sys.stderr)
         return 2
+    if args.path:  # (the demos' start scripts mount it for their containers)
+        print(data_dir(country))
+        return 0
     if args.plan:
         files = plan(country)
         print(f"{country}: {len(files)} files, {size_text(sum(int(o['size']) for o in files))} -> {data_dir(country)}")

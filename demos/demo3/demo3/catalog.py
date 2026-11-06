@@ -193,7 +193,7 @@ USE_CASE_NEEDS = {"Heat": "t2m", "Precipitation": "tp", "Onset": "tp"}
 RAIN_CAVEATS = {"aurora15": "Aurora's rainfall comes out 2–3 times too dry in our runs (still being "
                             "investigated), so it will rarely reach rainfall or onset thresholds."}
 CHIRPS_LAT = 60.0  # observed rainfall for onset (CHIRPS v3) covers 60°S–60°N (obs.LAT_LIMIT)
-CHIRPS_FIRST_YEAR = 1998  # ... from 1998, the start of the IMERG-based version (obs.FIRST_YEAR)
+CHIRPS_FIRST_YEAR = 2000  # ... from 2000, the first year of the 0.25° country files (obs.FIRST_YEAR)
 
 
 def check(m: Model, init, lead_days: int, members: int, box, region_name: str,

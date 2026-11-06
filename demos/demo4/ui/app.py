@@ -74,7 +74,6 @@ ensure_light_theme_config()
 # ─── EXTENDED SYSTEM MODULE CONFIGURATION MATRIX ───────────────────────────
 PAGE_MODULE_MAPPING = {
     "Home": "ui.pages.home",
-    # "AI_Setup": "ui.pages.ai_setup", 
     "AI Forecast": "ui.pages.ai_forecasting", 
     "SM_Benchmarking": "ui.pages.short_medium_benchmarking",
     #"Onset Blending": "ui.pages.ai_onset_blending",

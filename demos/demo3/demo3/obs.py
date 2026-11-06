@@ -1,26 +1,28 @@
 """Observations: daily rainfall from CHIRPS v3.0 (Precipitation and Onset) and daily maximum
 temperature from CHIRTS (Heat), both from UCSB's Climate Hazards Center.
 
-Rainfall: CHIRPS v3.0 (IMERG-disaggregated, "sat") at 0.25°.
+Rainfall: CHIRPS v3.0 (IMERG-disaggregated, "sat"). CHIRPS is satellite + rain gauge
+rainfall over land, 60°S–60°N.
 
-CHIRPS is satellite + rain gauge rainfall over land, 60°S–60°N. The "sat" version
-spreads each pentad's total over its days using NASA IMERG, so it starts in 1998.
-Two sources, same data on the same grid:
+  * Programme countries: yearly country files in the training bucket, on the models' 0.25°
+    grid (cells centred on whole and quarter degrees, as GraphCast's and the bucket's
+    forecasts are): gs://aim4scale_training_2026/CHIRPSv3_Country_0p25deg, from 2000.
+  * Anywhere else (India, custom boxes), or if neither this Spark nor the bucket has them:
+    CHC's global 0.25° daily GeoTIFFs (~0.9 MB a day), on CHIRPS's own grid (cells half a
+    cell off the models'), downloaded into {OUTPUT_DIR}/_obs/chirps_v3/p25/.
 
-  * Programme countries: yearly country boxes in the training bucket
-    (gs://aim4scale_training_2026/CHIRPSv3_Country_Boxes_025deg, ~3 MB a year),
-    downloaded once into {OUTPUT_DIR}/_obs/chirps_v3/.
-  * Anywhere else (India, custom boxes), or if the bucket can't be read: CHC's
-    global 0.25° daily GeoTIFFs (~0.9 MB a day), downloaded into the same folder.
+Temperature: CHIRTS daily Tmax (CHIRTS-ERA5), land only, from yearly country files on the
+same 0.25° grid (gs://aim4scale_training_2026/CHIRTS_Country_0p25deg/Tmax, from 2000, in K:
+returned in °C). Programme countries only: anywhere else the page falls back to ERA5.
 
-The current year is updated by CHC about once a month, so current-year files are
-re-fetched when they are older than 7 days. $DEMO3_DATA/CHIRPSv3 is checked first
-for preloaded country files.
+Country files are read from this Spark's country data first ($DEMO_COUNTRY_DATA, default
+/country_data: docker/run.sh mounts what Demo 1's country-data button downloaded, the bucket's
+own paths), and from the bucket otherwise (downloaded once into {OUTPUT_DIR}/_obs/*_0p25/).
+The current year's file is fetched from the bucket (re-fetched when older than 7 days, as
+CHC adds a month at a time), and the country data's copy is used if the bucket can't be read.
 
-Temperature: CHIRTS daily Tmax (CHIRTS-ERA5) at 0.05°, land only, from yearly country boxes
-in the training bucket (gs://aim4scale_training_2026/CHIRTS_Tmax_Country_Boxes, 3-100 MB a
-year), downloaded once into {OUTPUT_DIR}/_obs/chirts/ ($DEMO3_DATA/CHIRTS checked first).
-Programme countries only: anywhere else the page falls back to ERA5.
+Whatever the source, one series is all from one source (never some years on one grid and
+some on another), and every model is put on its grid (onset.to_grid).
 """
 from __future__ import annotations
 
@@ -38,22 +40,23 @@ import xarray as xr
 from .regions import Box
 from .store import OUTPUT_DIR
 
-BUCKET = os.environ.get("DEMO3_CHIRPS_BUCKET",
-                        "gs://aim4scale_training_2026/CHIRPSv3_Country_Boxes_025deg").rstrip("/")
+BUCKET = os.environ.get("DEMO3_OBS_BUCKET", "gs://aim4scale_training_2026").rstrip("/")
+# This Spark's country data: the bucket's own paths (docker/run.sh mounts it read-only)
+COUNTRY_DATA = Path(os.environ.get("DEMO_COUNTRY_DATA", "/country_data"))
 TIF_URL = "https://data.chc.ucsb.edu/products/CHIRPS/v3.0/daily/final/sat/p25/{y}/"
-CACHE = OUTPUT_DIR / "_obs" / "chirps_v3"
-PRELOADED = Path(os.environ.get("DEMO3_DATA", "/data")) / "CHIRPSv3"
+CHIRPS_DIR = "CHIRPSv3_Country_0p25deg"   # (the models' 0.25° grid)
+# New folders: files of the same names on CHIRPS's own grid may be in the old ones
+CACHE = OUTPUT_DIR / "_obs" / "chirps_v3_0p25"
+TIF_CACHE = OUTPUT_DIR / "_obs" / "chirps_v3" / "p25"
 COUNTRIES = ("Bangladesh", "Bolivia", "Chile", "Colombia", "Ethiopia", "Indonesia", "Kenya", "Nigeria",
              "Pakistan", "Peru", "Philippines", "Rwanda", "Senegal", "Sierra Leone")
 LAT_LIMIT = 60.0
-FIRST_YEAR = 1998
+FIRST_YEAR = 2000  # (the 0.25° country files' first year)
 NAME = "CHIRPS v3"
 
-TMAX_BUCKET = os.environ.get("DEMO3_CHIRTS_BUCKET",
-                             "gs://aim4scale_training_2026/CHIRTS_Tmax_Country_Boxes").rstrip("/")
-TMAX_CACHE = OUTPUT_DIR / "_obs" / "chirts"
-TMAX_PRELOADED = Path(os.environ.get("DEMO3_DATA", "/data")) / "CHIRTS"
-TMAX_FIRST_YEAR = 1981
+TMAX_DIR = "CHIRTS_Country_0p25deg/Tmax"
+TMAX_CACHE = OUTPUT_DIR / "_obs" / "chirts_0p25"
+TMAX_FIRST_YEAR = 2000
 TMAX_NAME = "CHIRTS"
 
 
@@ -64,28 +67,34 @@ def _stale(path: Path, year: int, refresh_days: float = 7) -> bool:
 
 # ── country boxes in the bucket ──────────────────────────────────────────────
 
-def _bucket_file(bucket: str, cache: Path, preloaded: Path, c: str, name: str, year: int) -> Path:
-    if (preloaded / c / name).exists():
-        return preloaded / c / name
+def _bucket_file(folder: str, cache: Path, c: str, name: str, year: int) -> Path:
+    """A country file: this Spark's copy (past years), else the bucket's (downloaded once into
+    `cache`; the current year's re-fetched when stale), else this Spark's copy after all."""
+    local = COUNTRY_DATA / folder / c / name
+    current = year >= pd.Timestamp.utcnow().year
+    if local.is_file() and not current:
+        return local
     path = cache / c / name
     if not path.exists() or _stale(path, year):
         import fsspec
-        fs, root = fsspec.core.url_to_fs(bucket)
+        fs, root = fsspec.core.url_to_fs(BUCKET)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".part")
         try:
-            fs.get(f"{root}/{c}/{name}", str(tmp))
+            fs.get(f"{root}/{folder}/{c}/{name}", str(tmp))
             tmp.replace(path)
         except Exception as e:
             tmp.unlink(missing_ok=True)
             if not path.exists():
+                if local.is_file():
+                    return local
                 raise OSError(f"couldn't get {name} from the bucket: {e}") from e
     return path
 
 
 def _country_file(country: str, year: int) -> Path:
     c = country.replace(" ", "_")
-    return _bucket_file(BUCKET, CACHE, PRELOADED, c, f"CHIRPSv3_{c}_{year}_box025.nc", year)
+    return _bucket_file(CHIRPS_DIR, CACHE, c, f"CHIRPSv3_{c}_{year}_box025.nc", year)
 
 
 def _from_bucket(country: str, box: Box, start, end) -> xr.DataArray:
@@ -127,7 +136,7 @@ def _tif_days(year: int) -> list[pd.Timestamp]:
 
 def _tif(day: pd.Timestamp) -> Path:
     name = f"chirps-v3.0.sat.{day:%Y.%m.%d}.tif"
-    path = CACHE / "p25" / f"{day:%Y}" / name
+    path = TIF_CACHE / f"{day:%Y}" / name
     if not path.exists():
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(".part")
@@ -177,7 +186,9 @@ def last_day(region: str | None = None) -> pd.Timestamp | None:
         if region in COUNTRIES:
             try:
                 with xr.open_dataset(_country_file(region, y)) as ds:
-                    return pd.Timestamp(ds.time.values[-1])
+                    day = _newest_day(ds)
+                if day is not None:
+                    return day
             except (OSError, ValueError):
                 pass
         days = _tif_days(y)
@@ -186,11 +197,31 @@ def last_day(region: str | None = None) -> pd.Timestamp | None:
     return None
 
 
+def _dates(start, end) -> tuple[pd.Timestamp, pd.Timestamp]:
+    """start..end as days; missing dates mean there's nothing to look up (before any file)."""
+    start = pd.Timestamp(start) if start is not None else pd.NaT
+    end = pd.Timestamp(end) if end is not None else pd.NaT
+    if pd.isna(start) or pd.isna(end):
+        raise FileNotFoundError(f"{NAME} observation dates are unavailable.")
+    start, end = start.normalize(), end.normalize()
+    if start > end:
+        raise ValueError("Observation start date must not be after the end date.")
+    return start, end
+
+
+def _newest_day(ds: xr.Dataset) -> pd.Timestamp | None:
+    """The file's last valid day (None for an empty or invalid calendar)."""
+    if "time" not in ds:
+        return None
+    dates = pd.DatetimeIndex(ds.time.values).dropna()
+    return pd.Timestamp(dates.max()).normalize() if not dates.empty else None
+
+
 def daily(box: Box, start, end, region: str | None = None) -> xr.DataArray:
     """Daily rainfall (mm/day), dims (time, lat, lon), for start..end inclusive.
     Days CHIRPS doesn't have yet are simply absent. A programme country's data come
     from its bucket box, which is cut close to the border (the plot's margin is empty)."""
-    start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
+    start, end = _dates(start, end)
     out = None
     if region in COUNTRIES:
         try:
@@ -214,12 +245,21 @@ def tmax_covers(region: str | None) -> bool:
 
 def _tmax_file(country: str, year: int) -> Path:
     c = country.replace(" ", "_")
-    return _bucket_file(TMAX_BUCKET, TMAX_CACHE, TMAX_PRELOADED, c, f"CHIRTS_Tmax_{c}_{year}_box.nc", year)
+    return _bucket_file(TMAX_DIR, TMAX_CACHE, c, f"CHIRTS-ERA5_Tmax_{c}_{year}_box025.nc", year)
+
+
+def _tmax_var(ds: xr.Dataset) -> xr.DataArray:
+    """The file's daily Tmax in °C (the 0.25° files have it as `tmax`, in K)."""
+    t = ds["tmax"] if "tmax" in ds else ds["temp"]
+    if str(t.attrs.get("units", "")).strip().upper() in ("K", "KELVIN", "DEGK"):
+        t = t - 273.15
+    return t
 
 
 def _tmax_year(country: str, year: int, box: Box | None = None, start=None, end=None) -> xr.DataArray:
     with xr.open_dataset(_tmax_file(country, year)) as ds:
-        da = ds.temp.assign_coords(lon=(ds.lon + 180) % 360 - 180).sortby("lat").sortby("lon")
+        da = _tmax_var(ds)
+        da = da.assign_coords(lon=(da.lon + 180) % 360 - 180).sortby("lat").sortby("lon")
         if box is not None:
             da = da.sel(lat=slice(box.lat_min, box.lat_max), lon=slice(box.lon_min, box.lon_max))
         if start is not None:
@@ -246,8 +286,8 @@ def _tmax_last_day(region: str) -> pd.Timestamp | None:
     for y in (year, year - 1):
         try:
             with xr.open_dataset(_tmax_file(region, y)) as ds:
-                t = ds.temp
-                some = t.isel(lat=slice(None, None, 10), lon=slice(None, None, 10)).notnull().any(["lat", "lon"])
+                t = _tmax_var(ds)
+                some = t.notnull().any(["lat", "lon"])  # (a 0.25° country box is small enough to scan whole)
                 days = t.time.values[some.values]
                 if len(days):
                     return pd.Timestamp(days[-1])
@@ -259,7 +299,7 @@ def _tmax_last_day(region: str) -> pd.Timestamp | None:
 def tmax_daily(box: Box, start, end, region: str) -> xr.DataArray:
     """Daily maximum 2 m temperature (°C), dims (time, lat, lon), for start..end inclusive,
     land only. Days CHIRTS doesn't have yet are absent."""
-    start, end = pd.Timestamp(start).normalize(), pd.Timestamp(end).normalize()
+    start, end = _dates(start, end)
     parts = []
     for y in range(start.year, end.year + 1):
         try:
