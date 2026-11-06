@@ -32,6 +32,7 @@ ssh -N -L 8500:127.0.0.1:8500 <you>@<country>-spark
 
 | Demo | What | Port | Start it alone |
 |------|------|------|----------------|
+| [Intro](demos/intro-to-spark/README.md) | Intro to DGX Spark: background docs + Africa-focused labs (JupyterLab) | 8506 | `bash demos/intro-to-spark/docker/run.sh start` |
 | [1](demos/demo1/README.md) | Spark setup + dashboard | 8500 | `spark-setup dashboard` |
 | 2 | Climate Data Tools (CDT) | 8504 | `bash demos/demo2/docker/run.sh` |
 | [3](demos/demo3/README.md) | AI forecast lab | 8502 | `bash demos/demo3/docker/run.sh` |
@@ -50,6 +51,7 @@ Other setup commands: `spark-setup --help`. To stop everything:
 ```
 ├── demos/
 │   ├── BEGINNER_GUIDE.md   step-by-step guide for every demo
+│   ├── intro-to-spark/     Intro to DGX Spark: background docs, Africa-focused labs 00-13 in five topic folders, docker/
 │   ├── demo1/              Spark setup: dashboard, spark_setup.py, demos.toml (the demo list), country_data.py
 │   ├── demo2/              CDT (Climate Data Tools) container
 │   ├── demo3/              AI forecast lab (Streamlit app + runners)
