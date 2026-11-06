@@ -275,6 +275,15 @@ def access_token(demo: dict) -> str:
     return ""
 
 
+def stopped_cleanly(state: dict) -> bool:
+    """A container that ended normally: it exited by itself (code 0), or was stopped (docker stop: SIGTERM,
+    143, or SIGKILL after the grace period, 137, unless the kernel killed it for memory). Not a crash."""
+    if state.get("Status") != "exited":
+        return False
+    code = state.get("ExitCode")
+    return code in (0, 143) or (code == 137 and not state.get("OOMKilled"))
+
+
 def status(demo: dict) -> tuple[str, str, str | None]:
     """(kind, label, link) for a demo, from its Docker container (if it has one)."""
     if demo["n"] == 1:
@@ -294,7 +303,10 @@ def status(demo: dict) -> tuple[str, str, str | None]:
             link += ("&" if "?" in link else "/?") + "token=" + quote(token)
         return "running", "Running", link
     if c:
-        return "stopped", f"Stopped ({c['State']['Status']})", None
+        if stopped_cleanly(c["State"]):  # (a Stop, or AI Almanac's own setup: ready, like a built image)
+            return "ready", "Ready to launch", None
+        code = c["State"].get("ExitCode")
+        return "stopped", f"Stopped ({c['State']['Status']}" + (f", exit code {code}" if code else "") + ")", None
     if setup.inspect("image", demo.get("image", name)):
         return "ready", "Ready to launch", None
     return "none", "Not set up yet" if demo.get("checkout") else "Image not built", None
@@ -776,7 +788,7 @@ def launch_card(demo: dict):
             if demo.get("container"):
                 st.button(f"Stop {name}", key=f"stop-{key}", width="stretch",
                           disabled=kind != "running" or bool(mine), on_click=stop, args=([demo],),
-                          help="Stops the container; its tabs close themselves" if kind == "running"
+                          help="Stops the container" if kind == "running"
                           else f"{name} isn't running")
         if note:
             st.markdown(f'<div class="d1-launch-note">{note}</div>', unsafe_allow_html=True)
