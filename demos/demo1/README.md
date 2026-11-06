@@ -29,6 +29,10 @@ python3 country_data.py [--plan]          # download this Spark's country data (
 bash shutdown.sh                          # stop any setup run, download, the dashboard and all containers
 ```
 
+**AI Almanac:** the dashboard's AI Almanac tab launches [AI Almanac](https://github.com/AI-Almanac/ai-almanac)
+from its own checkout, `~/ai-almanac` (the fleet clones and sets it up on the demo Sparks), with
+`scripts/spark.sh up`, and shows it with its access token. It counts as a demo: one at a time.
+
 **AI Weather Lab:** on the fleet's demo Sparks, the desktop has an **AI Weather Lab** shortcut
 (icon: `ai-weather-lab.svg`) that runs `spark_setup.py dashboard --open`: it starts the dashboard
 and opens it in the browser.

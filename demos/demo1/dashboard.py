@@ -11,10 +11,12 @@ from __future__ import annotations
 
 from html import escape
 import json
+from pathlib import Path
 import re
 import subprocess
 import sys
 import time
+from urllib.parse import quote
 
 import country_data
 import forecastcheck_data
@@ -24,6 +26,9 @@ import streamlit as st
 # Every demo in the training program, in order. `setup` is its id in demos.toml (once it has a Docker
 # image), whose steps spark_setup.py records in state/status.json; its `container` and `image` names
 # come from there too (below), so the two can't disagree.
+# AI Almanac (`n` "almanac", with its own `label`) is an app next to the demos, not a numbered demo
+# with a lesson: its code is its own repository in the home folder, and its link carries its access
+# token (`token` in demos.toml).
 # `path` is added to the container's address, to open a page inside a bigger site; `health` is the page
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
 # launches with their own button (named by `label`); they don't count towards the one-demo-at-a-time rule.
@@ -44,12 +49,18 @@ DEMOS = [
     {"n": 5, "title": "Putting your forecast to the test",
      "about": "Evaluate the forecasts you ran in Demo 3 against different metrics.",
      "setup": "demo5"},
+    {"n": "almanac", "label": "AI Almanac", "badge": "AI",
+     "title": "Assess, blend and forecast with AI weather models",
+     "about": "Pick a region, compare how well AI and conventional models predicted the rainy season "
+              "onset there, blend the best of them, and run the blend for the current season. Its "
+              "assistant can set up each step from a plain-language request.",
+     "setup": "almanac"},
     # {"n": 6, "title": "Ground truth challenge",
     #  "about": "Compare model performance against different observational datasets."},
     # {"n": 7, "title": "Feasibility assessment",
     #  "about": "Decide which models, data and thresholds to take forward into a pilot."},
 ]
-BY_N = {d["n"]: d for d in DEMOS}
+BY_N = {str(d["n"]): d for d in DEMOS}
 # Each demo's (and tool's) container and image, as demos.toml names them. A `setup` that isn't
 # in demos.toml (or Demo 1 itself) gets no container: its page says it has none yet.
 _IN_TOML = {d["id"]: d for d in setup.load_config()["demo"]}
@@ -57,6 +68,9 @@ for _d in DEMOS + [t for d in DEMOS for t in d.get("tools", [])]:
     if _d.get("setup") in _IN_TOML:
         _d["container"] = _IN_TOML[_d["setup"]]["container"]
         _d["image"] = _IN_TOML[_d["setup"]]["image"]
+        for _k in ("checkout", "token", "health"):  # (a `health` set here wins)
+            if _k in _IN_TOML[_d["setup"]] and _k not in _d:
+                _d[_k] = _IN_TOML[_d["setup"]][_k]
 LESSONS = setup.REPO / "docs" / "_episodes"
 DOCS_SITE = "https://mbzuai-aim-for-scale.github.io/training-program-2026"
 
@@ -209,12 +223,13 @@ def gpu_name() -> str | None:
 
 
 @st.cache_data(ttl=300)
-def lesson(n: int) -> dict:
+def lesson(n) -> dict:
     """The front matter of a demo's lesson page (docs/_episodes/0<n>-*.md): teaching, objectives, ...
 
     Only the shapes those pages use: `key: value` lines, and `key:` followed by `- "item"` lines.
+    (AI Almanac has none: it isn't a numbered demo.)
     """
-    files = sorted(LESSONS.glob(f"{n:02d}-*.md"))
+    files = sorted(LESSONS.glob(f"{n:02d}-*.md")) if isinstance(n, int) else []
     if not files:
         return {}
     m = re.match(r"---\n(.*?)\n---", files[0].read_text(encoding="utf-8"), re.DOTALL)
@@ -228,9 +243,9 @@ def lesson(n: int) -> dict:
     return info
 
 
-def lesson_url(n: int) -> str | None:
+def lesson_url(n) -> str | None:
     """A demo's lesson on the docs site. Its address is the lesson's file name, which Jekyll lowercases."""
-    files = sorted(LESSONS.glob(f"{n:02d}-*.md"))
+    files = sorted(LESSONS.glob(f"{n:02d}-*.md")) if isinstance(n, int) else []
     return f"{DOCS_SITE}/{files[0].stem.lower()}/" if files else None
 
 
@@ -244,6 +259,21 @@ def page_header(n: int, title: str, sub: str = ""):
                            help=f"Opens the Demo {n} lesson in a new tab")
 
 
+def access_token(demo: dict) -> str:
+    """An app's access token for its link (`token` in demos.toml: a KEY=value line in a file), or ""."""
+    tok = demo.get("token")
+    if not tok:
+        return ""
+    try:
+        for line in Path(tok["file"]).expanduser().read_text().splitlines():
+            key, _, value = line.partition("=")
+            if key.strip() == tok["key"]:
+                return value.strip()
+    except OSError:
+        pass
+    return ""
+
+
 def status(demo: dict) -> tuple[str, str, str | None]:
     """(kind, label, link) for a demo, from its Docker container (if it has one)."""
     if demo["n"] == 1:
@@ -251,15 +281,22 @@ def status(demo: dict) -> tuple[str, str, str | None]:
     name = demo.get("container")
     if not name:
         return "none", "Coming soon", None
+    if demo.get("checkout") and not (Path(demo["checkout"]).expanduser() / ".git").exists():
+        return "none", "Not on this Spark", None
     c = setup.inspect("container", name)
     if c and c["State"]["Running"]:
         ports = setup.host_ports(c)
-        return "running", "Running", f"http://localhost:{ports[0]}{demo.get('path', '')}" if ports else None
+        if not ports:
+            return "running", "Running", None
+        link = f"http://localhost:{ports[0]}{demo.get('path', '')}"
+        if token := access_token(demo):
+            link += ("&" if "?" in link else "/?") + "token=" + quote(token)
+        return "running", "Running", link
     if c:
         return "stopped", f"Stopped ({c['State']['Status']})", None
     if setup.inspect("image", demo.get("image", name)):
         return "ready", "Ready to launch", None
-    return "none", "Image not built", None
+    return "none", "Not set up yet" if demo.get("checkout") else "Image not built", None
 
 
 def label(demo: dict) -> str:
@@ -379,7 +416,7 @@ def navbar(active: int):
                        unsafe_allow_html=True)
         with menu:
             for col, d in zip(st.columns(len(DEMOS), gap="small"), DEMOS):
-                if col.button(f"Demo {d['n']}", key=f"nav-{d['n']}", help=d["title"], width="stretch",
+                if col.button(label(d), key=f"nav-{d['n']}", help=d["title"], width="stretch",
                               type="primary" if d["n"] == active else "secondary"):
                     st.query_params.clear()
                     st.query_params["demo"] = str(d["n"])
@@ -397,29 +434,29 @@ def launch_button(demo: dict, kind: str, busy: bool):
         launch(demo)
 
 
-def status_button(demo: dict, kind: str, label: str, run: dict | None, busy: bool):
+def status_button(demo: dict, kind: str, text: str, run: dict | None, busy: bool):
     """The demo's status in the Launch button's place; clicking it opens the demo's page (where Launch is)."""
     steps = steps_for(demo, run)
     tag = KINDS[kind][1]
     if busy and run and run["state"] == "running" and steps:
-        tag, label = "ready", "Starting…"
+        tag, text = "ready", "Starting…"
     elif steps and run["state"] != "running" and any(s["status"] == "failed" for s in steps):
-        tag, label = "failed", "Setup failed"
-    if st.button(label, key=f"status-{tag}-{demo['n']}", width="stretch",
-                 help=f"Open the Demo {demo['n']} page" + (" to launch it" if demo.get("container") else "")):
+        tag, text = "failed", "Setup failed"
+    if st.button(text, key=f"status-{tag}-{demo['n']}", width="stretch",
+                 help=f"Open the {label(demo)} page" + (" to launch it" if demo.get("container") else "")):
         st.query_params.clear()
         st.query_params["demo"] = str(demo["n"])
         st.rerun()
 
 
-def demo_row(demo: dict, kind: str, label: str, link: str | None) -> str:
+def demo_row(demo: dict, kind: str, text: str, link: str | None) -> str:
     _, tag = KINDS[kind]
     # Demo 1 keeps its tag next to its Run checks button; the other demos show their status in the button
-    side = f'<span class="d1-tag {tag}">{escape(label)}</span>' if demo["n"] == 1 else ""
+    side = f'<span class="d1-tag {tag}">{escape(text)}</span>' if demo["n"] == 1 else ""
     if link:
-        side += f'<a href="?demo={demo["n"]}&launch=1" target="_blank">Open Demo {demo["n"]} ↗</a>'
-    return (f'<div class="d1-demo"><div class="num">{demo["n"]}</div>'
-            f'<div class="body"><div class="n">Demo {demo["n"]} · {escape(demo["title"])}</div>'
+        side += f'<a href="?demo={demo["n"]}&launch=1" target="_blank">Open {escape(label(demo))} ↗</a>'
+    return (f'<div class="d1-demo"><div class="num">{escape(str(demo.get("badge", demo["n"])))}</div>'
+            f'<div class="body"><div class="n">{escape(label(demo))} · {escape(demo["title"])}</div>'
             f'<div class="o">{escape(demo["about"])}</div></div>'
             f'<div class="side">{side}</div></div>')
 
@@ -555,7 +592,7 @@ def bullets(items: list[str], cls: str = "") -> str:
 
 def demo_page(demo: dict):
     info = lesson(demo["n"])
-    page_header(demo["n"], f'Demo {demo["n"]} · {demo["title"]}')
+    page_header(demo["n"], f'{label(demo)} · {demo["title"]}')
 
     blurb, card = st.columns([0.6, 0.4], gap="large")
     with blurb:
@@ -790,9 +827,9 @@ st.set_page_config(page_title="AI Weather Lab · Demos", layout="wide")
 st.markdown(CSS, unsafe_allow_html=True)
 
 try:
-    current = BY_N.get(int(st.query_params.get("demo", 1)), BY_N[1])
+    current = BY_N.get(str(st.query_params.get("demo", 1)), BY_N["1"])
 except ValueError:
-    current = BY_N[1]
+    current = BY_N["1"]
 tool = next((t for t in current.get("tools", []) if t["tool"] == st.query_params.get("tool")), None)
 # The tab a Launch or Open button opens shows only the demo or tool (or its start-up progress), without the bar
 if current["n"] != 1 and st.query_params.get("launch") == "1" and (tool or current).get("container"):

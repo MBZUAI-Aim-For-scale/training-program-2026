@@ -30,6 +30,10 @@ context and Dockerfile), and a later run rebuilds when the checkout's fingerprin
 Uncommitted edits don't count (use --rebuild). An image built before this, or copied from
 another Spark without the label, is kept as it is until --rebuild.
 
+An app with a `checkout` in demos.toml (AI Almanac: its own repository in the home folder,
+which the fleet clones and sets up) builds itself when it starts: no build step here, and
+--build-only leaves it out. Its `run` runs in that checkout.
+
 A demo whose code lives in another repository (`source` in demos.toml: its url, branch and
 the folder here it goes in, which .gitignore leaves out) is cloned there on the first run
 and pulled (fast-forward only) on every run but the dashboard's Launch (--no-pull), so it
@@ -254,11 +258,17 @@ class Run:
             print(f"         fix: {s['hint']}", flush=True)
 
 
-def sh(cmd: list[str], log, *, env: dict | None = None, timeout: float | None = None, on_line=None):
-    """Run a command from the repo root, streaming its output into the step log."""
+def checkout_dir(demo: dict) -> Path | None:
+    """An app's own checkout (`checkout` in demos.toml, e.g. ~/ai-almanac), if it has one."""
+    return Path(demo["checkout"]).expanduser() if demo.get("checkout") else None
+
+
+def sh(cmd: list[str], log, *, env: dict | None = None, timeout: float | None = None, on_line=None,
+       cwd: Path | None = None):
+    """Run a command from the repo root (or `cwd`), streaming its output into the step log."""
     log.write(f"$ {' '.join(cmd)}\n")
     log.flush()
-    proc = subprocess.Popen(cmd, cwd=REPO, env={**os.environ, **(env or {})}, text=True, errors="replace",
+    proc = subprocess.Popen(cmd, cwd=cwd or REPO, env={**os.environ, **(env or {})}, text=True, errors="replace",
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1)
     timer = threading.Timer(timeout, proc.kill) if timeout else None
     if timer:
@@ -515,8 +525,13 @@ def step_start(run, sid, log, demo):
     if c:  # stopped or crashed: recreate so it picks up the current image and settings
         log.write(f"container {name} exists but is {c['State']['Status']}; recreating it\n")
         sh(["docker", "rm", "-f", name], log, timeout=60)
+    # An app in its own checkout (AI Almanac) builds itself as it starts; it has to be there.
+    where = checkout_dir(demo)
+    if where and not (where / ".git").exists():
+        raise Failed(f"{demo['checkout']} isn't on this Spark (the fleet clones it into the home folder)")
     # Its host port comes from demos.toml (the only place ports are set), as PORT.
-    rc, out = sh(demo["run"], log, env={"PORT": str(demo["port"]), **(demo.get("env") or {})}, timeout=300)
+    rc, out = sh(demo["run"], log, env={"PORT": str(demo["port"]), **(demo.get("env") or {})},
+                 timeout=demo.get("start_timeout", 300), cwd=where)
     if rc:
         raise Failed(f"start failed: {last_line(out)}")
     time.sleep(3)
@@ -639,10 +654,13 @@ def plan(cfg: dict, only: list[str] | None, host_only: bool,
     if only and not host_only and len(demos) != len(only):
         sys.exit(f"unknown demo id(s): {set(only) - {d['id'] for d in demos}}")
     steps = [{"id": sid, "group": "demo1", "title": title} for sid, title, _ in HOST_STEPS]
+    if build_only:  # (an app in its own checkout builds itself when it starts)
+        demos = [d for d in demos if not d.get("checkout")]
     for d in demos:
         if d.get("source"):
             steps.append({"id": f"{d['id']}.source", "group": d["id"], "title": f"Get the code (`{d['source']['url']}`)"})
-        steps.append({"id": f"{d['id']}.build", "group": d["id"], "title": f"Build image `{d['image']}`"})
+        if not d.get("checkout"):
+            steps.append({"id": f"{d['id']}.build", "group": d["id"], "title": f"Build image `{d['image']}`"})
         if not build_only:  # (--build-only: the dashboard's Launch starts it, one demo at a time)
             steps += [{"id": f"{d['id']}.start", "group": d["id"], "title": f"Start container `{d['container']}`"},
                       {"id": f"{d['id']}.health", "group": d["id"], "title": f"Page answers on :{d['port']}"}]
@@ -697,8 +715,17 @@ def cmd_run(args, argv):
                     run.skip(ids[0], "Docker isn't running")
                 continue
             if not docker_ok:
-                for sid in ids:
+                for sid in ids[1:] if d.get("checkout") else ids:
                     run.skip(sid, "Docker isn't running")
+                continue
+            if d.get("checkout"):  # (builds itself as it starts)
+                if not gpu_ok and not (inspect("container", d["container"]) or {}).get("State", {}).get("Running"):
+                    run.skip(ids[1], "containers can't see the GPU (see host checks)")
+                    run.skip(ids[2], "container not started")
+                elif run.step(ids[1], step_start, d) == "failed":
+                    run.skip(ids[2], "container not running")
+                else:
+                    run.step(ids[2], step_health, d)
                 continue
             if run.step(ids[0], step_build, d, args.rebuild) == "failed":
                 run.skip(ids[1], "image build failed")
