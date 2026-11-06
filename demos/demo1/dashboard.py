@@ -68,7 +68,7 @@ for _d in DEMOS + [t for d in DEMOS for t in d.get("tools", [])]:
     if _d.get("setup") in _IN_TOML:
         _d["container"] = _IN_TOML[_d["setup"]]["container"]
         _d["image"] = _IN_TOML[_d["setup"]]["image"]
-        for _k in ("checkout", "token", "health"):  # (a `health` set here wins)
+        for _k in ("checkout", "get", "token", "health"):  # (a `health` set here wins)
             if _k in _IN_TOML[_d["setup"]] and _k not in _d:
                 _d[_k] = _IN_TOML[_d["setup"]][_k]
 LESSONS = setup.REPO / "docs" / "_episodes"
@@ -282,7 +282,7 @@ def status(demo: dict) -> tuple[str, str, str | None]:
     name = demo.get("container")
     if not name:
         return "none", "Coming soon", None
-    if demo.get("checkout") and not (Path(demo["checkout"]).expanduser() / ".git").exists():
+    if checkout_missing(demo):
         return "none", "Not on this Spark", None
     c = setup.inspect("container", name)
     if c and c["State"]["Running"]:
@@ -298,6 +298,11 @@ def status(demo: dict) -> tuple[str, str, str | None]:
     if setup.inspect("image", demo.get("image", name)):
         return "ready", "Ready to launch", None
     return "none", "Not set up yet" if demo.get("checkout") else "Image not built", None
+
+
+def checkout_missing(demo: dict) -> bool:
+    """An app in its own checkout (AI Almanac: ~/ai-almanac) that isn't on this Spark: it can't start."""
+    return bool(demo.get("checkout")) and not (Path(demo["checkout"]).expanduser() / ".git").exists()
 
 
 def tracked(demo: dict) -> dict:
@@ -716,6 +721,12 @@ def launch_card(demo: dict):
             elif not demo.get("container"):
                 st.button("Coming soon", key=f"soon-{key}", disabled=True, width="stretch")
                 note = "This demo doesn't have a container yet."
+            elif checkout_missing(demo):
+                # (no Launch: it would run the host checks, maybe stop another demo, then fail)
+                st.button("Not on this Spark", key=f"missing-{key}", disabled=True, width="stretch")
+                note = (f"{escape(name)}'s code isn't in <code>{escape(demo['checkout'])}</code>. On the "
+                        "training's demo Sparks it arrives with the next update; or, in a terminal:"
+                        + (f"<br><code>{escape(demo['get'])}</code>" if demo.get("get") else ""))
             elif setup_running() and not mine:
                 st.button(go, key=f"busy-{key}", disabled=True, width="stretch",
                           help="Wait for the current setup run to finish")
@@ -799,6 +810,11 @@ def watch(demo: dict):
 @st.fragment(run_every=2)
 def follow(demo: dict):
     kind, _, link = status(demo)
+    if checkout_missing(demo):  # (a Launch link from before it went: nothing to start, nothing to stop)
+        st.markdown(f'<div class="d1-launch-note">{escape(label(demo))} isn\'t on this Spark (no '
+                    f'<code>{escape(demo["checkout"])}</code>), so it can\'t start. See its page in the dashboard.</div>',
+                    unsafe_allow_html=True)
+        return
     if kind == "running" and page_up(demo, link):
         st.session_state[f"framed-{uid(demo)}"] = link
         st.rerun()
