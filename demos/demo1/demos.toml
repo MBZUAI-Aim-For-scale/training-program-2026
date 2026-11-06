@@ -99,6 +99,8 @@ title = "AI Almanac"
 image = "ai-almanac:spark"
 container = "ai-almanac-spark-almanac-1"
 checkout = "~/ai-almanac"
+# (what the dashboard tells you to run when it isn't there)
+get = "git clone -b hcwf-demo-spark https://github.com/AI-Almanac/ai-almanac ~/ai-almanac"
 run = ["sh", "scripts/spark.sh", "up"]
 port = 8765
 env = { ALMANAC_PORT = "8765" }
