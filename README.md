@@ -37,6 +37,7 @@ ssh -N -L 8500:127.0.0.1:8500 <you>@<country>-spark
 | [3](demos/demo3/README.md) | AI forecast lab | 8502 | `bash demos/demo3/docker/run.sh` |
 | [4](demos/demo4/README.md) | Forecasting & benchmarking | 8503 | `bash demos/demo4/docker/run.sh start` |
 | [5](docs/_episodes/05-AI-Forest-test.md) | ForecastCheck | 8505 | `fcstcheck setup <country>` |
+| AI Almanac | Assess, blend and forecast with AI weather models | 8765 | the dashboard's **AI Almanac** tab (`~/ai-almanac`) |
 
 Other setup commands: `spark-setup --help`. To stop everything:
 `bash demos/demo1/shutdown.sh`.
