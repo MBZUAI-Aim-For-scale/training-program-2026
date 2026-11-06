@@ -32,7 +32,6 @@ ssh -N -L 8500:127.0.0.1:8500 <you>@<country>-spark
 
 | Demo | What | Port | Start it alone |
 |------|------|------|----------------|
-| [Intro](demos/intro-to-spark/README.md) | Intro to DGX Spark: background docs + Africa-focused labs (JupyterLab) | 8506 | `bash demos/intro-to-spark/docker/run.sh start` |
 | [1](demos/demo1/README.md) | Spark setup + dashboard | 8500 | `spark-setup dashboard` |
 | 2 | Climate Data Tools (CDT) | 8504 | `bash demos/demo2/docker/run.sh` |
 | [3](demos/demo3/README.md) | AI forecast lab | 8502 | `bash demos/demo3/docker/run.sh` |
