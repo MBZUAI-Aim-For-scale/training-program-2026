@@ -788,7 +788,7 @@ def launch_card(demo: dict):
             if demo.get("container"):
                 st.button(f"Stop {name}", key=f"stop-{key}", width="stretch",
                           disabled=kind != "running" or bool(mine), on_click=stop, args=([demo],),
-                          help="Stops the container; its tabs close themselves" if kind == "running"
+                          help="Stops the container" if kind == "running"
                           else f"{name} isn't running")
         if note:
             st.markdown(f'<div class="d1-launch-note">{note}</div>', unsafe_allow_html=True)
