@@ -19,7 +19,8 @@ from xarray.backends.netCDF4_ import NetCDF4ArrayWrapper
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'apps/benchmarking/ROMP'))
-SOURCE = ROOT / 'run_momp.py'
+SOURCE = next(parent / 'run_momp.py' for parent in (ROOT, *ROOT.parents)
+              if (parent / 'run_momp.py').is_file())
 
 
 def functions(*names, **namespace):
@@ -91,6 +92,35 @@ class HorizonPreflightTests(unittest.TestCase):
                 self.validate(self.cfg(folder, horizon=15))
             self.assertTrue(seen)
             self.assertNotIn('tp', seen)
+
+    def test_bare_lead_dimension_survives_metadata_only_preflight(self):
+        original = NetCDF4ArrayWrapper.__getitem__
+        for ensemble, lead in ((False, 'step'), (True, 'step'), (True, 'forecast_axis')):
+            with self.subTest(ensemble=ensemble, lead=lead), tempfile.TemporaryDirectory() as folder:
+                rainfall = xr.DataArray(np.zeros((1, 51, 1, 1)),
+                                       dims=('init_time', lead, 'lat', 'lon'),
+                                       coords={'init_time': pd.to_datetime(['2021-05-01']),
+                                               'lat': [8.], 'lon': [39.]})
+                if ensemble:
+                    rainfall = rainfall.expand_dims(number=[0, 1])
+                rainfall.rename('tp').to_dataset().to_netcdf(Path(folder) / '2021.nc')
+                def metadata_only(wrapper, key):
+                    if wrapper.variable_name == 'tp':
+                        raise AssertionError('Rainfall data was materialized during preflight')
+                    return original(wrapper, key)
+
+                with patch.object(NetCDF4ArrayWrapper, '__getitem__', metadata_only):
+                    self.validate(self.cfg(folder))
+
+    def test_bare_leads_still_reject_an_insufficient_confirmation_tail(self):
+        with tempfile.TemporaryDirectory() as folder:
+            rainfall = xr.DataArray(np.zeros((1, 46, 1, 1)),
+                                   dims=('init_time', 'step', 'lat', 'lon'),
+                                   coords={'init_time': pd.to_datetime(['2021-05-01']),
+                                           'lat': [8.], 'lon': [39.]})
+            rainfall.rename('tp').to_dataset().to_netcdf(Path(folder) / '2021.nc')
+            with self.assertRaisesRegex(ValueError, 'day 45.*day 50'):
+                self.validate(self.cfg(folder))
 
     def test_failed_preflight_never_syncs_or_launches_driver(self):
         with tempfile.TemporaryDirectory() as folder:

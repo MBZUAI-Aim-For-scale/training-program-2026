@@ -68,3 +68,10 @@ class ForecastRateInputTests(unittest.TestCase):
                 self.load(ensemble=ensemble, named_leads=False)
         with self.assertRaisesRegex(ValueError, "sample duration"):
             precipitation_to_mm(xr.DataArray([2.], attrs={"units": "mm/day"}), 1000)
+
+    def test_bare_lead_indices_survive_removing_day_zero_for_amounts(self):
+        for ensemble in (False, True):
+            with self.subTest(ensemble=ensemble):
+                result = self.load(ensemble=ensemble, units="mm", named_leads=False)
+                np.testing.assert_equal(result.step.values, [1, 2])
+                np.testing.assert_allclose(result.values.reshape(-1, 2), [[2., 4.]] * (2 if ensemble else 1))

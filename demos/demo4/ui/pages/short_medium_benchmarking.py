@@ -9,6 +9,7 @@ robust argument filtering for onset analysis, and error-proof tab routing.
 from __future__ import annotations
 from ai_weather.benchmark_job import BenchmarkJob
 from ai_weather.background_task import BackgroundTask
+from ai_weather.country_boundaries import COUNTRY_ISO3, cached_boundary_path, download_country_boundaries
 from ui.utils.benchmark_session import reconnect_benchmark, remember_benchmark
 from ui.utils.benchmark_report import collect_evaluated_models
 from ui.utils.parameter_help import PARAMETER_HELP
@@ -1009,8 +1010,22 @@ def _map_lon_lat_names(da: xr.DataArray):
     return lon, lat
 
 
+def _country_boundary_path(country):
+    if country == "Ethiopia":
+        return climatology_boundary_path(config)
+    return cached_boundary_path(country, "ADM0", EXTERNAL_DATA_DIR / "boundaries")
+
+
+def _map_load_admin_shapefile(country="Ethiopia", al=""):
+    if country != "Ethiopia":
+        level = "ADM" + al[-1] if al in ("Admin1", "Admin2") else "ADM0"
+        path = cached_boundary_path(country, level, EXTERNAL_DATA_DIR / "boundaries")
+        return load_boundary_frame(str(path)) if path else None
+    return _map_load_ethiopia_shapefile()
+
+
 @st.cache_resource(show_spinner=False)
-def _map_load_admin_shapefile():
+def _map_load_ethiopia_shapefile():
     try:
         import geopandas as gpd
     except Exception:
@@ -1066,8 +1081,8 @@ def _map_admin_column(gdf, al: str) -> Optional[str]:
 
 
 @st.cache_data(show_spinner=False, ttl=300)
-def map_admin_options(al: str) -> List[str]:
-    gdf = _map_load_admin_shapefile()
+def map_admin_options(al: str, country="Ethiopia") -> List[str]:
+    gdf = _map_load_admin_shapefile(country, al)
     if gdf is None:
         return []
     col = _map_admin_column(gdf, al)
@@ -1078,10 +1093,10 @@ def map_admin_options(al: str) -> List[str]:
 
 
 @st.cache_data(show_spinner=False, ttl=600)
-def map_admin_bounds(al: str, an: str):
+def map_admin_bounds(al: str, an: str, country="Ethiopia"):
     if not an or an == "All":
         return None
-    gdf = _map_load_admin_shapefile()
+    gdf = _map_load_admin_shapefile(country, al)
     if gdf is None:
         return None
     col = _map_admin_column(gdf, al)
@@ -1097,11 +1112,11 @@ def map_admin_bounds(al: str, an: str):
         return None
 
 
-def _get_admin_subset(al: str, an: str):
+def _get_admin_subset(al: str, an: str, country="Ethiopia"):
     """Returns the GeoDataFrame subset for a specific admin level and name."""
     if not al or not an or an == "All":
         return None
-    gdf = _map_load_admin_shapefile()
+    gdf = _map_load_admin_shapefile(country, al)
     if gdf is None:
         return None
     col = _map_admin_column(gdf, al)
@@ -1167,10 +1182,14 @@ def load_map_da_cached(
             if country == "Ethiopia":
                 da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
                 da = clip_to_boundary(da, climatology_boundary_path(config))
+            else:
+                boundary = _country_boundary_path(country)
+                if boundary:
+                    da = clip_to_boundary(da, boundary)
             while len(da.dims) > 2:
                 da = da.isel({da.dims[0]: 0})
 
-            if {"lat", "lon"}.issubset(da.dims):
+            if country == "Ethiopia" and {"lat", "lon"}.issubset(da.dims):
                 try:
                     from momp.utils.land_mask import shp_mask
 
@@ -1184,7 +1203,7 @@ def load_map_da_cached(
                     da = da * 100.0
 
             if al and an and an != "All":
-                bbox = map_admin_bounds(al, an)
+                bbox = map_admin_bounds(al, an, country)
                 if bbox:
                     da = _map_clip_bbox(da, bbox)
 
@@ -1211,10 +1230,16 @@ def plot_map(
     try:
         lon, lat = _map_lon_lat_names(da)
         zones = None
-        if lon and lat and (country or da.attrs.get("benchmark_country", "Ethiopia")) == "Ethiopia":
-            boundary_path = boundary_path or climatology_boundary_path(config)
-            zones = load_boundary_frame(boundary_path)
-            da = clip_to_boundary(apply_jjas_mask(da, getattr(config, "nc_mask", None)), boundary_path)
+        selected_country = country or da.attrs.get("benchmark_country", "Ethiopia")
+        if lon and lat:
+            boundary_path = boundary_path or (climatology_boundary_path(config)
+                                             if selected_country == "Ethiopia"
+                                             else _country_boundary_path(selected_country))
+            if selected_country == "Ethiopia":
+                da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
+            if boundary_path:
+                zones = load_boundary_frame(boundary_path)
+                da = clip_to_boundary(da, boundary_path)
         arr = np.asarray(da.values, dtype=float)
         has_data = np.isfinite(arr).any()
         if diverging:
@@ -2368,6 +2393,11 @@ def run_momp_benchmark(
         if run_config.get("benchmark_coverage"):
             env["ROMP_BENCHMARK_COVERAGE"] = str(run_config["benchmark_coverage"])
             env["ROMP_REGION"] = "_".join(str(run_config["benchmark_coverage"]).split())
+            if run_config["benchmark_coverage"] != "Ethiopia":
+                boundary = _country_boundary_path(run_config["benchmark_coverage"])
+                if boundary:
+                    env["ROMP_SHAPEFILE_URI"] = str(boundary.resolve())
+                    env["ROMP_CLIMATOLOGY_SHAPEFILE"] = str(boundary.resolve())
             output_dir, figure_dir = _benchmark_output_dirs(
                 run_config["benchmark_coverage"], env.get("ROMP_OUT_DIR"), env.get("ROMP_FIG_DIR"))
             env["ROMP_OUT_DIR"], env["ROMP_FIG_DIR"] = str(output_dir), str(figure_dir)
@@ -3331,6 +3361,49 @@ def render_onset_years():
     st.rerun()
 
 
+@st.fragment(run_every=1)
+def render_country_boundaries(country):
+    """Poll downloads without blocking input controls or starting network work on reruns."""
+    if country == "Ethiopia" or country not in COUNTRY_ISO3:
+        return
+    root = EXTERNAL_DATA_DIR / "boundaries"
+    tasks = st.session_state.setdefault("benchmark_boundary_tasks", {})
+    results = st.session_state.setdefault("benchmark_boundary_results", {})
+    task = tasks.get(country)
+    if task is not None:
+        snapshot = task.snapshot()
+        if not snapshot["done"]:
+            st.info(f"Downloading {country} boundaries in the background. You can continue using the dashboard.")
+            return
+        results[country] = snapshot["result"] or {"paths": {}, "errors": {"Download": snapshot["error"]}}
+        del tasks[country]
+        # Refresh map caches only; forecast and observation discovery stays warm.
+        for function in (load_map_da_cached, map_admin_bounds, map_admin_options,
+                         compute_model_comparison_cached, compute_metric_distribution_stats):
+            function.clear()
+        st.rerun()
+
+    available = [level for level in ("ADM0", "ADM1", "ADM2")
+                 if cached_boundary_path(country, level, root)]
+    if available:
+        st.caption(f"{country} boundaries available: {', '.join(available)}. Source: geoBoundaries gbOpen (CC BY 4.0).")
+    else:
+        st.caption("Download country and subregion boundaries to enable map outlines and subregion selection.")
+    errors = results.get(country, {}).get("errors", {})
+    if errors:
+        st.warning("Some boundaries could not be downloaded. Existing boundaries remain available.")
+        with st.expander("Boundary download details"):
+            for level, error in errors.items():
+                st.write(f"{level}: {error}")
+    if len(available) < 3:
+        label = "Retry boundary download" if errors else "Download country boundaries"
+        if st.button(label, key=f"benchmark_boundary_download_{COUNTRY_ISO3[country]}"):
+            tasks[country] = BackgroundTask(download_country_boundaries, country, root).start()
+            st.rerun()
+    st.caption("Boundary data: [geoBoundaries](https://www.geoboundaries.org/) · "
+               "[Attribution](https://www.geoboundaries.org/citation.html)")
+
+
 def page() -> None:
     _inject_theme_css()
     country_hint = st.session_state.get("benchmark_country", DEFAULT_BENCHMARK_COVERAGE)
@@ -3403,6 +3476,7 @@ def page() -> None:
     if not coverage_ready:
         bi2.caption(f"⚠️ {sources['reason']} Run Benchmark is disabled.")
     forecast_window = bi3.selectbox("Forecast window", ["1-15 days", "16-30 days"])
+    render_country_boundaries(benchmark_coverage)
 
     # Models
     section_header("Models", "teal")
@@ -3750,13 +3824,22 @@ def page() -> None:
                 wl = c2.selectbox("Lead Time", sorted(list(all_w)), key="m_wl")
                 m_opts = sorted({o["model_label"] for o in map_outputs if wl in o["windows"]})
                 model_label = c3.selectbox("Model", m_opts, key="m_mod")
-                sf_avail = benchmark_coverage == "Ethiopia" and _map_load_admin_shapefile() is not None
-                al = c4.selectbox("Subregion level", ["All", "Admin1", "Admin2", "Admin3"] if sf_avail else ["All"], disabled=not sf_avail, key="m_al")
+                admin_levels = ["All"]
+                if benchmark_coverage == "Ethiopia":
+                    frame = _map_load_admin_shapefile()
+                    admin_levels += [level for level in ("Admin1", "Admin2", "Admin3")
+                                     if _map_admin_column(frame, level)]
+                else:
+                    admin_levels += [f"Admin{number}" for number in (1, 2)
+                                     if cached_boundary_path(benchmark_coverage, f"ADM{number}",
+                                                             EXTERNAL_DATA_DIR / "boundaries")]
+                al = c4.selectbox("Subregion level", admin_levels, disabled=len(admin_levels) == 1,
+                                  key=f"m_al_{benchmark_coverage}")
                 an = "All"
                 if al != "All":
-                    ao = map_admin_options(al)
+                    ao = map_admin_options(al, benchmark_coverage)
                     if ao:
-                        an = st.selectbox("Subregion", ["All"] + ao, key="m_an")
+                        an = st.selectbox("Subregion", ["All"] + ao, key=f"m_an_{benchmark_coverage}_{al}")
 
                 sel_out = next((o for o in map_outputs if o["model_label"] == model_label and wl in o["windows"]), None)
                 if sel_out:
@@ -3764,7 +3847,7 @@ def page() -> None:
                     uan = "" if an == "All" else an
                     base_da = load_map_da_cached(sel_out["path"], ml, wl, ual, uan,
                                                  file_mtime=sel_out.get("mtime", 0.0), country=benchmark_coverage)
-                    admin_sub = _get_admin_subset(ual, uan)
+                    admin_sub = _get_admin_subset(ual, uan, benchmark_coverage)
 
                     if base_da is not None:
                         mm = MAP_METRICS[ml]

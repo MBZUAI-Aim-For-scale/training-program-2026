@@ -449,6 +449,8 @@ def get_forecast_deterministic_twice_weekly(year=None, *, model_dir=None, model_
                 ds = ds.rename({unrecognized_dims[0]: 'step'})
 
         if 'step' in ds.dims or 'step' in ds.coords:
+            if 'step' not in ds.coords:
+                ds = ds.assign_coords(step=ds['step'])
             if ds['step'][0].values == 0:
                 ds = ds.sel(step=slice(1, None))
         else:
@@ -533,6 +535,8 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
                 ds = ds.rename({unrecognized_dims[0]: 'step'})
 
         if 'step' in ds.dims or 'step' in ds.coords:
+            if 'step' not in ds.coords:
+                ds = ds.assign_coords(step=ds['step'])
             if ds['step'][0].values == 0:
                 ds = ds.sel(step=slice(1, None))
         else:

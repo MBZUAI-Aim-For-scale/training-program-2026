@@ -103,12 +103,13 @@ def exists(path: Any) -> bool:
         return False
     path_str = str(path).strip()
     if is_uri(path_str):
-        if hasattr(config, "exists"):
-            return config.exists(path_str)
-        try:
-            return gcs_fs().exists(_strip(path_str))
-        except Exception:
-            return False
+        local_copy = getattr(config, "local_copy", None)
+        if local_copy is not None and local_copy(path_str):
+            return True
+        # Runtime checks must query the requested object even when the
+        # configuration's best-effort startup discovery timed out. Preserve
+        # authentication/network errors instead of misreporting missing files.
+        return gcs_fs().exists(_strip(path_str))
     return Path(path_str).expanduser().exists()
 
 
