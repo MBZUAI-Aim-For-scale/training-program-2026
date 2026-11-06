@@ -31,7 +31,7 @@ import streamlit as st
 # token (`token` in demos.toml).
 # `path` is added to the container's address, to open a page inside a bigger site; `health` is the page
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
-# launches with their own button (named by `label`); they don't count towards the one-demo-at-a-time rule.
+# launches with their own button (named by `label`); they count towards the one-demo-at-a-time rule too.
 DEMOS = [
     {"n": 1, "title": "Setting up your AI weather forecasting lab",
      "about": "Check the Spark and get a working environment before diving into the models.", "setup": "demo1"},
@@ -73,6 +73,7 @@ for _d in DEMOS + [t for d in DEMOS for t in d.get("tools", [])]:
                 _d[_k] = _IN_TOML[_d["setup"]][_k]
 LESSONS = setup.REPO / "docs" / "_episodes"
 DOCS_SITE = "https://mbzuai-aim-for-scale.github.io/training-program-2026"
+LINK_MAX_AGE = 120  # seconds a Launch link can start a demo (the pages renew theirs every few seconds)
 
 # Same palette as Demo 3; the top bar uses the shared site's navy
 NAVY, NAVY_DARK, BLUE, TEAL = "#1f2f6b", "#172457", "#4b6fd6", "#3f8f7a"
@@ -299,6 +300,12 @@ def status(demo: dict) -> tuple[str, str, str | None]:
     return "none", "Not set up yet" if demo.get("checkout") else "Image not built", None
 
 
+def tracked(demo: dict) -> dict:
+    """What a demo's card reports on: its own container or, for a demo that only has a tool (Demo 2), that tool's."""
+    tools = demo.get("tools", [])
+    return tools[0] if tools and not demo.get("container") else demo
+
+
 def label(demo: dict) -> str:
     return demo.get("label") or f"Demo {demo['n']}"
 
@@ -309,9 +316,24 @@ def uid(demo: dict) -> str:
 
 
 def launch_href(demo: dict, **extra: str) -> str:
-    """The link a Launch or Open button follows: a new tab that starts the demo (or tool), then shows it."""
-    return "?" + "&".join(f"{k}={v}" for k, v in
-                          {"demo": demo["n"], "tool": demo.get("tool"), "launch": 1, **extra}.items() if v)
+    """The link a Launch or Open button follows: a new tab that starts the demo (or tool), then shows it.
+    It says when it was made, so that it stops working once it's old (see link_works)."""
+    return "?" + "&".join(f"{k}={v}" for k, v in {"demo": demo["n"], "tool": demo.get("tool"), "launch": 1,
+                                                  "at": int(time.time()), **extra}.items() if v)
+
+
+def link_works(demo: dict) -> bool:
+    """True if this tab's link may show the Starting page. An old link, such as a tab the browser restored,
+    must not start a demo or stop another one. It can still show a demo that's already running.
+    A tab whose link was new when it opened keeps working, however long the demo takes to build."""
+    key = f"link-{uid(demo)}"
+    try:
+        new = time.time() - int(st.query_params.get("at", 0)) < LINK_MAX_AGE
+    except ValueError:
+        new = False
+    if new:
+        st.session_state[key] = True
+    return st.session_state.get(key, False) or status(demo)[0] == "running"
 
 
 def page_up(demo: dict, link: str | None) -> bool:
@@ -387,12 +409,11 @@ def launch(demo: dict):
 
 
 def running_others(demo: dict) -> list[dict]:
-    """Other demos whose container is running. Only one demo runs at a time on a Spark; Demo 1 (this
-    dashboard and its host checks) is left out of that rule, so it is never counted or stopped; so are tools."""
-    if demo.get("tool"):
-        return []
-    return [d for d in DEMOS if d["n"] != 1 and d.get("container") and d["container"] != demo.get("container")
-            and (setup.inspect("container", d["container"]) or {}).get("State", {}).get("Running")]
+    """Other demos and tools whose container is running. Only one runs at a time on a Spark; Demo 1 (this
+    dashboard and its host checks) is left out of that rule, so it is never counted or stopped."""
+    everything = [part for d in DEMOS if d["n"] != 1 for part in (d, *d.get("tools", []))]
+    return [p for p in everything if p.get("container") and p["container"] != demo.get("container")
+            and (setup.inspect("container", p["container"]) or {}).get("State", {}).get("Running")]
 
 
 def names(demos: list[dict]) -> str:
@@ -436,14 +457,14 @@ def launch_button(demo: dict, kind: str, busy: bool):
 
 def status_button(demo: dict, kind: str, text: str, run: dict | None, busy: bool):
     """The demo's status in the Launch button's place; clicking it opens the demo's page (where Launch is)."""
-    steps = steps_for(demo, run)
+    steps = steps_for(tracked(demo), run)
     tag = KINDS[kind][1]
     if busy and run and run["state"] == "running" and steps:
         tag, text = "ready", "Starting…"
     elif steps and run["state"] != "running" and any(s["status"] == "failed" for s in steps):
         tag, text = "failed", "Setup failed"
     if st.button(text, key=f"status-{tag}-{demo['n']}", width="stretch",
-                 help=f"Open the {label(demo)} page" + (" to launch it" if demo.get("container") else "")):
+                 help=f"Open the {label(demo)} page" + (" to launch it" if tracked(demo).get("container") else "")):
         st.query_params.clear()
         st.query_params["demo"] = str(demo["n"])
         st.rerun()
@@ -454,7 +475,7 @@ def demo_row(demo: dict, kind: str, text: str, link: str | None) -> str:
     # Demo 1 keeps its tag next to its Run checks button; the other demos show their status in the button
     side = f'<span class="d1-tag {tag}">{escape(text)}</span>' if demo["n"] == 1 else ""
     if link:
-        side += f'<a href="?demo={demo["n"]}&launch=1" target="_blank">Open {escape(label(demo))} ↗</a>'
+        side += f'<a href="{escape(launch_href(tracked(demo)))}" target="_blank">Open {escape(label(demo))} ↗</a>'
     return (f'<div class="d1-demo"><div class="num">{escape(str(demo.get("badge", demo["n"])))}</div>'
             f'<div class="body"><div class="n">{escape(label(demo))} · {escape(demo["title"])}</div>'
             f'<div class="o">{escape(demo["about"])}</div></div>'
@@ -463,7 +484,7 @@ def demo_row(demo: dict, kind: str, text: str, link: str | None) -> str:
 
 def demo_card(demo: dict, kind: str, label: str, link: str | None, run: dict | None, busy: bool):
     with st.container(key=f"d1card-{demo['n']}"):
-        steps = steps_for(demo, run)
+        steps = steps_for(tracked(demo), run)
         info, button = st.columns([0.84, 0.16])
         info.markdown(f'<style>.st-key-d1card-{demo["n"]} {{ border-left-color: {KINDS[kind][0]} !important; }}</style>'
                       + demo_row(demo, kind, label, link), unsafe_allow_html=True)
@@ -477,8 +498,8 @@ def demo_card(demo: dict, kind: str, label: str, link: str | None, run: dict | N
         if steps and (run["state"] != "done" or any(s["status"] in ("failed", "skipped") for s in steps)):
             st.markdown(progress(steps, run["state"]), unsafe_allow_html=True)
         with st.expander("Command-line output"):
-            st.code(output(steps) or ("no output yet: the latest setup run didn't include this demo" if demo.get("setup")
-                                      else "no output: this demo doesn't have a container yet"),
+            st.code(output(steps) or ("no output yet: the latest setup run didn't include this demo"
+                                      if tracked(demo).get("setup") else "no output: this demo doesn't have a container yet"),
                     language=None, height=320 if steps else "content")
 
 
@@ -488,7 +509,7 @@ def setup_page():
 
     @st.fragment(run_every=3)  # re-reads Docker and the setup progress every few seconds
     def live():
-        statuses = [status(d) for d in DEMOS]
+        statuses = [status(tracked(d)) for d in DEMOS]
         run = last_run()
         stats = [("Demos", str(len(DEMOS)), BLUE),
                  ("Running", str(sum(k == "running" for k, _, _ in statuses[1:])), GREEN),
@@ -603,7 +624,8 @@ def demo_page(demo: dict):
             html += ('<div class="d1-section">Questions it answers</div>' + bullets(info["questions"], "q"))
         st.markdown(html, unsafe_allow_html=True)
     with card:
-        launch_card(demo)
+        if tracked(demo) is demo:  # (a demo that only has a tool gets that tool's card, not a "Coming soon" one)
+            launch_card(demo)
         for tool in demo.get("tools", []):
             launch_card(tool)
         if demo.get("setup") == "demo5":
@@ -780,7 +802,7 @@ def follow(demo: dict):
     if kind == "running" and page_up(demo, link):
         st.session_state[f"framed-{uid(demo)}"] = link
         st.rerun()
-    # Start it once per tab (reloading the tab tries again), as soon as no other setup run holds the lock.
+    # Start it once per tab, as soon as no other setup run holds the lock.
     # Other running demos are stopped first, but only the ones confirmed (in the link, or with the button below).
     key = f"launched-{uid(demo)}"
     if key not in st.session_state and kind != "running" and not setup_running():
@@ -808,7 +830,7 @@ def follow(demo: dict):
         if steps:
             st.markdown(progress(steps, run["state"]), unsafe_allow_html=True)
         if steps and run["state"] != "running" and any(s["status"] in ("failed", "skipped") for s in steps):
-            note = "The demo didn't start. Fix the problem above, then reload this tab to try again."
+            note = "The demo didn't start. Fix the problem above, then launch it again from its page in the dashboard."
         elif kind == "running":
             note = "The container is running; waiting for its page to answer …"
         elif setup_running() and not steps:
@@ -831,11 +853,17 @@ try:
 except ValueError:
     current = BY_N["1"]
 tool = next((t for t in current.get("tools", []) if t["tool"] == st.query_params.get("tool")), None)
+launching = current["n"] != 1 and st.query_params.get("launch") == "1" and (tool or current).get("container")
 # The tab a Launch or Open button opens shows only the demo or tool (or its start-up progress), without the bar
-if current["n"] != 1 and st.query_params.get("launch") == "1" and (tool or current).get("container"):
+if launching and link_works(tool or current):
     starting_page(tool or current)
 else:
+    if launching:  # An old link: forget it, and show the demo's page
+        st.query_params.clear()
+        st.query_params["demo"] = str(current["n"])
     navbar(current["n"])
+    if launching:
+        st.info(f"That link has expired, so {label(tool or current)} wasn't started. Use the button on this page.")
     # (Statements, not `a() if … else b()`: Streamlit's "magic" would write that expression's None on the page.)
     if current["n"] == 1:
         setup_page()

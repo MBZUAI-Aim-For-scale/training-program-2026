@@ -13,7 +13,8 @@ python3 demos/demo1/spark_setup.py dashboard
 
 It starts the dashboard in the background and prints its link (http://localhost:8500). It
 doesn't start any demo. The dashboard's **Run checks** and **Launch** buttons run the steps below
-and show their progress, flag errors, and suggest fixes.
+and show their progress, flag errors, and suggest fixes. A Launch link only starts its demo for
+2 minutes after the page offers it, so an old or restored browser tab can't start or stop a demo.
 
 The same steps from the terminal, printed as they run:
 
