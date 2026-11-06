@@ -29,6 +29,10 @@ python3 country_data.py [--plan]          # download this Spark's country data (
 bash shutdown.sh                          # stop any setup run, download, the dashboard and all containers
 ```
 
+**AI Weather Lab:** on the fleet's demo Sparks, the desktop has an **AI Weather Lab** shortcut
+(icon: `ai-weather-lab.svg`) that runs `spark_setup.py dashboard --open`: it starts the dashboard
+and opens it in the browser.
+
 **`spark-setup`:** every run also installs this command (in `~/.local/bin`), the same script from
 any folder: `spark-setup dashboard`, `spark-setup --only demo3`, `spark-setup status`, ...
 

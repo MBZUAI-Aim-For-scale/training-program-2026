@@ -13,6 +13,8 @@
   python3 spark_setup.py --no-dashboard       terminal output only
   python3 spark_setup.py status               print the last run's steps
   python3 spark_setup.py dashboard [--stop]   start (or stop) just the dashboard
+  python3 spark_setup.py dashboard --open     start it and open it in the browser (the
+                                              desktop's AI Weather Lab shortcut)
 
 Every run installs the command `spark-setup` ([setup] command in demos.toml) in ~/.local/bin:
 the same script from any folder, e.g. `spark-setup dashboard`, `spark-setup --only demo3`.
@@ -552,17 +554,23 @@ def dashboard_port(cfg: dict) -> int:
     return int(os.environ.get("DASHBOARD_PORT") or cfg.get("dashboard", {}).get("port", 8500))
 
 
+def ensure_streamlit() -> Path:
+    """The dashboard's Streamlit, in .venv/ here (installed on first use)."""
+    streamlit = VENV / "bin" / "streamlit"
+    if not streamlit.exists():
+        print("Installing Streamlit for the dashboard (first run only)…", flush=True)
+        subprocess.run([sys.executable, "-m", "venv", str(VENV)], check=True)
+        subprocess.run([str(VENV / "bin" / "pip"), "install", "-q", "streamlit==1.61.0"], check=True)
+    return streamlit
+
+
 def start_dashboard(cfg: dict) -> str:
     """Start dashboard.py in the background unless it's already up; return its URL."""
     port = dashboard_port(cfg)
     url = f"http://localhost:{port}"
     if healthy(port):
         return url
-    streamlit = VENV / "bin" / "streamlit"
-    if not streamlit.exists():
-        print("Installing Streamlit for the dashboard (first run only)…", flush=True)
-        subprocess.run([sys.executable, "-m", "venv", str(VENV)], check=True)
-        subprocess.run([str(VENV / "bin" / "pip"), "install", "-q", "streamlit==1.61.0"], check=True)
+    streamlit = ensure_streamlit()
     STATE.mkdir(parents=True, exist_ok=True)
     with open(STATE / "dashboard.log", "a") as log:
         proc = subprocess.Popen(
@@ -587,8 +595,29 @@ def cmd_dashboard(args, _argv):
             print("dashboard stopped")
         DASHBOARD_PID.unlink(missing_ok=True)
         return 0
-    print(f"Progress dashboard: {start_dashboard(load_config())}")
+    if not args.open:
+        print(f"Progress dashboard: {start_dashboard(load_config())}")
+        return 0
+    # --open, from the desktop shortcut: there's no terminal, so it says so on the desktop.
+    cfg = load_config()
+    if not healthy(dashboard_port(cfg)):
+        notify("Starting the dashboard…")
+    try:
+        url = start_dashboard(cfg)
+    except Exception as e:
+        notify(f"The dashboard didn't start: {e}")
+        raise
+    print(f"Progress dashboard: {url}")
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
     return 0
+
+
+def notify(text: str) -> None:
+    """A desktop notification, when there's a desktop (and notify-send)."""
+    if shutil.which("notify-send") and (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        subprocess.run(["notify-send", "--app-name=AI Weather Lab", "AI Weather Lab", text], check=False)
 
 
 # --- Main ---------------------------------------------------------------------------------
@@ -629,6 +658,12 @@ def cmd_run(args, argv):
     try:
         demos, steps = plan(cfg, args.only, args.host_only, args.build_only)
         run = Run(steps, argv)
+        if args.no_dashboard and args.build_only:
+            # (unattended setup: the dashboard opens fast from the desktop later)
+            try:
+                ensure_streamlit()
+            except (OSError, subprocess.CalledProcessError) as e:
+                print(f"(couldn't install the dashboard's Streamlit: {e})", flush=True)
         if not args.no_dashboard:
             try:
                 url = start_dashboard(cfg)
@@ -717,7 +752,9 @@ def main(argv=None):
                    help="don't update demos whose code is in another repository (the dashboard's Launch)")
     sub.add_parser("status", help="print the last run's steps")
     dash = sub.add_parser("dashboard", help="start just the progress dashboard")
-    dash.add_argument("--stop", action="store_true", help="stop it instead")
+    how_dash = dash.add_mutually_exclusive_group()
+    how_dash.add_argument("--stop", action="store_true", help="stop it instead")
+    how_dash.add_argument("--open", action="store_true", help="and open it in the browser")
     if not argv or argv[0] not in ("run", "status", "dashboard", "-h", "--help"):
         argv = ["run", *argv]
     args = p.parse_args(argv)
