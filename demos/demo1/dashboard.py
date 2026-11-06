@@ -33,6 +33,13 @@ import streamlit as st
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
 # launches with their own button (named by `label`); they count towards the one-demo-at-a-time rule too.
 DEMOS = [
+    # (first: "read first". Not a numbered demo; its lesson is 00-intro-to-spark.md)
+    {"n": "intro", "label": "Intro to Spark", "badge": "0", "lesson": 0, "path": "/lab",
+     "title": "Intro to DGX Spark: AI weather for Africa",
+     "about": "What a DGX Spark is and what it can do for weather, climate and agriculture, then fourteen "
+              "hands-on labs, all about Africa, in JupyterLab: forecasts, verification against stations, "
+              "farm advisories, crop stress, cyclone tracks, solar energy and the data behind a forecast.",
+     "setup": "intro"},
     {"n": 1, "title": "Setting up your AI weather forecasting lab",
      "about": "Check the Spark and get a working environment before diving into the models.", "setup": "demo1"},
     {"n": 2, "title": "Observational data readiness",
@@ -257,7 +264,7 @@ def page_header(n: int, title: str, sub: str = ""):
                   unsafe_allow_html=True)
     if url := lesson_url(n):
         button.link_button("Additional information ↗", url, width="stretch",
-                           help=f"Opens the Demo {n} lesson in a new tab")
+                           help=f"Opens the Demo {n} lesson in a new tab" if n else "Opens its lesson in a new tab")
 
 
 def access_token(demo: dict) -> str:
@@ -529,7 +536,7 @@ def setup_page():
         statuses = [status(tracked(d)) for d in DEMOS]
         run = last_run()
         stats = [("Demos", str(len(DEMOS)), BLUE),
-                 ("Running", str(sum(k == "running" for k, _, _ in statuses[1:])), GREEN),
+                 ("Running", str(sum(k == "running" for d, (k, _, _) in zip(DEMOS, statuses) if d["n"] != 1)), GREEN),
                  ("Ready to launch", str(sum(k == "ready" for k, _, _ in statuses)), ORANGE)]
         st.markdown('<div class="d1-stats">' + "".join(
             f'<div class="d1-stat" style="--c:{c}"><div class="k">{k}</div><div class="v">{v}</div></div>'
@@ -629,8 +636,8 @@ def bullets(items: list[str], cls: str = "") -> str:
 
 
 def demo_page(demo: dict):
-    info = lesson(demo["n"])
-    page_header(demo["n"], f'{label(demo)} · {demo["title"]}')
+    info = lesson(demo.get("lesson", demo["n"]))
+    page_header(demo.get("lesson", demo["n"]), f'{label(demo)} · {demo["title"]}')
 
     blurb, card = st.columns([0.6, 0.4], gap="large")
     with blurb:
@@ -750,7 +757,8 @@ def launch_card(demo: dict):
             if kind == "running" and link:
                 st.link_button(f"Open {name} ↗", launch_href(demo), type="primary",
                                width="stretch", help=f"Opens {name} in a new tab")
-                note = f"Running at <code>{escape(link)}</code>."
+                # (the address without its access token: the button carries that)
+                note = f"Running at <code>{escape(re.sub(r'[?&]token=[^&]*', '', link))}</code>."
             elif not demo.get("container"):
                 st.button("Coming soon", key=f"soon-{key}", disabled=True, width="stretch")
                 note = "This demo doesn't have a container yet."

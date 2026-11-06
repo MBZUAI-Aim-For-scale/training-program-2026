@@ -7,8 +7,9 @@
 #   8501  the repo's top-level app    8505  Demo 5 (ForecastCheck)
 #   8502  Demo 3                      8888  Demo 4's Jupyter Lab (demos/demo4/docker)
 #   8503  Demo 4                      8889  Demo 1's JupyterLab sandbox (docker-compose.yml)
-#   8765  AI Almanac (its own default)
-# A new demo takes the next free one (8506, ...).
+#   8506  Intro to Spark (JupyterLab)  8765  AI Almanac (its own default)
+# A new demo takes the next free one (8507, ...). A person's own intro-to-Spark JupyterLab
+# (Lab 00: run.sh <port>) uses one outside these, 8890 and up.
 # Paths are relative to the ai_weather repo root. Add a [[demo]] block to track a new demo.
 #
 # Each demo gets three steps: build its image (skipped while the image is up to date with
@@ -108,3 +109,20 @@ health = "/health"
 token = { file = "~/.local/share/ai-almanac-spark/secrets.env", key = "SERVE_ACCESS_TOKEN" }
 # (a fresh install sets itself up first: downloads of tens of GB, unless the fleet did it already)
 start_timeout = 7200
+
+# Intro to DGX Spark (demos/intro-to-spark): background docs and Africa-focused labs 00-13, as
+# notebooks in JupyterLab. Its image (PyTorch + Earth2Studio) takes 30-60 minutes to build, so
+# the fleet's unattended setup builds it ahead; its models (~35 GB) download on first use, into
+# ~/.cache/spark-intro. Its page needs Jupyter's token, which run.sh start keeps in that folder.
+# (A person's own JupyterLab, Lab 00's run.sh <port>, is separate: its own container and port.)
+[[demo]]
+id = "intro"
+title = "Intro to DGX Spark"
+image = "spark-intro"
+container = "spark-intro"
+context = "demos/intro-to-spark/docker"
+dockerfile = "demos/intro-to-spark/docker/Dockerfile"
+run = ["bash", "demos/intro-to-spark/docker/run.sh", "start"]
+port = 8506
+health = "/api"
+token = { file = "~/.cache/spark-intro/jupyter.env", key = "JUPYTER_TOKEN" }

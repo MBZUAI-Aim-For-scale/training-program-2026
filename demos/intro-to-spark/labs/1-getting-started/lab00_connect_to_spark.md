@@ -3,6 +3,11 @@
 **Goal:** get from your laptop to a running Jupyter on the Spark, securely. 15 min.
 Your instructor gives you: the Spark hostname (reached over Tailscale or the local network), a username, and a port.
 
+> **On a training Spark, there's a shorter way:** open the AI Weather Lab dashboard (the desktop's
+> **AI Weather Lab** shortcut, or `spark-setup dashboard --open`), choose **Intro to Spark** in the top bar and
+> **Launch**: JupyterLab opens signed in, with these labs, and its image is already built. The steps below give a
+> JupyterLab of your own, on your own port (one per person or team), on any Spark.
+
 ## 1. SSH in (key-based)
 
 ```bash
