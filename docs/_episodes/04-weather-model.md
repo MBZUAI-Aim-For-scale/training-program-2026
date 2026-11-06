@@ -34,7 +34,7 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 > 
 > * Complete the Docker container setup in [Demo 1: Setting Up AI Weather Forecasting Lab](/training-program-2026/01-setup/) before proceeding.
 > * The container stack must be running (`bash demos/demo4/docker/run.sh start`). ROMP and all model environments are pre-installed inside the container.  See [Demo 1, Section 7](/training-program-2026/01-setup#7-rompmomp-benchmarking-configuration).
-> * Familiarity with the Demo 3 Streamlit interface (`http://localhost:8503`) and NetCDF output format.
+> * Familiarity with the Demo 3 Streamlit interface (`http://localhost:8502`) and NetCDF output format.
 > {: .prereq}
 
 
@@ -144,7 +144,7 @@ We want your feedback, in person and online, to improve this package.
 - Observations or reference rainfall: CHIRPS, ENACTS or another gridded product.
 - Forecasts: daily rainfall from each model's reforecasts, on a common grid (e.g. 0.25°).
 - The configured `jjas_100mm_rainfall_mask_0p25.nc` uses True/1 = keep.
-- Models are registered centrally in `BENCHMARK_MODEL_CATALOG` under `ai_weather/config.py`.
+- Models are registered centrally in `BENCHMARK_MODEL_CATALOG` under `demos/demo4/ai_weather/config.py`.
 
 
 
@@ -171,7 +171,7 @@ Verification uses Days 1–15 and Days 16–30. Probabilistic BS/AUC use three f
 
 Observed onset is derived from a gridded rainfall product (e.g., CHIRPS, ENACTS). This product is the "truth" in the benchmark, but it has its own errors, so conclusions can change with the dataset.
 
-The prepared CHIRPS observation sample is labelled Version 3.0, variable `RAINFALL`, in mm/day. Check the existing `ai_weather/config.py` data paths and prepared forecast unit metadata before a rerun. The lesson result CSVs do not include the raw rainfall archive.
+The prepared CHIRPS observation sample is labelled Version 3.0, variable `RAINFALL`, in mm/day. Check the existing `demos/demo4/ai_weather/config.py` data paths and prepared forecast unit metadata before a rerun. The lesson result CSVs do not include the raw rainfall archive.
 
 Verify grid coordinates, calendar and rainfall units before scoring. These prepared arrays use a 0.25° evaluation grid, not proof of each model's native resolution. A change to 1° requires a new experiment; no 1° result is included here.
 
@@ -277,7 +277,7 @@ Skill fractions are multiplied by 100 for dashboard and figure percentages. A ze
 
 ### Models in the Benchmark
 
-Models are registered in `ai_weather/config.py` through the legacy `config` import. Member counts and grid descriptions below refer to the prepared inputs used for this snapshot, not advertised maximum ensemble sizes.
+Models are registered in `demos/demo4/ai_weather/config.py` through the legacy `config` import. Member counts and grid descriptions below refer to the prepared inputs used for this snapshot, not advertised maximum ensemble sizes.
 
 | Model | Type | Origin | Resolution |
 | --- | --- | --- | --- |
@@ -301,7 +301,7 @@ The windows are disjoint: Days 16–30 is not a cumulative Days 1–30 forecast.
 ## Command-Line Execution (`run_momp.py`)
 
 
-`run_momp.py` is the command-line entry point. Configure data locations in the existing `ai_weather/config.py` and `.env`.
+`run_momp.py` is the command-line entry point. Configure data locations in the existing `demos/demo4/ai_weather/config.py` and `.env`.
 
 
 ### Step 1: Access the Container Environment
