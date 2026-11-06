@@ -341,7 +341,8 @@ def render_config_check():
                 for item in snapshot["result"]:
                     st.write(f"- {item}")
         else:
-            st.success("Benchmark configuration check completed.")
+            st.toast("Benchmark configuration check completed.", icon="✅", duration="short")
+            st.session_state.pop("config_check_result", None)
 
 
 @st.fragment(run_every=2)
@@ -362,6 +363,13 @@ def render_background_status():
         job = st.session_state.get(key)
         if job is not None:
             snapshot = job.snapshot()
+            if key == "benchmark_active_job":
+                notice_token = st.session_state.get("benchmark_job_token", id(job))
+                if not snapshot["done"] and st.session_state.get("benchmark_notice_token") != notice_token:
+                    st.toast("Benchmark running. Progress and Stop are below Run Benchmark.",
+                             icon="⏳", duration="short")
+                    st.session_state["benchmark_notice_token"] = notice_token
+                continue
             if snapshot["done"]:
                 st.caption(f"{label}: {snapshot['status']}. Open its menu for results.")
             else:
