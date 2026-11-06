@@ -14,8 +14,11 @@ and pilot them in forecast-to-farmer advisory services.
 ## Quick start (on a DGX Spark)
 
 ```bash
-python3 demos/demo1/spark_setup.py dashboard     # the dashboard: http://localhost:8500
+spark-setup dashboard     # the dashboard: http://localhost:8500
 ```
+
+`spark-setup` is `python3 demos/demo1/spark_setup.py`, from any folder. Every run installs it, so the
+first time (if it isn't there yet), use the long form.
 
 From the dashboard, **Run checks** checks the Spark, and **Launch** builds a demo (only if its code changed) and starts it.
 The country-data button downloads this Spark's data to `~/<country>_data`. Only one
@@ -29,13 +32,13 @@ ssh -N -L 8500:127.0.0.1:8500 <you>@<country>-spark
 
 | Demo | What | Port | Start it alone |
 |------|------|------|----------------|
-| [1](demos/demo1/README.md) | Spark setup + dashboard | 8500 | `python3 demos/demo1/spark_setup.py dashboard` |
+| [1](demos/demo1/README.md) | Spark setup + dashboard | 8500 | `spark-setup dashboard` |
 | 2 | Climate Data Tools (CDT) | 8504 | `bash demos/demo2/docker/run.sh` |
 | [3](demos/demo3/README.md) | AI forecast lab | 8502 | `bash demos/demo3/docker/run.sh` |
 | [4](demos/demo4/README.md) | Forecasting & benchmarking | 8503 | `bash demos/demo4/docker/run.sh start` |
 | [5](docs/_episodes/05-AI-Forest-test.md) | ForecastCheck | 8505 | `fcstcheck setup <country>` |
 
-Other setup commands: `python3 demos/demo1/spark_setup.py --help`. To stop everything:
+Other setup commands: `spark-setup --help`. To stop everything:
 `bash demos/demo1/shutdown.sh`.
 
 **Data:** the demos read this Spark's country data first, and the program's bucket
