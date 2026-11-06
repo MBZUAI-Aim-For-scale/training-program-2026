@@ -8,7 +8,6 @@ import subprocess
 import tempfile
 import unittest
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -23,7 +22,7 @@ class Demo4RepositoryLayoutTests(unittest.TestCase):
                 result = subprocess.run(
                     ["docker", "compose", "--env-file", str(env_file), "-f", compose_file,
                      "config", "--no-env-resolution", "--format", "json"],
-                    cwd=ROOT, capture_output=True, text=True, timeout=15)
+                    cwd=ROOT, capture_output=True, text=True, timeout=15, check=False)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 return json.loads(result.stdout)
 
@@ -48,7 +47,7 @@ class Demo4RepositoryLayoutTests(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / script, target)
                 result = subprocess.run(["bash", str(target), "logs", "with spaces"],
-                                        cwd=root.parent, capture_output=True, text=True, timeout=5)
+                                        cwd=root.parent, capture_output=True, text=True, timeout=5, check=False)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.splitlines(), ["logs", "with spaces"])
 

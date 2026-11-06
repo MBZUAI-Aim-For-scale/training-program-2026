@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+
 import argparse
 import os
+from pathlib import Path
 import signal
 import subprocess
 import sys
-from pathlib import Path
+
 
 def find_streamlit_process_on_port(port: int):
     """Return PID of a process listening on given port, or None."""
@@ -32,7 +34,7 @@ def kill_process(pid: int):
     try:
         os.kill(pid, signal.SIGTERM)
         print(f"Killed process {pid}")
-    except Exception as e:
+    except OSError as e:
         print(f"Could not kill process {pid}: {e}")
 
 def run_streamlit(app_path: Path, port: int, host: str, python_exe: Path):
@@ -78,7 +80,7 @@ def run_streamlit(app_path: Path, port: int, host: str, python_exe: Path):
 
 def main():
     parser = argparse.ArgumentParser(description="Run the Ethiopia Rainfall Onset Dashboard using uv or current env.")
-    parser.add_argument("--port", type=int, default=int(os.environ.get("STREAMLIT_PORT", 8502)),
+    parser.add_argument("--port", type=int, default=int(os.environ.get("STREAMLIT_PORT", "8502")),
                         help="Port to run Streamlit on (default: 8502 or STREAMLIT_PORT env).")
     parser.add_argument("--host", type=str, default="localhost",
                         help="Host to bind (default: localhost).")

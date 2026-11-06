@@ -5,17 +5,18 @@ Executes evaluation pipelines for selected weather models.
 Parses Streamlit UI runtime parameters, spec files, and GCS catalog configs.
 """
 from __future__ import annotations
+
 import argparse
 import ast
 import contextlib
+from datetime import date
 import fnmatch
 import importlib.metadata
 import json
 import os
+from pathlib import Path
 import subprocess
 import sys
-from datetime import date
-from pathlib import Path
 
 # ------------------------------------------------------------------------------
 # Paths
@@ -52,11 +53,10 @@ EXTERNAL_DATA_DIR = Path(config.EXTERNAL_DATA_DIR).expanduser()
 ROMP_OUT_DIR = Path(os.getenv("ROMP_OUT_DIR") or getattr(config, "ROMP_OUT_DIR", getattr(config, "ROMP_DEMO_OUT_DIR", PROJECT_ROOT / "romp_output"))).expanduser()
 ROMP_FIG_DIR = Path(os.getenv("ROMP_FIG_DIR") or getattr(config, "ROMP_FIG_DIR", getattr(config, "ROMP_DEMO_FIG_DIR", PROJECT_ROOT / "romp_figure"))).expanduser()
 
-import momp  # noqa: E402,F401
-import momp.params as params  # noqa: E402
 from ai_weather.runtime import check_runtime_python, select_runtime_python
-from momp.lib.loader import get_cfg, get_setting  # noqa: E402
-from momp.lib.assertion import ROMPValidator  # noqa: E402
+from momp import params
+from momp.lib.assertion import ROMPValidator
+from momp.lib.loader import get_cfg, get_setting
 
 # ------------------------------------------------------------------------------
 # Lead windows / tolerances (Length matched: 2 items each)
@@ -68,43 +68,43 @@ LEAD_SETTINGS = {
     "day_bins": ((1, 5), (6, 10), (11, 15), (16, 20), (21, 25), (26, 30)),
 }
 
-DETERMINISTIC_FLAGS = dict(
-    probabilistic=False,
-    FAR=True,
-    MAE=True,
-    MR=True,
-    BS=False,
-    RPS=False,
-    AUC=False,
-    Reliability=False,
-    skill_score=False,
-    plot_spatial_far_mr_mae=True,
-    plot_panel_heatmap_error=True,
-    plot_heatmap_bss_auc=False,
-    plot_reliability=False,
-    plot_panel_heatmap_skill=False,
-    plot_bar_bss_rpss_auc=False,
-)
+DETERMINISTIC_FLAGS = {
+    "probabilistic": False,
+    "FAR": True,
+    "MAE": True,
+    "MR": True,
+    "BS": False,
+    "RPS": False,
+    "AUC": False,
+    "Reliability": False,
+    "skill_score": False,
+    "plot_spatial_far_mr_mae": True,
+    "plot_panel_heatmap_error": True,
+    "plot_heatmap_bss_auc": False,
+    "plot_reliability": False,
+    "plot_panel_heatmap_skill": False,
+    "plot_bar_bss_rpss_auc": False,
+}
 
-PROBABILISTIC_FLAGS = dict(
-    probabilistic=True,
-    members="All",
-    onset_percentage_threshold=0.5,
-    BS=True,
-    RPS=True,
-    AUC=True,
-    Reliability=True,
-    skill_score=True,
-    FAR=True,
-    MAE=True,
-    MR=True,
-    plot_heatmap_bss_auc=True,
-    plot_reliability=True,
-    plot_panel_heatmap_skill=True,
-    plot_bar_bss_rpss_auc=True,
-    plot_spatial_far_mr_mae=True,
-    plot_panel_heatmap_error=True,
-)
+PROBABILISTIC_FLAGS = {
+    "probabilistic": True,
+    "members": "All",
+    "onset_percentage_threshold": 0.5,
+    "BS": True,
+    "RPS": True,
+    "AUC": True,
+    "Reliability": True,
+    "skill_score": True,
+    "FAR": True,
+    "MAE": True,
+    "MR": True,
+    "plot_heatmap_bss_auc": True,
+    "plot_reliability": True,
+    "plot_panel_heatmap_skill": True,
+    "plot_bar_bss_rpss_auc": True,
+    "plot_spatial_far_mr_mae": True,
+    "plot_panel_heatmap_error": True,
+}
 
 VALID_MODES = ["det", "deterministic", "prob", "probabilistic"]
 
@@ -317,7 +317,7 @@ def _apply_forecast_window(cfg, window: str):
 
 def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
     if not isinstance(spec, dict):
-        raise ValueError("Benchmark spec must be a JSON object.")
+        raise ValueError("Benchmark spec must be a JSON object.")  # noqa: TRY004 -- Preserve CLI validation errors.
     ground_truth = _clean_str(spec.get("ground_truth", ""))
     if ground_truth:
         obs_meta = _obs_meta(ground_truth)
@@ -341,7 +341,7 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
         _apply_forecast_window(cfg, forecast_window)
     shared = spec.get("shared", {})
     if not isinstance(shared, dict):
-        raise ValueError("Spec shared settings must be a JSON object.")
+        raise ValueError("Spec shared settings must be a JSON object.")  # noqa: TRY004 -- Preserve CLI validation errors.
     for key in ("wet_spell_length", "dry_spell_limit", "dry_spell_search_extension"):
         if shared.get(key) is not None and type(shared[key]) is not int:
             raise ValueError(f"Spec {key} must be an integer number of days.")
@@ -443,12 +443,10 @@ def apply_env_vars_to_cfg(cfg):
             raise ValueError(f"Invalid literal override {val!r}.") from exc
 
     # Streamlit Date Evaluation Windows
-    if val := os.getenv("ROMP_EVAL_START"):
-        if t := _iso_to_tuple(val):
-            cfg.start_date = t
-    if val := os.getenv("ROMP_EVAL_END"):
-        if t := _iso_to_tuple(val):
-            cfg.end_date = t
+    if (val := os.getenv("ROMP_EVAL_START")) and (t := _iso_to_tuple(val)):
+        cfg.start_date = t
+    if (val := os.getenv("ROMP_EVAL_END")) and (t := _iso_to_tuple(val)):
+        cfg.end_date = t
 
     # Streamlit Baseline Climatology Years
     if val := os.getenv("ROMP_BASELINE_START_YEAR"):
@@ -521,7 +519,7 @@ def apply_env_vars_to_cfg(cfg):
     if "ROMP_INIT_DAYS" in os.environ:
         val = os.environ["ROMP_INIT_DAYS"]
         try:
-            cfg.init_days = tuple(sorted(set(int(day.strip()) for day in val.split(",") if day.strip())))
+            cfg.init_days = tuple(sorted({int(day.strip()) for day in val.split(",") if day.strip()}))
         except ValueError as exc:
             raise ValueError(f"Invalid numeric override {val!r}.") from exc
 
@@ -881,6 +879,7 @@ def execute_momp_benchmark(mode="det", model_key=None, in_process=False):
             cmd,
             cwd=str(PROJECT_ROOT),
             env=os.environ.copy(),
+            check=False,
         )
         if result.returncode != 0:
             failures.append((_model_name(meta, key), result.returncode))

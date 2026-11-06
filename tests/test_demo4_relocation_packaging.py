@@ -13,7 +13,6 @@ from types import ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -98,9 +97,9 @@ class Demo4RelocationPackagingTests(unittest.TestCase):
             (package / "__init__.py").touch()
             (package / "config.py").write_text("DATA_DIR = 'relocated-test-data'\n")
             result = subprocess.run([sys.executable, "-c",
-                                     "import config; from ai_weather import config as canonical; "
-                                     "assert config is canonical; assert config.DATA_DIR == 'relocated-test-data'"],
-                                    cwd=root, capture_output=True, text=True, timeout=10)
+                                     ("import config; from ai_weather import config as canonical; "
+                                      "assert config is canonical; assert config.DATA_DIR == 'relocated-test-data'")],
+                                    cwd=root, capture_output=True, text=True, timeout=10, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_root_runners_bootstrap_moved_runtime_before_imports(self):
@@ -124,5 +123,5 @@ class Demo4RelocationPackagingTests(unittest.TestCase):
                 program = root / filename
                 program.write_text(ast.unparse(ast.Module(body=nodes, type_ignores=[])))
                 result = subprocess.run([sys.executable, str(program)], cwd=root,
-                                        capture_output=True, text=True, timeout=10)
+                                        capture_output=True, text=True, timeout=10, check=False)
                 self.assertEqual(result.returncode, 0, result.stderr)

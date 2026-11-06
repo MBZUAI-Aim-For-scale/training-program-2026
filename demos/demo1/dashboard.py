@@ -9,17 +9,16 @@ Cards and colours are styled like the Demo 3 app (demos/demo3/demo3/theme.py): l
 """
 from __future__ import annotations
 
+from html import escape
 import json
 import re
 import subprocess
 import sys
 import time
-from html import escape
-
-import streamlit as st
 
 import country_data
 import spark_setup as setup
+import streamlit as st
 
 # Every demo in the training program, in order. `container` is set once a demo has a Docker image;
 # `setup` is its id in demos.toml, whose steps spark_setup.py records in state/status.json.
@@ -192,7 +191,7 @@ KINDS = {"running": (GREEN, "ok"), "ready": (BLUE, "ready"), "stopped": (ORANGE,
 def gpu_name() -> str | None:
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
-                             capture_output=True, text=True, timeout=10)
+                             capture_output=True, text=True, timeout=10, check=False)
         return out.stdout.strip().splitlines()[0] if out.returncode == 0 and out.stdout.strip() else None
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
@@ -207,7 +206,7 @@ def lesson(n: int) -> dict:
     files = sorted(LESSONS.glob(f"{n:02d}-*.md"))
     if not files:
         return {}
-    m = re.match(r"---\n(.*?)\n---", files[0].read_text(encoding="utf-8"), re.S)
+    m = re.match(r"---\n(.*?)\n---", files[0].read_text(encoding="utf-8"), re.DOTALL)
     info, key = {}, None
     for line in (m[1] if m else "").splitlines():
         if re.match(r"\w+:", line):
@@ -623,7 +622,8 @@ def starting_page(demo: dict):
 def demo_frame(demo: dict, link: str):
     """The demo, filling this tab. The tab stays the launcher's, so it can close itself when the demo stops
     (a tab that had moved on to the demo's own address couldn't)."""
-    st.html(f"<script>document.title = {json.dumps(f'{label(demo)} · {demo['title']}')};</script>",
+    document_title = json.dumps(f"{label(demo)} · {demo['title']}")
+    st.html(f"<script>document.title = {document_title};</script>",
             unsafe_allow_javascript=True)
     with st.container(key="demoframe"):
         st.iframe(link, height=800)
