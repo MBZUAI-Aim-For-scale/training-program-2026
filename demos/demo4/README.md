@@ -97,6 +97,13 @@ The `run_momp.py` script is the backend execution engine. It processes one model
 2. **Run a Deterministic Model** (e.g., GraphCast, FuXi, AIFS):
    Inside the container, `python` resolves to `/opt/envs/app/bin/python`, the application environment installed in the image. You do not need to create a host `.venv` for the Docker workflow. Only when working **outside Docker** in an already configured host development checkout should you replace `python` with `.venv/bin/python` in these commands.
 
+   Local dashboard workers find the repository's `.venv/bin/python` even when
+   the app is launched from `demos/demo4`. The executable's symlink path is
+   preserved so Python uses the virtual environment's scientific packages.
+   `ROMP_PYTHON`, when set, explicitly overrides this selection. After updating
+   runtime-selection code, restart the local dashboard from the repository root
+   with `.venv/bin/python run_app.py --port 8501`.
+
    ```bash
    python run_momp.py --mode det --model GraphCast
    ```

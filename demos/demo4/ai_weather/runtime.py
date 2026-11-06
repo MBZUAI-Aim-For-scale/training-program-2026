@@ -1,17 +1,33 @@
 """Select and check the scientific Python used by benchmark processes."""
 
 import os
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 
 def select_runtime_python(project_root):
-    """Prefer the project environment without resolving its Python symlink."""
+    """Prefer a project environment, including above a relocated demo directory.
+
+    Stop at the nearest repository/package boundary so a flattened Docker app
+    retains its own environment. Never resolve the Python executable symlink:
+    doing so bypasses the virtual environment's site-packages.
+    """
     override = os.environ.get("ROMP_PYTHON")
-    local_python = Path(project_root) / ".venv" / "bin" / "python"
-    candidate = Path(override).expanduser() if override else (
-        local_python if local_python.is_file() else Path(sys.executable))
+    if override:
+        candidate = Path(override).expanduser()
+    else:
+        root = Path(project_root).expanduser().absolute()
+        search_roots = []
+        for parent in (root, *root.parents):
+            search_roots.append(parent)
+            if (parent / ".git").exists() or (parent / "pyproject.toml").is_file():
+                break
+        else:
+            search_roots = [root]
+        local_python = next((parent / ".venv/bin/python" for parent in search_roots
+                             if (parent / ".venv/bin/python").is_file()), None)
+        candidate = local_python or Path(sys.executable)
     if not candidate.is_file() or not os.access(candidate, os.X_OK):
         raise RuntimeError(f"Scientific Python is not executable: {candidate}. Check ROMP_PYTHON or the project .venv.")
     return str(candidate.absolute())

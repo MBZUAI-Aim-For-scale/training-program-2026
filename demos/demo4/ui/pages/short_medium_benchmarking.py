@@ -2292,7 +2292,8 @@ def _analyze_onset_streamlit(year, lat, lon):
 # Execution Bridge
 # ======================================================================
 def _locate_run_momp() -> Optional[Path]:
-    for c in [PROJECT_ROOT / "run_momp.py", Path.cwd() / "run_momp.py"]:
+    for base in (PROJECT_ROOT, *PROJECT_ROOT.parents, Path.cwd()):
+        c = base / "run_momp.py"
         if c.exists():
             return c.resolve()
     return None

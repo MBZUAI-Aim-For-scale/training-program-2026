@@ -10,10 +10,13 @@ from unittest.mock import MagicMock, patch
 
 from ai_weather.runtime import check_runtime_python, select_runtime_python
 
+SOURCE_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
 
 class ScientificRuntimeTests(unittest.TestCase):
     def test_legacy_notebook_executor_runs_outside_the_wrong_kernel(self):
-        path = Path("notebooks/utils.py")
+        path = SOURCE_ROOT / "notebooks/utils.py"
         function = next(node for node in ast.parse(path.read_text()).body
                         if isinstance(node, ast.FunctionDef) and node.name == "execute_momp_benchmark")
         worker = MagicMock(return_value={"ok": True})
@@ -27,7 +30,7 @@ class ScientificRuntimeTests(unittest.TestCase):
     def test_command_line_launchers_handoff_before_running_models(self):
         for filename in ("run_momp.py", "notebooks/run_momp.py"):
             with self.subTest(filename=filename):
-                path = Path(filename).absolute()
+                path = (PROJECT_ROOT if filename == "run_momp.py" else SOURCE_ROOT) / filename
                 tree = ast.parse(path.read_text())
                 function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                                 and node.name == "execute_momp_benchmark")
@@ -53,7 +56,7 @@ class ScientificRuntimeTests(unittest.TestCase):
     def test_command_line_dependency_failure_prevents_all_model_runs(self):
         for filename in ("run_momp.py", "notebooks/run_momp.py"):
             with self.subTest(filename=filename):
-                path = Path(filename).absolute()
+                path = (PROJECT_ROOT if filename == "run_momp.py" else SOURCE_ROOT) / filename
                 function = next(node for node in ast.parse(path.read_text()).body
                                 if isinstance(node, ast.FunctionDef) and node.name == "execute_momp_benchmark")
                 scope = {"__file__": str(path), "Path": Path, "os": os, "sys": sys,
