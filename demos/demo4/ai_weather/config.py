@@ -93,7 +93,7 @@ region = "_".join(os.getenv("ROMP_REGION", "Ethiopia").strip().split())
 obs = os.getenv("ROMP_OBS", "CHIRPS").upper()
 
 # ==============================================================================
-# 2. BUCKET CONFIGURATION (STRICTLY READ FROM .ENV)
+# 2. BUCKET CONFIGURATION (ENVIRONMENT OVERRIDES THE SHARED TRAINING BUCKET)
 # ==============================================================================
 DATA_MODE = os.getenv("DEMO_DATA_SOURCE", "auto").strip().lower()
 if DATA_MODE not in ("auto", "local", "bucket"):
@@ -109,8 +109,9 @@ def _clean_bucket(raw: str) -> str:
     return raw.strip("/")
 
 
-# Read bucket strictly from .env / environment without exposing bucket name
-DEMO_BUCKET = _clean_bucket(os.getenv("DEMO_BUCKET", ""))
+# All country-box collections share the training bucket. Explicit bucket names
+# override it; local-only deployments opt out with DEMO_DATA_SOURCE=local.
+DEMO_BUCKET = _clean_bucket(os.getenv("DEMO_BUCKET", "")) or "aim4scale_training_2026"
 BUCKET_PREFIX = os.getenv("DEMO_BUCKET_PREFIX", BUCKET_PREFIXES["demo4"]).strip("/")
 
 BUCKET_OK = bool(re.fullmatch(r"[a-z0-9][a-z0-9._-]{1,220}[a-z0-9]", DEMO_BUCKET)) and \
@@ -747,6 +748,7 @@ def benchmark_country_sources(country: str, ground_truth: str = "CHIRPS") -> Dic
         return profile
     is_current = country.casefold() == region.casefold()
     is_ethiopia = country.casefold() == "ethiopia"
+    use_bucket = BUCKET_OK and DATA_MODE != "local"
     if ground_truth != "CHIRPS":
         observations = (globals().get("BENCHMARK_OBS_CATALOG", {}).get(ground_truth)
                         or _OBS_SETS.get(ground_truth)) if is_current else None
@@ -754,7 +756,7 @@ def benchmark_country_sources(country: str, ground_truth: str = "CHIRPS") -> Dic
             profile["reason"] = f"{ground_truth} sources are not configured for {country.replace('_', ' ')}."
             return profile
         observations = copy.deepcopy(observations)
-    elif is_current:
+    elif is_current and not (use_bucket and DATA_SOURCES.get("observations") == "missing"):
         observations = copy.deepcopy(_OBS_SETS["CHIRPS"])
     else:
         observations = {
@@ -770,14 +772,13 @@ def benchmark_country_sources(country: str, ground_truth: str = "CHIRPS") -> Dic
         if not is_ethiopia and not folder:
             continue
         item = copy.deepcopy(metadata)
-        if not is_current:
+        if not is_current or (use_bucket and DATA_SOURCES.get(f"model {local_key}") == "missing"):
             if not folder:
                 continue
             item["dir"] = f"gs://{DEMO_BUCKET}/Forecasts_Country_0p25deg/{folder}/tp/{country}"
             item["file_pattern"] = f"{folder}_tp_{country}_{{}}_box025.nc"
         models[key] = item
 
-    use_bucket = BUCKET_OK and DATA_MODE != "local"
     if not use_bucket and is_current and not is_ethiopia:
         models = {key: item for key, item in models.items()
                   if DATA_SOURCES.get(f"model {item['model_name']}") in {"local", "country data"}}

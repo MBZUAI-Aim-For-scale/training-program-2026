@@ -1,4 +1,4 @@
-"""Input metadata warms before model selection and survives settings changes."""
+"""Selected-model metadata loads without scanning unrelated models or blocking controls."""
 
 from datetime import date
 from pathlib import Path
@@ -47,7 +47,7 @@ class BenchmarkMetadataWarmupTests(unittest.TestCase):
                 return
         self.fail("Metadata task did not publish its results")
 
-    def test_all_models_warm_without_selection_and_settings_reuse_metadata(self):
+    def test_only_selected_models_load_and_settings_reuse_metadata(self):
         release, entered = threading.Event(), threading.Event()
         calls = []
         selected = []
@@ -76,12 +76,15 @@ class BenchmarkMetadataWarmupTests(unittest.TestCase):
             try:
                 app.run()
                 self.assertFalse(app.exception)
-                self.assertTrue(entered.wait(1))
+                self.assertEqual(calls, [])
+                self.assertNotIn("benchmark_coverage_task", app.session_state)
                 self.assertEqual(app.session_state["selected_model_rows"], [])
-                task = app.session_state["benchmark_coverage_task"]
-                # Model controls remain usable while a slow metadata read is paused.
                 selected.append(0)
                 app.radio(key="model_category_filter").set_value("Probabilistic").run()
+                self.assertTrue(entered.wait(1))
+                task = app.session_state["benchmark_coverage_task"]
+                # Model controls remain usable while a slow metadata read is paused.
+                app.selectbox(key="initialization_schedule_GenCast").set_value("daily").run()
                 self.assertFalse(app.exception)
                 self.assertIs(app.session_state["benchmark_coverage_task"], task)
                 self.assertTrue(app.button(key="btn_run").disabled)
@@ -90,7 +93,7 @@ class BenchmarkMetadataWarmupTests(unittest.TestCase):
                 release.set()
             self.finish_metadata(app)
             self.assertEqual([(model, first, last) for model, first, last, _ in calls],
-                             [("AIFS", 2020, 2024), ("GenCast", 2020, 2024)])
+                             [("GenCast", 2020, 2024)])
             self.assertTrue(all(name == "dashboard-task" for *_, name in calls))
             for entry in app.session_state["benchmark_coverage_cache"].values():
                 entry["loaded_at"] = 0
@@ -98,14 +101,62 @@ class BenchmarkMetadataWarmupTests(unittest.TestCase):
             app.selectbox(key="initialization_schedule_GenCast").set_value("daily").run()
             self.assertFalse(app.exception)
             self.assertFalse(app.button(key="btn_run").disabled)
-            self.assertEqual(len(calls), 2)
+            self.assertEqual(len(calls), 1)
             self.assertNotIn("benchmark_inventory_task", app.session_state)
             app.button(key="benchmark_refresh_inventory").click().run()
             inventory_task = app.session_state.get("benchmark_inventory_task")
             if inventory_task is not None:
                 self.assertTrue(inventory_task.done.wait(5))
             self.finish_metadata(app)
-            self.assertEqual(len(calls), 4)
+            self.assertEqual(len(calls), 2)
+
+    def test_each_model_publishes_before_the_next_finishes(self):
+        release, entered = threading.Event(), threading.Event()
+        calls, selected = [], [0, 1]
+        rows = self.rows()
+        original_table = self.page.st.dataframe
+
+        def table(*args, **kwargs):
+            result = original_table(*args, **kwargs)
+            return SimpleNamespace(selection=SimpleNamespace(rows=selected)) if kwargs.get("key") == "model_table_selection" else result
+
+        def inspect(model, first, last, model_meta=None):
+            calls.append(model)
+            if model == "GenCast":
+                entered.set()
+                release.wait(10)
+            return {"dates": [(2024, 5, 6)], "horizons": {2024: 60}, "failures": []}
+
+        with patch.object(self.page, "inspect_model_temporal_coverage", side_effect=inspect), \
+             patch.object(self.page.st, "dataframe", side_effect=table):
+            app = self.app(rows)
+            try:
+                app.run()
+                # Collect the first result, then start the second selected model.
+                for _ in range(5):
+                    if entered.is_set():
+                        break
+                    task = app.session_state.get("benchmark_coverage_task")
+                    if task is not None:
+                        self.assertTrue(task.done.wait(5))
+                    app.run()
+                    self.assertFalse(app.exception)
+                self.assertTrue(entered.wait(1))
+                self.assertEqual(calls, ["AIFS", "GenCast"])
+                cached_models = [key[0] for key in app.session_state["benchmark_coverage_cache"]]
+                self.assertEqual(cached_models, ["AIFS"])
+                # Deselect the slow model: the ready model can run immediately.
+                selected[:] = [0]
+                app.run()
+                self.assertFalse(app.exception)
+                self.assertFalse(app.button(key="btn_run").disabled)
+                self.assertEqual(calls, ["AIFS", "GenCast"])
+            finally:
+                release.set()
+                task = app.session_state.get("benchmark_coverage_task")
+                if task is not None:
+                    self.assertTrue(task.done.wait(5))
+            self.finish_metadata(app)
 
     def test_cached_coverage_is_filtered_to_selected_years(self):
         coverage = {"dates": [(2020, 5, 1), (2021, 5, 1), (2022, 5, 1)],

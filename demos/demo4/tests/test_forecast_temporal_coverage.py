@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -34,6 +35,30 @@ class ForecastTemporalCoverageTests(unittest.TestCase):
             self.assertEqual(coverage["failures"], [])
             self.assertEqual(coverage["horizons"], {2020: 30, 2021: 15})
             self.assertEqual(coverage["dates"], [(2020, 5, 2), (2020, 5, 6), (2021, 5, 2), (2021, 5, 6)])
+
+    def test_inspection_does_not_read_spatial_coordinates_or_forecast_fields(self):
+        from xarray.backends.netCDF4_ import NetCDF4ArrayWrapper
+
+        with tempfile.TemporaryDirectory() as folder:
+            ds = xr.Dataset(
+                {"rain": (("time", "step", "lat", "lon"), np.zeros((1, 2, 3, 4)))},
+                coords={"time": pd.to_datetime(["2024-05-06"]), "step": [1, 60],
+                        "lat": [7., 8., 9.], "lon": [35., 36., 37., 38.]})
+            ds.to_netcdf(Path(folder) / "2024.nc", engine="netcdf4")
+            reads = []
+            original_read = NetCDF4ArrayWrapper.__getitem__
+
+            def read(array, key):
+                reads.append(array.variable_name)
+                return original_read(array, key)
+
+            with patch.object(NetCDF4ArrayWrapper, "__getitem__", read):
+                coverage = self.inspector(folder)("test", 2024, 2024)
+            self.assertEqual(coverage["failures"], [])
+            self.assertEqual(coverage["horizons"], {2024: 60})
+            self.assertEqual(coverage["dates"], [(2024, 5, 6)])
+            self.assertTrue(reads)
+            self.assertLessEqual(set(reads), {"time", "step"})
 
     def test_unreadable_data_is_reported_before_worker_launch(self):
         with tempfile.TemporaryDirectory() as folder:

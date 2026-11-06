@@ -3082,7 +3082,7 @@ def inspect_model_temporal_coverage(model_key, first_year, last_year, model_meta
         if not config.exists(path):
             continue
         try:
-            with config.open_dataset(path) as ds:
+            with config.open_dataset(path, create_default_indexes=False, cache=False) as ds:
                 time_name = next((name for name in ds.coords if str(name).casefold()
                                   in {"time", "init_time", "initialization_time", "forecast_reference_time"}), None)
                 if time_name:
@@ -3327,7 +3327,7 @@ def render_benchmark_coverage():
         return
     snapshot = job.snapshot()
     if not snapshot["done"]:
-        st.info("Preparing forecast metadata for all models in the background. You can select models and adjust settings while it loads.")
+        st.info("Checking forecast metadata for a selected model. Settings remain available; each model is cached when ready.")
         return
     cache = st.session_state.setdefault("benchmark_coverage_cache", {})
     keys = st.session_state.pop("benchmark_coverage_keys", [])
@@ -3512,17 +3512,7 @@ def page() -> None:
     render_benchmark_inventory()
     model_registry = inventory["models"]
     CONFIG_BENCHMARK_MODEL_CATALOG = inventory.get("catalog", CONFIG_BENCHMARK_MODEL_CATALOG)
-    # Warm each model's entire available year range once, before selection.
-    # Session data remains valid until an explicit input refresh, so changing
-    # models, schedules or evaluation years never opens the same files again.
     coverage_cache = st.session_state.setdefault("benchmark_coverage_cache", {})
-    pending_coverage = [_benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG) for row in model_registry
-                        if _benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG) not in coverage_cache]
-    if pending_coverage and st.session_state.get("benchmark_coverage_task") is None:
-        st.session_state["benchmark_coverage_keys"] = pending_coverage
-        st.session_state["benchmark_coverage_task"] = BackgroundTask(
-            _load_benchmark_coverage, pending_coverage).start()
-    render_benchmark_coverage()
     active_rows: List[Dict[str, Any]] = []
 
     if not model_registry:
@@ -3571,6 +3561,21 @@ def page() -> None:
                     """,
                     unsafe_allow_html=True,
                 )
+
+    # Inspect only selected models, publishing one result per task. An unrelated
+    # model must never delay validation, and selection changes must not leave an
+    # entire catalog queued for background I/O. Reuse full-year-range results
+    # across date/schedule edits until Refresh model data is requested.
+    pending_coverage = list(dict.fromkeys(
+        _benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG)
+        for row in active_rows
+        if _benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG) not in coverage_cache))
+    if pending_coverage and st.session_state.get("benchmark_coverage_task") is None:
+        keys = pending_coverage[:1]
+        st.session_state["benchmark_coverage_keys"] = keys
+        st.session_state["benchmark_coverage_task"] = BackgroundTask(
+            _load_benchmark_coverage, keys).start()
+    render_benchmark_coverage()
 
     model_run_windows: Dict[str, Dict[str, Any]] = {}
     verification_problems = []
