@@ -738,7 +738,7 @@ def validate_forecast_horizons(cfg):
     from momp.io.input import available_forecast_years
     from momp.stats.detect import _fit_forecast_horizon
     from momp.utils import storage
-    from momp.utils.standard import _promote_coords, dim_fmt_model
+    from momp.utils.standard import _promote_coords, dim_fmt_model_ensemble
 
     years = getattr(cfg, 'years', None)
     if years is None or years == 'All' or not years:
@@ -752,20 +752,36 @@ def validate_forecast_horizons(cfg):
         for year in available:
             filename = pattern.format(year) if '{}' in pattern else pattern
             path = storage.join(folder, filename)
+            dimensions = None
             try:
                 with storage.open_dataset(path, cache=False) as source:
+                    dimensions = dict(source.sizes)
                     # Preserve coordinate promotion used by the actual loader,
                     # then remove rainfall before any dimension transposition.
                     # Only lead/date/spatial coordinate metadata is read here.
                     promoted = _promote_coords(source)
-                    metadata = dim_fmt_model(promoted.drop_vars(list(promoted.data_vars)),
-                                             preserve_admin=True)
+                    metadata = promoted.drop_vars(list(promoted.data_vars))
+                    # xarray drops dimensions referenced only by rainfall. Keep
+                    # their implicit positional indices without reading rainfall.
+                    metadata = metadata.assign_coords({
+                        name: promoted[name] for name in promoted.dims
+                        if name not in metadata.coords
+                    })
+                    metadata = dim_fmt_model_ensemble(metadata, preserve_admin=True)
+                    if 'step' not in metadata.dims:
+                        excluded = {'init_time', 'lat', 'lon', 'member', 'adm3_name',
+                                    'adm2_name', 'adm1_name', 'woreda', 'district'}
+                        candidates = [name for name in metadata.dims if name not in excluded]
+                        if len(candidates) == 1:
+                            # Match the loaders' legacy unnamed-lead fallback.
+                            metadata = dim_fmt_model_ensemble(
+                                metadata.rename({candidates[0]: 'step'}), preserve_admin=True)
                     _fit_forecast_horizon(metadata, cfg.max_forecast_day, cfg.dry_extent,
                                           cfg.wet_spell, cfg.day_bins, dry_spell=cfg.dry_spell)
             except Exception as exc:
                 raise ValueError(
                     f"Forecast horizon preflight failed for model {model!r}, year {year}, "
-                    f"file {path!r}: {exc}"
+                    f"file {path!r}: {exc} (source dimensions: {dimensions})"
                 ) from exc
 
 
