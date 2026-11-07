@@ -88,6 +88,8 @@ CSS = f"""
 .stApp {{ background: {PAGE}; font-family: 'Inter', system-ui, sans-serif; }}
 /* Fills the screen up to a comfortable width; the demo cards go two across when there's room */
 .block-container {{ padding: 6rem clamp(1rem, 3vw, 3rem) 3rem; max-width: 1680px; }}
+/* Country buttons wrap onto more lines instead of scrolling sideways */
+[data-testid="stButtonGroup"] > div {{ flex-wrap: wrap !important; overflow: visible !important; }}
 .st-key-d1cards {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 640px), 1fr));
   gap: 1rem; align-items: stretch; }}
 
@@ -626,8 +628,9 @@ def country_data_card():
         found = country_data.on_this_spark()
         info, button = st.columns([0.72, 0.28], vertical_alignment="bottom")
         with info:
-            country = st.selectbox(
-                "Country", country_data.COUNTRIES, key="data-country", disabled=running, placeholder="Choose a country",
+            # (buttons, not a dropdown: nothing to type in; the chosen one stays selected)
+            country = st.pills(
+                "Country", country_data.COUNTRIES, key="data-country", disabled=running, required=True,
                 format_func=lambda c: name(c) + (" (this Spark)" if c == own else "")
                 + {"complete": " ✓", "partial": " (partial)"}.get(found.get(c), ""),
                 help="This Spark's country is the one the demos use; any other downloads next to it")
@@ -727,9 +730,8 @@ def forecastcheck_show_picker():
     if shown in countries and st.session_state.get("fcshow-country") != shown:
         st.session_state["fcshow-country"] = shown  # (changed elsewhere too: fcstcheck country)
     mark = {"scored": " ✓ scored", "complete": " · data, no scores yet", "partial": " · partial data"}
-    st.selectbox("Show in Demo 5", countries, key="fcshow-country", on_change=choose_forecastcheck_country,
-                 index=None if "fcshow-country" not in st.session_state else 0, placeholder="Choose a country",
-                 format_func=lambda c: forecastcheck_data.title(c) + mark.get(found.get(c), " · no data"),
+    st.pills("Show in Demo 5", countries, key="fcshow-country", on_change=choose_forecastcheck_country,
+                 required=True, format_func=lambda c: forecastcheck_data.title(c) + mark.get(found.get(c), " · no data"),
                  help="The country ForecastCheck's dashboard shows (the same as fcstcheck country <name>). "
                       "A running Demo 5 restarts with it; downloads and pipeline runs below carry on.")
     if msg := st.session_state.get("fcshow-msg"):
@@ -760,8 +762,8 @@ def forecastcheck_data_card():
         elif st.session_state.get("fcdata-get") not in countries:  # (first: the latest run's, or the one shown)
             latest = job.get("country") if job else None
             st.session_state["fcdata-get"] = next(c for c in (latest, country, countries[0]) if c in countries)
-        get = st.selectbox(
-            "Download data for", countries, key="fcdata-get", disabled=running,
+        get = st.pills(
+            "Download data for", countries, key="fcdata-get", disabled=running, required=True,
             format_func=lambda c: forecastcheck_data.title(c) + (" (shown in Demo 5)" if c == country else "")
             + {"scored": " ✓ scored", "complete": " ✓", "partial": " (partial)"}.get(found.get(c), ""),
             help="Downloads and pipeline runs, one country at a time; the country Demo 5 shows is chosen above, "
