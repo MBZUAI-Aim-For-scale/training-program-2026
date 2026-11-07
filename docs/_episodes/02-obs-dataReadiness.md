@@ -16,9 +16,6 @@ keypoints:
 - "Rain gauge analysis provides essential ground-truth context for validating observational data readiness."
 ---
 
-<!-- MathJax -->
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-
 # Observational Data Readiness
 
 # CDT Exercise

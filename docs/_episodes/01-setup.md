@@ -22,9 +22,6 @@ keypoints:
 - "Pre-built container images can significantly reduce setup time for new deployments."
 ---
 
-<!-- MathJax -->
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-
 # Setting Up the AI Weather Forecasting Lab
 
 This lesson documents the complete environmental setup and configuration for AI weather forecasting on DGX Spark infrastructure. It is the single source of truth for all configuration — covering GPU verification, container configuration, runtime options, model-specific environments, FGN integration, and the ROMP/MOMP benchmarking pipeline. It is required reading before [Demo 3: Running AI Weather Forecasts](/training-program-2026/03-forecast) and [Demo 4: AI Weather Model Scorecard](/training-program-2026/04-weather-model).

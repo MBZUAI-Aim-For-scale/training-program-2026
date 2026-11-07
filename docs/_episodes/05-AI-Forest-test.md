@@ -1,4 +1,5 @@
 ---
+math: true  # KaTeX ($...$ inline, $$...$$ display): the default layout loads it
 layout: default
 title: "Demo 5"
 teaching: 45
@@ -21,9 +22,6 @@ keypoints:
 - "Calibration fixes bias and reliability. It cannot add discrimination the raw forecast does not have."
 - "Every number depends on the truth product. ERA5 and CHIRTS disagree by more than the models' own errors, and a national dataset would move the rainfall scores again: that is the question of Demo 6."
 ---
-
-<!-- MathJax -->
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 
 
 # Putting Your Forecast to the Test
@@ -627,7 +625,7 @@ The **Calibrated Forecast Metrics** tab shows the CRPS of the `-idr` forecasts (
 
 ### 9.5 Score Decomposition: did calibration help?
 
-**Score Decomposition → Miscalibration** plots, for each model, $\mathrm{CRPS}_{\text{IDR}} - \mathrm{MAE}_{\text{raw}}$: the error removed by calibration. **Below zero means calibration helped.** With one model selected, you can compare both truth products on the same chart.
+**Score Decomposition → Miscalibration** plots, for each model, $$\mathrm{CRPS}_{\text{IDR}} - \mathrm{MAE}_{\text{raw}}$$: the error removed by calibration. **Below zero means calibration helped.** With one model selected, you can compare both truth products on the same chart.
 
 ![Error removed by calibration for GraphCast, against CHIRTS and against ERA5](../fig/demo5_sen_sd_miscal.png)
 

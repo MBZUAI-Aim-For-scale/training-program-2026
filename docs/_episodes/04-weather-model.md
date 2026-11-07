@@ -1,4 +1,5 @@
 ---
+math: true  # KaTeX ($...$ inline, $$...$$ display): the default layout loads it
 title: "Demo 4"
 teaching: 30
 exercises: 40
@@ -20,9 +21,6 @@ keypoints:
 - "Skill is always relative to a reference. Read FAR, MR and MAE together, and read BSS together with AUC and reliability."
 - "Results depend on explicit choices (thresholds, tolerance, resolution, period, reference). Report them with every score."
 ---
-
-<!-- MathJax -->
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
 
 
 # The AI Weather Model Scorecard
@@ -224,7 +222,7 @@ The runner selects a deterministic or probabilistic track for each worker. The s
 
 | Metric | Formula Concept | Interpretation |
 | --- | --- | --- |
-| MAE (Mean Absolute Error) | $\|\text{forecast onset} - \text{obs onset}\|$ | Average error in days. |
+| MAE (Mean Absolute Error) | $\lvert \text{forecast onset} - \text{obs onset} \rvert$ | Average error in days. |
 | FAR (False Alarm Ratio) | $\frac{\text{false alarms}}{\text{hits} + \text{false alarms}}$ | Fraction of predicted events that were false alarms; maps multiply by 100 for %. |
 | MR (Miss Rate) | $\frac{\text{misses}}{\text{hits} + \text{misses}}$ | Fraction of observed in-window events that were missed; maps multiply by 100 for %. |
 
@@ -494,7 +492,7 @@ The climatology reference uses the same observation source, configured mask and 
 
 ### Model Skill Rankings from the Original Test Run (Reference: Climatology = 0.0)
 
-These are derived relative skills, $1-\overline{M}_{model}/\overline{M}_{climatology}$, computed from the separate finite-cell spatial means in the summary CSV. They are not the mean of cell-by-cell skill, and different metrics have different coverage. Fractions are shown below; multiply by 100 for percentages. There is no supported overall composite ranking in this snapshot.
+These are derived relative skills, $$1-\overline{M}_{model}/\overline{M}_{climatology}$$, computed from the separate finite-cell spatial means in the summary CSV. They are not the mean of cell-by-cell skill, and different metrics have different coverage. Fractions are shown below; multiply by 100 for percentages. There is no supported overall composite ranking in this snapshot.
 
 | Model | Window | MAE Skill | FAR Skill | MR Skill |
 | --- | --- | --- | --- | --- |
