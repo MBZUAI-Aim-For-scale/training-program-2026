@@ -588,17 +588,19 @@ def here_line(found: dict[str, str], name) -> str:
 
 
 def country_progress(job: dict) -> str:
+    # (.get: a status written before byte counts were kept, by an older download, has none)
     state, size = job["state"], country_data.size_text
-    pct = round(100 * job["done_bytes"] / job["total_bytes"]) if job["total_bytes"] else 0
-    done = f"{size(job['done_bytes'])} of {size(job['total_bytes'])}, {job['done_files']} of {job['total_files']} files"
+    total, got = job.get("total_bytes") or 0, job.get("done_bytes") or 0
+    pct = round(100 * got / total) if total else 0
+    done = f"{size(got)} of {size(total)}, {job.get('done_files', 0)} of {job.get('total_files', 0)} files"
     if state == "running":
-        color, text = BLUE, f"<b>{pct}%</b> · {escape(done if job['total_files'] else job['detail'])}"
+        color, text = BLUE, f"<b>{pct}%</b> · {escape(done if job.get('total_files') else job.get('detail', ''))}"
     elif state == "interrupted":
-        color, text = ORANGE, f"<b>Stopped at {pct}%</b> · {escape(done)}. Finished files are kept."
+        color, text = ORANGE, f"<b>Stopped at {pct}%</b> · {escape(done if total else job.get('detail', ''))}."
     elif state == "failed":
-        color, text = RED, f"<b>Failed</b> · {escape(job['detail'])}"
+        color, text = RED, f"<b>Failed</b> · {escape(job.get('detail', ''))}"
     else:
-        color, text = GREEN, f"<b>Done</b> · {escape(job['detail'])}"
+        color, text, pct = GREEN, f"<b>Done</b> · {escape(job.get('detail', ''))}", 100
     return (f'<div class="d1-prog" style="--p:{color}"><div class="bar"><span style="width:{pct}%"></span></div>'
             f'<div class="txt">{text}</div></div>')
 
