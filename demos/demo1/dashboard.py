@@ -86,7 +86,10 @@ CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 #MainMenu, footer, header[data-testid="stHeader"] {{ visibility: hidden; height: 0; }}
 .stApp {{ background: {PAGE}; font-family: 'Inter', system-ui, sans-serif; }}
-.block-container {{ padding-top: 6rem; max-width: 1000px; }}
+/* Fills the screen up to a comfortable width; the demo cards go two across when there's room */
+.block-container {{ padding: 6rem clamp(1rem, 3vw, 3rem) 3rem; max-width: 1680px; }}
+.st-key-d1cards {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 640px), 1fr));
+  gap: 1rem; align-items: stretch; }}
 
 /* Top bar, as in the shared site (ui/components/styles/main.css and nav.css) */
 .st-key-top_navbar {{ position: fixed; top: 0; left: 0; right: 0; z-index: 1001; background: {NAV_BLUE};
@@ -252,11 +255,12 @@ def lesson_url(n) -> str | None:
 
 def page_header(n: int, title: str, sub: str = ""):
     """A demo tab's title, with a button to its lesson on the docs site."""
-    text, button = st.columns([0.76, 0.24], vertical_alignment="center")
+    text, button = st.columns([0.8, 0.2], vertical_alignment="center")
+    button = button.container(key="d1-lesson-link", horizontal_alignment="right")
     text.markdown(f'<div class="d1-page-title">{escape(title)}</div><div class="d1-page-sub">{escape(sub)}</div>',
                   unsafe_allow_html=True)
     if url := lesson_url(n):
-        button.link_button("Additional information ↗", url, width="stretch",
+        button.link_button("Additional information ↗", url, width="content",
                            help=f"Opens the Demo {n} lesson in a new tab" if n else "Opens its lesson in a new tab")
 
 
@@ -515,7 +519,7 @@ def demo_row(demo: dict, kind: str, text: str, link: str | None) -> str:
 def demo_card(demo: dict, kind: str, label: str, link: str | None, run: dict | None, busy: bool):
     with st.container(key=f"d1card-{demo['n']}"):
         steps = steps_for(tracked(demo), run)
-        info, button = st.columns([0.84, 0.16])
+        info, button = st.columns([0.74, 0.26])
         info.markdown(f'<style>.st-key-d1card-{demo["n"]} {{ border-left-color: {KINDS[kind][0]} !important; }}</style>'
                       + demo_row(demo, kind, label, link), unsafe_allow_html=True)
         with button:
@@ -550,8 +554,9 @@ def setup_page():
 
         st.markdown('<div class="d1-section">Demos</div><div class="d1-rule"></div>', unsafe_allow_html=True)
         busy = setup_running()
-        for d, s in zip(DEMOS, statuses):
-            demo_card(d, *s, run, busy)
+        with st.container(key="d1cards"):
+            for d, s in zip(DEMOS, statuses):
+                demo_card(d, *s, run, busy)
 
     live()
     country_data_card()
