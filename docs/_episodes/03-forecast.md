@@ -17,9 +17,6 @@ keypoints:
 - "All configuration options are documented in Demo 1."
 ---
 
-<!-- MathJax -->
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.3/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-
 # Running AI Weather Forecast Models on a DGX Spark
 
 This module provides a comprehensive guide to executing and benchmarking modern AI weather forecasting models using containerized workflows on a DGX Spark infrastructure. The Demo 3 Streamlit application serves as the unified interface for orchestrating seven AI weather models.
