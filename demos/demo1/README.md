@@ -54,7 +54,9 @@ keeps its old image until it's stopped and launched again.
 program's Google bucket, keeping going if you close the page. The country comes from the Spark's
 name (`kenya-spark` is Kenya, `sierra-leone-spark` is Sierra Leone). It fetches the country's 312
 files, one a year for 2000-2025, into `~/<country>_data` (such as `~/kenya_data`) with the same paths as the bucket
-(`SPARK_DATA_DIR` changes the location):
+(`SPARK_DATA_DIR` changes this Spark's own country's location). Its country picker downloads any
+other country's next to it (`python3 country_data.py --country Rwanda`), and marks the ones already
+here (✓, or partial):
 
 - `CHIRPSv3_Country_0p25deg/<COUNTRY>/`
 - `CHIRTS_Country_0p25deg/<Tmax|Tmin>/<COUNTRY>/`
