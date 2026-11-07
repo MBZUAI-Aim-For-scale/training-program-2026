@@ -4,9 +4,9 @@
   python3 forecastcheck_data.py      download it (the Demo 5 page's button runs this in the background)
   python3 forecastcheck_data.py --country rwanda   another of ForecastCheck's countries (Demo 5's stays as it is)
   python3 forecastcheck_data.py --setup --country rwanda
-                                     all of it for Demo 5: makes it Demo 5's country, downloads its data,
-                                     then runs ForecastCheck's full pipeline (`fcstcheck pipeline --full`,
-                                     up to a few hours) and waits for it; Demo 5 shows the scores after
+                                     downloads its data, then runs ForecastCheck's full pipeline (`fcstcheck
+                                     pipeline --full`, up to a few hours) and waits for it. The country Demo 5
+                                     shows stays as it is (`fcstcheck country`, or the Demo 5 page's picker)
 
 Only for the countries ForecastCheck has (its deployments/: Kenya, Rwanda, Senegal and Sierra
 Leone): this Spark's own, from its name (senegal-spark: Senegal), as country_data.py finds it, or
@@ -75,6 +75,12 @@ def chosen_country() -> str | None:
         return None
     name = next((l.strip() for l in lines if l.strip() and not l.strip().startswith("#")), None)
     return name if name in supported() else None
+
+
+def shown_country() -> str | None:
+    """The country Demo 5's dashboard shows: the one chosen for it (.deployment), or before any is chosen,
+    this Spark's own (Demo 5's start chooses that, when ForecastCheck has it)."""
+    return chosen_country() or spark_country()
 
 
 def demo_country() -> str | None:
@@ -173,7 +179,7 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--country", help="another of ForecastCheck's countries (default: Demo 5's)")
     p.add_argument("--setup", action="store_true",
-                   help="make it Demo 5's country, download, then run the full pipeline and wait for it")
+                   help="download, then run the full pipeline and wait for it (Demo 5 shows what it shows)")
     args = p.parse_args(argv)
     if args.country and args.country not in supported():
         print(f"ForecastCheck has no {args.country!r}; it has: {', '.join(supported())}", file=sys.stderr)
@@ -203,14 +209,6 @@ def main(argv=None) -> int:
             job.update(fields)
             write_status(**job)
     save()
-    if args.setup and chosen_country() != country:
-        save(detail=f"Making {title(country)} Demo 5's country")
-        ok, msg = choose(country)
-        print(msg, flush=True)
-        if not ok:
-            save(state="failed", finished=time.time(), detail=f"Demo 5's country wasn't changed: {msg}"[:200])
-            record(job)
-            return 1
     try:
         files = plan(country)
     except (OSError, ValueError, KeyError, country_data.bucket_access.BucketError) as e:
@@ -361,7 +359,7 @@ def pipeline(country: str, job: dict, save) -> int:
     end = next((l for l in reversed(lines) if l.startswith("pipeline finished with exit status")), "")
     ok = end.endswith(" 0")
     save(state="done" if ok else "failed", finished=time.time(),
-         detail=(f"{title(country)} is set up: Demo 5 shows its scores" if ok
+         detail=(f"{title(country)} is scored" if ok
                  else (lines[-2] if len(lines) > 1 and end else lines[-1] if lines else "the pipeline ended")[:200]))
     record(job)
     return 0 if ok else 1

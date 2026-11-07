@@ -705,24 +705,46 @@ def start_forecastcheck_download(country: str, pipeline: bool = False):
     time.sleep(0.5)  # lets it write its first status, so this page's next look already shows it running
 
 
-def choose_forecastcheck_country():
-    """The picker's on_change: Demo 5's country, as `fcstcheck country <name>` sets it."""
-    name = st.session_state.get("fcdata-country")
+def choose_forecastcheck_country(name: str | None = None):
+    """The Show in Demo 5 picker's on_change (or its Show button): the country Demo 5's dashboard shows,
+    as `fcstcheck country <name>` sets it. A running dashboard restarts with it."""
+    name = name or st.session_state.get("fcshow-country")
     if name:
         ok, msg = forecastcheck_data.choose(name)
+        st.session_state["fcshow-msg"] = None if ok else msg or "couldn't set the country"
         if ok:
-            st.session_state["fcdata-get"] = name  # (the download picker follows Demo 5's country)
-        st.session_state["fcdata-country-msg"] = None if ok else msg or "couldn't set the country"
+            st.session_state["fcshow-country"] = name
+
+
+def forecastcheck_show_picker():
+    """On Demo 5's launch card, above Launch: the country its dashboard shows. Separate from the
+    downloads and pipeline runs below, which have their country set when they start, so it can change
+    while they run."""
+    countries = forecastcheck_data.supported()
+    if not countries:
+        return
+    shown, found = forecastcheck_data.shown_country(), forecastcheck_data.on_this_spark()
+    if shown in countries and st.session_state.get("fcshow-country") != shown:
+        st.session_state["fcshow-country"] = shown  # (changed elsewhere too: fcstcheck country)
+    mark = {"scored": " ✓ scored", "complete": " · data, no scores yet", "partial": " · partial data"}
+    st.selectbox("Show in Demo 5", countries, key="fcshow-country", on_change=choose_forecastcheck_country,
+                 index=None if "fcshow-country" not in st.session_state else 0, placeholder="Choose a country",
+                 format_func=lambda c: forecastcheck_data.title(c) + mark.get(found.get(c), " · no data"),
+                 help="The country ForecastCheck's dashboard shows (the same as fcstcheck country <name>). "
+                      "A running Demo 5 restarts with it; downloads and pipeline runs below carry on.")
+    if msg := st.session_state.get("fcshow-msg"):
+        st.error(f"The country wasn't changed: {msg}")
+    elif shown and found.get(shown) != "scored":
+        st.markdown(f'<div class="d1-launch-note">No scores for {escape(forecastcheck_data.title(shown))} yet: '
+                    'run its pipeline below.</div>', unsafe_allow_html=True)
 
 
 @st.fragment(run_every=3)
 def forecastcheck_data_card():
-    """This Spark's country, if ForecastCheck has it (Kenya, Rwanda, Senegal, Sierra Leone); on any
-    other Spark, a picker for the country Demo 5 uses (the same as `fcstcheck country <name>`)."""
-    host, countries = country_data.hostname(), forecastcheck_data.supported()
-    spark = forecastcheck_data.spark_country()
-    country = spark or forecastcheck_data.chosen_country()
-    names = ", ".join(forecastcheck_data.title(c) for c in countries)
+    """Downloads and pipeline runs for ForecastCheck's countries (Kenya, Rwanda, Senegal, Sierra Leone), one
+    at a time. Which country Demo 5 shows is the launch card's picker (forecastcheck_show_picker)."""
+    countries = forecastcheck_data.supported()
+    country = forecastcheck_data.shown_country()
     with st.container(key="d1launch-fcdata"):
         st.markdown('<div class="d1-launch-k">Country data for ForecastCheck</div>', unsafe_allow_html=True)
         if not countries:
@@ -731,37 +753,24 @@ def forecastcheck_data_card():
                         unsafe_allow_html=True)
             return
         job = forecastcheck_data.read_status()
-        if not spark:
-            # ForecastCheck doesn't have this Spark's country: Demo 5 works with the one picked here
-            if country and st.session_state.get("fcdata-country") != country:
-                st.session_state["fcdata-country"] = country  # (changed elsewhere: fcstcheck, Run pipeline)
-            st.selectbox("Country for Demo 5", countries, key="fcdata-country",
-                         index=countries.index(country) if country in countries else None,
-                         placeholder="Choose a country", format_func=forecastcheck_data.title,
-                         on_change=choose_forecastcheck_country,
-                         disabled=bool(job and job.get("state") == "running"),
-                         help="The same as fcstcheck country <name>. A running Demo 5 restarts with it.")
-            st.markdown(f'<div class="d1-launch-note">ForecastCheck has data for {escape(names)}; this Spark '
-                        f'(<code>{escape(host)}</code>) isn\'t one of them, so Demo 5 uses the country you '
-                        f'pick.</div>', unsafe_allow_html=True)
-            if msg := st.session_state.get("fcdata-country-msg"):
-                st.error(f"The country wasn't changed: {msg}")
         found = forecastcheck_data.on_this_spark()
         running = bool(job and job.get("state") == "running")
         if running:  # (the picker shows the country being downloaded, and waits)
             st.session_state["fcdata-get"] = job["country"]
-        elif st.session_state.get("fcdata-get") not in countries:
-            st.session_state["fcdata-get"] = country if country in countries else countries[0]
+        elif st.session_state.get("fcdata-get") not in countries:  # (first: the latest run's, or the one shown)
+            latest = job.get("country") if job else None
+            st.session_state["fcdata-get"] = next(c for c in (latest, country, countries[0]) if c in countries)
         get = st.selectbox(
             "Download data for", countries, key="fcdata-get", disabled=running,
-            format_func=lambda c: forecastcheck_data.title(c) + (" (Demo 5)" if c == country else "")
+            format_func=lambda c: forecastcheck_data.title(c) + (" (shown in Demo 5)" if c == country else "")
             + {"scored": " ✓ scored", "complete": " ✓", "partial": " (partial)"}.get(found.get(c), ""),
-            help="Demo 5 shows its own country's; another's downloads next to it, for when you switch")
+            help="Downloads and pipeline runs, one country at a time; the country Demo 5 shows is chosen above, "
+                 "and can change while they run")
         job = job if job and job.get("country") == get else None
         state = job["state"] if job else ("done" if found.get(get) in ("complete", "scored") else None)
-        tag, text, go = {"running": ("ready", "Running the pipeline" if job and job.get("phase") == "pipeline"
-                                     else "Downloading", None),
-                         "done": ("ok", "Downloaded", "Check for new data"),
+        tag, text, go = {"running": ("ready", ("Running the pipeline" if job and job.get("phase") == "pipeline"
+                                      else "Downloading") + f" for {forecastcheck_data.title(get)}", None),
+                         "done": ("ok", "Scored" if found.get(get) == "scored" else "Downloaded", "Check for new data"),
                          "failed": ("warn", "Not finished", "Try again"),
                          "interrupted": ("warn", "Stopped", "Resume download"),
                          }.get(state, ("warn", "Partly downloaded", "Resume download") if found.get(get) else
@@ -783,10 +792,10 @@ def forecastcheck_data_card():
                                         "Keeps going if you close this page.")
             full.button("Run pipeline", key="fcdata-setup", type="primary", width="stretch",
                         on_click=start_forecastcheck_download, args=(get, True),
-                        help=f"All of Demo 5 for {forecastcheck_data.title(get)}: makes it Demo 5's country, "
-                             "downloads what's missing, then runs ForecastCheck's full pipeline (fcstcheck "
-                             "pipeline --full: up to a few hours), after which Demo 5 shows its scores. Keeps "
-                             "going if you close this page.")
+                        help=f"Scores {forecastcheck_data.title(get)} for Demo 5: downloads what's missing, then "
+                             "runs ForecastCheck's full pipeline (fcstcheck pipeline --full: up to a few hours). "
+                             "Demo 5 keeps showing the country chosen above meanwhile. Keeps going if you close "
+                             "this page.")
         st.markdown(f'<div class="d1-launch-note">{escape(forecastcheck_data.title(get))}\'s forecasts and '
                     'observations, from the program\'s bucket into Demo 5\'s data folder '
                     '(<code>fcstcheck where</code>), the same as <code>fcstcheck fetch --apply</code>. '
@@ -794,6 +803,10 @@ def forecastcheck_data_card():
         if job:
             st.markdown(pipeline_progress(job) if job.get("phase") == "pipeline" else country_progress(job),
                         unsafe_allow_html=True)
+            if job.get("phase") == "pipeline" and job["state"] == "done" and get != country:
+                st.button(f"Show {forecastcheck_data.title(get)} in Demo 5", key="fcdata-show", width="stretch",
+                          on_click=choose_forecastcheck_country, args=(get,),
+                          help="Switches Demo 5's dashboard to it, like the picker above")
             with st.expander("Command-line output"):
                 log = forecastcheck_data.pipeline_log(get) if job.get("phase") == "pipeline" else forecastcheck_data.LOG
                 st.code(setup.tail(log, 200) or "no output yet", language=None, height=320)
@@ -838,6 +851,8 @@ def launch_card(demo: dict):
                     f'<div class="d1-launch-status"><span class="d1-tag {KINDS[kind][1]}">'
                     f'{escape(tag_text)}</span></div>',
                     unsafe_allow_html=True)
+        if demo.get("setup") == "demo5" and not demo.get("tool"):
+            forecastcheck_show_picker()
         with st.container(key=f"launch-page-{key}"):
             if kind == "running" and link:
                 st.link_button(f"Open {name} ↗", launch_href(demo), type="primary",
