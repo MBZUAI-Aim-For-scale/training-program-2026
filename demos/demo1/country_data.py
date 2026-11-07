@@ -2,6 +2,7 @@
 """Download this Spark's country data from the program's Google bucket.
 
   python3 country_data.py          download it (the dashboard's button runs this in the background)
+  python3 country_data.py --country Rwanda   another country's, into ~/rwanda_data
   python3 country_data.py --plan   show the country, file count and size, and download nothing
   python3 country_data.py --path   print where this Spark's country data goes (the demos read it there)
 
@@ -44,6 +45,7 @@ STATE = HERE / "state"
 STATUS = STATE / "country_data.json"
 LOG = STATE / "logs" / "country_data.log"
 LOCK = STATE / "country_data.lock"
+RESULTS = STATE / "country_data_results.json"  # each country's latest finished download, for the dashboard
 
 API = "https://storage.googleapis.com/storage/v1/b"
 BUCKET = bucket_access.BUCKET.removeprefix("gs://")
@@ -67,7 +69,17 @@ class DownloadError(Exception):
 
 
 def data_dir(country: str) -> Path:
-    return Path(os.environ.get("SPARK_DATA_DIR") or Path.home() / f"{country.lower()}_data").expanduser()
+    """~/<country>_data; $SPARK_DATA_DIR moves this Spark's own country's (the one the demos read)."""
+    own = os.environ.get("SPARK_DATA_DIR")
+    if own and country == country_from_hostname(hostname()):
+        return Path(own).expanduser()
+    return Path.home() / f"{country.lower()}_data"
+
+
+def country_named(name: str) -> str | None:
+    """A country of the bucket layout from a name as typed: rwanda, "sierra leone", Sierra_Leone."""
+    key = name.strip().lower().replace(" ", "_").replace("-", "_")
+    return next((c for c in COUNTRIES if c.lower() == key), None)
 
 
 def hostname() -> str:
@@ -103,13 +115,13 @@ def request(token: Token, url: str) -> urllib.request.Request:
     return urllib.request.Request(url, headers={"Authorization": f"Bearer {token.get()}"})
 
 
-def list_objects(token: Token, prefix: str) -> list[dict]:
+def list_objects(token: Token, prefix: str, bucket: str = BUCKET) -> list[dict]:
     objects, page = [], None
     while True:
         query = {"prefix": prefix, "maxResults": 1000, "fields": "nextPageToken,items(name,size,updated,md5Hash)"}
         if page:
             query["pageToken"] = page
-        with urllib.request.urlopen(request(token, f"{API}/{BUCKET}/o?{urllib.parse.urlencode(query)}"),
+        with urllib.request.urlopen(request(token, f"{API}/{bucket}/o?{urllib.parse.urlencode(query)}"),
                                     timeout=60) as r:
             data = json.load(r)
         objects += data.get("items", [])
@@ -306,9 +318,16 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--plan", action="store_true", help="show what would be downloaded, and download nothing")
     p.add_argument("--path", action="store_true", help="print where this Spark's country data goes, and stop")
+    p.add_argument("--country", help="another country's data (default: this Spark's, from its name)")
     args = p.parse_args(argv)
 
-    country = country_from_hostname(hostname())
+    if args.country:
+        country = country_named(args.country)
+        if not country:
+            print(f"No country {args.country!r} in the bucket. Known: {', '.join(COUNTRIES)}", file=sys.stderr)
+            return 2
+    else:
+        country = country_from_hostname(hostname())
     if not country:
         print(f"No single country in this Spark's name ({hostname()}). Known: {', '.join(COUNTRIES)}",
               file=sys.stderr)
@@ -336,6 +355,7 @@ def main(argv=None) -> int:
         download(job, Token(), country, dest)
     except Exception as e:
         job.update(state="failed", detail=str(e) or type(e).__name__, finished=time.time())
+        record(job.data)
         say(f"FAILED {e}")
         return 1
     failed = len(job.data["failed"])
@@ -343,11 +363,52 @@ def main(argv=None) -> int:
     summary = (f"{failed} of {job.data['total_files']} files failed; run it again to retry them" if failed
                else f"{finished} files, {size_text(job.data['total_bytes'])} in {dest}")
     job.update(state="failed" if failed else "done", detail=summary, finished=time.time())
+    record(job.data)
     say(summary)
     return 1 if failed else 0
 
 
+def record(job: dict):
+    """Keep a finished download's outcome by country, so the dashboard can say which are here."""
+    results = read_results()
+    results[job["country"]] = {k: job[k] for k in ("state", "finished", "total_files", "total_bytes", "dest")}
+    tmp = RESULTS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(results, indent=1))
+    tmp.replace(RESULTS)
+
+
 # --- For the dashboard --------------------------------------------------------------------
+
+def read_results() -> dict:
+    try:
+        results = json.loads(RESULTS.read_text())
+    except (OSError, ValueError):
+        return {}
+    return results if isinstance(results, dict) else {}
+
+
+def has_files(folder: Path) -> bool:
+    try:
+        return any(p.is_file() for p in folder.rglob("*.nc"))
+    except OSError:
+        return False
+
+
+def on_this_spark() -> dict[str, str]:
+    """Countries with data here: "complete" (its latest download finished with every file) or
+    "partial" (files here, but no finished download of all of them)."""
+    results, found = read_results(), {}
+    latest = read_status()  # (a download from before this record was kept)
+    if latest and latest.get("country") and latest["country"] not in results and latest["state"] != "running":
+        results[latest["country"]] = latest
+    for c in COUNTRIES:
+        r = results.get(c)
+        if r and r.get("state") == "done" and Path(r.get("dest", data_dir(c))).is_dir():
+            found[c] = "complete"
+        elif has_files(data_dir(c)):
+            found[c] = "partial"
+    return found
+
 
 def read_status() -> dict | None:
     """The latest download's status, with `state` corrected if its process has died."""

@@ -569,13 +569,22 @@ def country_plan(country: str) -> tuple[int, int] | None:
     return len(files), sum(int(o["size"]) for o in files)
 
 
-def start_country_download():
+def start_country_download(country: str):
     """Run country_data.py in the background; it outlives this page, like a setup run."""
     country_data.LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(country_data.LOG, "a") as log:
-        subprocess.Popen([sys.executable, str(setup.HERE / "country_data.py")], cwd=setup.HERE,
+        subprocess.Popen([sys.executable, str(setup.HERE / "country_data.py"), "--country", country], cwd=setup.HERE,
                          stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     time.sleep(0.5)  # lets it write its first status, so this page's next look already shows it running
+
+
+def here_line(found: dict[str, str], name) -> str:
+    """Which countries' data is on this Spark: "On this Spark: Kenya ✓ · Rwanda (partial)"."""
+    if not found:
+        return "No country data on this Spark yet."
+    return "On this Spark: " + " · ".join(
+        {"scored": f"{name(c)} ✓ scored", "complete": f"{name(c)} ✓"}.get(how, f"{name(c)} (partial)")
+        for c, how in found.items())
 
 
 def country_progress(job: dict) -> str:
@@ -597,38 +606,51 @@ def country_progress(job: dict) -> str:
 @st.fragment(run_every=3)
 def country_data_card():
     host = country_data.hostname()
-    country = country_data.country_from_hostname(host)
+    own = country_data.country_from_hostname(host)
+    name = lambda c: c.replace("_", " ")
     st.markdown('<div class="d1-section">Country data</div><div class="d1-rule"></div>', unsafe_allow_html=True)
     with st.container(key="d1launch-data"):
-        if not country:
-            st.button("Download country data", key="launch-data-none", disabled=True)
-            st.markdown(f'<div class="d1-launch-note">No single country found in this Spark\'s name '
-                        f'(<code>{escape(host)}</code>). Known countries: '
-                        f'{escape(", ".join(c.replace("_", " ") for c in country_data.COUNTRIES))}.</div>',
-                        unsafe_allow_html=True)
-            return
         job = country_data.read_status()
-        state = job["state"] if job else None
+        running = bool(job and job["state"] == "running")
+        if running:  # (the picker shows the country being downloaded, and waits)
+            st.session_state["data-country"] = job["country"]
+        elif "data-country" not in st.session_state and own:
+            st.session_state["data-country"] = own
+        found = country_data.on_this_spark()
+        info, button = st.columns([0.72, 0.28], vertical_alignment="bottom")
+        with info:
+            country = st.selectbox(
+                "Country", country_data.COUNTRIES, key="data-country", disabled=running, placeholder="Choose a country",
+                format_func=lambda c: name(c) + (" (this Spark)" if c == own else "")
+                + {"complete": " ✓", "partial": " (partial)"}.get(found.get(c), ""),
+                help="This Spark's country is the one the demos use; any other downloads next to it")
+        if not country:
+            button.button("Download country data", key="launch-data-none", disabled=True, width="stretch")
+            st.markdown(f'<div class="d1-launch-note">No single country in this Spark\'s name (<code>{escape(host)}'
+                        f'</code>): choose one. {escape(here_line(found, name))}</div>', unsafe_allow_html=True)
+            return
+        job = job if job and job.get("country") == country else None
+        state = job["state"] if job else ("done" if found.get(country) == "complete" else None)
         tag, text, go = {"running": ("ready", "Downloading", None),
                          "done": ("ok", "Downloaded", "Check for updates"),
                          "failed": ("warn", "Not finished", "Try again"),
                          "interrupted": ("warn", "Stopped", "Resume download"),
-                         }.get(state, ("off", "Not downloaded", f"Download {country.replace('_', ' ')} data"))
+                         }.get(state, ("warn", "Partly downloaded", "Resume download") if found.get(country) else
+                               ("off", "Not downloaded", f"Download {name(country)} data"))
         plan = country_plan(country)
         about = (f"{plan[0]:,} files, {country_data.size_text(plan[1])}" if plan
                  else "Size unknown: can't read the bucket right now")
-        info, button = st.columns([0.72, 0.28])
-        info.markdown(f'<div class="d1-launch-k">{escape(host)} · {escape(country.replace("_", " "))}</div>'
-                      f'<div class="d1-launch-status"><span class="d1-tag {tag}">{text}</span></div>'
-                      f'<div class="d1-launch-note">{escape(about)}, saved to '
-                      f'<code>{escape(str(country_data.data_dir(country)))}</code>.</div>', unsafe_allow_html=True)
         with button:
-            if state == "running":
+            if running:
                 st.button("Stop download", key="stop-data", width="stretch", on_click=country_data.stop,
                           help="Finished files are kept; the next download skips them")
             else:
                 st.button(go, key="launch-data", type="primary", width="stretch", on_click=start_country_download,
-                          help="Keeps going if you close this page. Files already here are skipped.")
+                          args=(country,), help="Keeps going if you close this page. Files already here are skipped.")
+        st.markdown(f'<div class="d1-launch-status"><span class="d1-tag {tag}">{text}</span></div>'
+                    f'<div class="d1-launch-note">{escape(about)}, saved to '
+                    f'<code>{escape(str(country_data.data_dir(country)))}</code>. '
+                    f'{escape(here_line(found, name))}</div>', unsafe_allow_html=True)
         if job:
             st.markdown(country_progress(job), unsafe_allow_html=True)
             with st.expander("Command-line output"):
@@ -664,11 +686,14 @@ def demo_page(demo: dict):
 
 # --- Demo 5: download this Spark's country data for ForecastCheck ------------------------------
 
-def start_forecastcheck_download():
-    """Run forecastcheck_data.py in the background; it outlives this page, like a setup run."""
+def start_forecastcheck_download(country: str, pipeline: bool = False):
+    """Run forecastcheck_data.py in the background (with --setup: the country, the data and the full
+    pipeline); it outlives this page, like a setup run."""
     forecastcheck_data.LOG.parent.mkdir(parents=True, exist_ok=True)
     with open(forecastcheck_data.LOG, "a") as log:
-        subprocess.Popen([sys.executable, str(setup.HERE / "forecastcheck_data.py")], cwd=setup.HERE,
+        subprocess.Popen([sys.executable, str(setup.HERE / "forecastcheck_data.py"), "--country", country,
+                          *(["--setup"] if pipeline else [])],
+                         cwd=setup.HERE,
                          stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     time.sleep(0.5)  # lets it write its first status, so this page's next look already shows it running
 
@@ -678,6 +703,8 @@ def choose_forecastcheck_country():
     name = st.session_state.get("fcdata-country")
     if name:
         ok, msg = forecastcheck_data.choose(name)
+        if ok:
+            st.session_state["fcdata-get"] = name  # (the download picker follows Demo 5's country)
         st.session_state["fcdata-country-msg"] = None if ok else msg or "couldn't set the country"
 
 
@@ -699,6 +726,8 @@ def forecastcheck_data_card():
         job = forecastcheck_data.read_status()
         if not spark:
             # ForecastCheck doesn't have this Spark's country: Demo 5 works with the one picked here
+            if country and st.session_state.get("fcdata-country") != country:
+                st.session_state["fcdata-country"] = country  # (changed elsewhere: fcstcheck, Run pipeline)
             st.selectbox("Country for Demo 5", countries, key="fcdata-country",
                          index=countries.index(country) if country in countries else None,
                          placeholder="Choose a country", format_func=forecastcheck_data.title,
@@ -710,38 +739,79 @@ def forecastcheck_data_card():
                         f'pick.</div>', unsafe_allow_html=True)
             if msg := st.session_state.get("fcdata-country-msg"):
                 st.error(f"The country wasn't changed: {msg}")
-        if not country:
-            st.button("Download country data", key="fcdata-none", disabled=True, width="stretch")
-            return
-        state = job["state"] if job and job.get("country") == country else None
-        tag, text, go = {"running": ("ready", "Downloading", None),
+        found = forecastcheck_data.on_this_spark()
+        running = bool(job and job.get("state") == "running")
+        if running:  # (the picker shows the country being downloaded, and waits)
+            st.session_state["fcdata-get"] = job["country"]
+        elif st.session_state.get("fcdata-get") not in countries:
+            st.session_state["fcdata-get"] = country if country in countries else countries[0]
+        get = st.selectbox(
+            "Download data for", countries, key="fcdata-get", disabled=running,
+            format_func=lambda c: forecastcheck_data.title(c) + (" (Demo 5)" if c == country else "")
+            + {"scored": " ✓ scored", "complete": " ✓", "partial": " (partial)"}.get(found.get(c), ""),
+            help="Demo 5 shows its own country's; another's downloads next to it, for when you switch")
+        job = job if job and job.get("country") == get else None
+        state = job["state"] if job else ("done" if found.get(get) in ("complete", "scored") else None)
+        tag, text, go = {"running": ("ready", "Running the pipeline" if job and job.get("phase") == "pipeline"
+                                     else "Downloading", None),
                          "done": ("ok", "Downloaded", "Check for new data"),
                          "failed": ("warn", "Not finished", "Try again"),
                          "interrupted": ("warn", "Stopped", "Resume download"),
-                         }.get(state, ("off", "Not downloaded", f"Download {forecastcheck_data.title(country)} data"))
+                         }.get(state, ("warn", "Partly downloaded", "Resume download") if found.get(get) else
+                               ("off", "Not downloaded", f"Download {forecastcheck_data.title(get)} data"))
         st.markdown(f'<div class="d1-launch-status"><span class="d1-tag {tag}">{text}</span></div>',
                     unsafe_allow_html=True)
-        if state == "running":
-            st.button("Stop download", key="fcdata-stop", width="stretch", on_click=forecastcheck_data.stop,
-                      help="What's fetched stays; the next download fetches only what's missing")
+        if running:
+            st.button("Stop", key="fcdata-stop", width="stretch", on_click=forecastcheck_data.stop,
+                      help="What's fetched stays; the next download fetches only what's missing. A pipeline "
+                           "stopped part-way starts over when it's run again")
         elif not forecastcheck_data.image_ready():
             st.button(go, key="fcdata-go", type="primary", width="stretch", disabled=True)
             st.markdown('<div class="d1-launch-note">Launch Demo 5 first: the download runs in its image.</div>',
                         unsafe_allow_html=True)
         else:
-            st.button(go, key="fcdata-go", type="primary", width="stretch", on_click=start_forecastcheck_download,
-                      help=f"ForecastCheck's own fetch, for {forecastcheck_data.title(country)}. "
-                           "Keeps going if you close this page.")
-        st.markdown(f'<div class="d1-launch-note">{escape(forecastcheck_data.title(country))}\'s forecasts and '
+            dl, full = st.columns(2)
+            dl.button(go, key="fcdata-go", width="stretch", on_click=start_forecastcheck_download,
+                      args=(get,), help=f"ForecastCheck's own fetch, for {forecastcheck_data.title(get)}. "
+                                        "Keeps going if you close this page.")
+            full.button("Run pipeline", key="fcdata-setup", type="primary", width="stretch",
+                        on_click=start_forecastcheck_download, args=(get, True),
+                        help=f"All of Demo 5 for {forecastcheck_data.title(get)}: makes it Demo 5's country, "
+                             "downloads what's missing, then runs ForecastCheck's full pipeline (fcstcheck "
+                             "pipeline --full: up to a few hours), after which Demo 5 shows its scores. Keeps "
+                             "going if you close this page.")
+        st.markdown(f'<div class="d1-launch-note">{escape(forecastcheck_data.title(get))}\'s forecasts and '
                     'observations, from the program\'s bucket into Demo 5\'s data folder '
-                    '(<code>fcstcheck where</code>), the same as <code>fcstcheck fetch --apply</code>.</div>',
-                    unsafe_allow_html=True)
-        if job and state:
-            color = {"running": BLUE, "done": GREEN}.get(state, ORANGE if state == "interrupted" else RED)
-            st.markdown(f'<div class="d1-prog" style="--p:{color}"><div class="txt">'
-                        f'{escape(job.get("detail") or "")}</div></div>', unsafe_allow_html=True)
+                    '(<code>fcstcheck where</code>), the same as <code>fcstcheck fetch --apply</code>. '
+                    f'{escape(here_line(found, forecastcheck_data.title))}</div>', unsafe_allow_html=True)
+        if job:
+            st.markdown(pipeline_progress(job) if job.get("phase") == "pipeline" else country_progress(job),
+                        unsafe_allow_html=True)
             with st.expander("Command-line output"):
-                st.code(setup.tail(forecastcheck_data.LOG, 200) or "no output yet", language=None, height=320)
+                log = forecastcheck_data.pipeline_log(get) if job.get("phase") == "pipeline" else forecastcheck_data.LOG
+                st.code(setup.tail(log, 200) or "no output yet", language=None, height=320)
+
+
+def pipeline_progress(job: dict) -> str:
+    """Two bars while ForecastCheck's full pipeline runs: all of it, and the part of the step it's in."""
+    def bar(color, pct, text):
+        return (f'<div class="d1-prog" style="--p:{color}"><div class="bar"><span style="width:{pct}%"></span>'
+                f'</div><div class="txt">{text}</div></div>')
+    state, detail = job["state"], escape(job.get("detail") or "")
+    if state == "done":
+        return bar(GREEN, 100, f"<b>Done</b> · {detail}")
+    if state in ("failed", "interrupted"):
+        color, word = (RED, "Failed") if state == "failed" else (ORANGE, "Stopped")
+        return bar(color, job.get("pipeline_pct") or 0, f"<b>{word}</b> · {detail}")
+    pct, step, steps = job.get("pipeline_pct") or 0, job.get("pipeline_step") or 0, job.get("pipeline_steps") or 0
+    if not step:
+        return bar(BLUE, 0, f"<b>Pipeline 0%</b> · starting ({steps} step{'s' * (steps != 1)} to run) · {detail}")
+    part, size = job.get("pipeline_part") or 0, job.get("pipeline_part_size") or 1
+    done = job.get("pipeline_part_done") or 0
+    return (bar(BLUE, pct, f"<b>Pipeline {pct}%</b> · step {step} of {steps}: "
+                           f"{escape(job.get('pipeline_step_name') or '')}")
+            + bar(BLUE, round(100 * done / size),
+                  f"<b>{forecastcheck_data.PARTS[part]}</b> (part {part + 1} of 3) · {done} of {size} · {detail}"))
 
 
 @st.fragment(run_every=3)
