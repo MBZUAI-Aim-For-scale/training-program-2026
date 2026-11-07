@@ -4,7 +4,8 @@
   python3 country_data.py          download it (the dashboard's button runs this in the background)
   python3 country_data.py --country Rwanda   another country's, into ~/rwanda_data
   python3 country_data.py --plan   show the country, file count and size, and download nothing
-  python3 country_data.py --path   print where this Spark's country data goes (the demos read it there)
+  python3 country_data.py --path   print where this Spark's country data goes
+  python3 country_data.py --view   print the folder with every country's data on this Spark (the demos mount it)
 
 The country comes from the Spark's name: kenya-spark -> Kenya, sierra-leone-spark -> Sierra_Leone.
 "The data" is the country's 312 files in the bucket layout (see layout_names): CHIRPS v3 rainfall,
@@ -14,6 +15,11 @@ bucket is downloaded. A listed file that's missing from the bucket counts as a f
 Files keep their bucket paths under ~/<country>_data, such as ~/kenya_data ($SPARK_DATA_DIR to change it). Running
 it again resumes: files already there, with the bucket's size and date, are skipped. A file cut off
 part-way starts over, since it's only moved into place once it has been downloaded and checked.
+
+The demos read every downloaded country's data from one folder, ~/.cache/country-data (VIEW): hard
+links to the files in each ~/<country>_data, so it takes no extra space. Every download, and every
+--view, brings it up to date in place, so a demo container that mounts it sees a country downloaded
+after it started.
 
 Standard library only, like spark_setup.py. Progress goes to state/country_data.json and
 state/logs/country_data.log; dashboard.py reads both.
@@ -46,6 +52,7 @@ STATUS = STATE / "country_data.json"
 LOG = STATE / "logs" / "country_data.log"
 LOCK = STATE / "country_data.lock"
 RESULTS = STATE / "country_data_results.json"  # each country's latest finished download, for the dashboard
+VIEW = Path.home() / ".cache" / "country-data"  # every country's files in one folder, for the demos (refresh_view)
 
 API = "https://storage.googleapis.com/storage/v1/b"
 BUCKET = bucket_access.BUCKET.removeprefix("gs://")
@@ -318,8 +325,18 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--plan", action="store_true", help="show what would be downloaded, and download nothing")
     p.add_argument("--path", action="store_true", help="print where this Spark's country data goes, and stop")
+    p.add_argument("--view", action="store_true",
+                   help="bring the folder with every country's data up to date, print where it is, and stop")
     p.add_argument("--country", help="another country's data (default: this Spark's, from its name)")
     args = p.parse_args(argv)
+
+    if args.view:  # (the demos' start scripts mount it for their containers, whichever country this Spark is)
+        try:
+            refresh_view()
+        except OSError as e:  # (a download finishing at the same moment): mounted all the same
+            print(f"couldn't fully update {VIEW}: {e}", file=sys.stderr)
+        print(VIEW)
+        return 0
 
     if args.country:
         country = country_named(args.country)
@@ -365,6 +382,10 @@ def main(argv=None) -> int:
     job.update(state="failed" if failed else "done", detail=summary, finished=time.time())
     record(job.data)
     say(summary)
+    try:
+        refresh_view()
+    except OSError as e:
+        say(f"(couldn't update {VIEW}, which the demos read: {e})")
     return 1 if failed else 0
 
 
@@ -375,6 +396,60 @@ def record(job: dict):
     tmp = RESULTS.with_suffix(".tmp")
     tmp.write_text(json.dumps(results, indent=1))
     tmp.replace(RESULTS)
+
+
+# --- For the demos: every country's data in one folder ----------------------------------
+
+def data_dirs() -> dict[str, Path]:
+    """Each country's data folder on this Spark: where its latest download went, else the default."""
+    results = read_results()
+    found = {}
+    for c in COUNTRIES:
+        for d in (Path(results[c]["dest"]) if c in results and results[c].get("dest") else None, data_dir(c)):
+            if d and d.is_dir():
+                found[c] = d
+                break
+    return found
+
+
+def refresh_view() -> Path:
+    """Bring VIEW up to date in place: the bucket layout, with every country's files on this Spark.
+
+    Each country's files keep their bucket paths, all of which name the country, so the countries
+    never collide. Files are hard links (a copy if the data is on another disk), relinked when the
+    download replaces a file, and removed when the file is gone. The folder itself is never
+    replaced: the demo containers have it mounted."""
+    VIEW.mkdir(parents=True, exist_ok=True)
+    wanted: set[Path] = set()
+    for src_root in data_dirs().values():
+        for src in src_root.rglob("*"):
+            if not src.is_file() or src.name.endswith(".part"):
+                continue
+            rel = src.relative_to(src_root)
+            dst = VIEW / rel
+            wanted.add(rel)
+            try:
+                if dst.exists() and dst.stat().st_ino == src.stat().st_ino:
+                    continue
+            except OSError:
+                pass
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dst.with_name(dst.name + ".link")
+            tmp.unlink(missing_ok=True)
+            try:
+                os.link(src, tmp)
+            except OSError:  # another disk ($SPARK_DATA_DIR): a copy, refreshed when the file changes
+                if dst.exists() and dst.stat().st_size == src.stat().st_size \
+                        and dst.stat().st_mtime >= src.stat().st_mtime:
+                    continue
+                shutil.copy2(src, tmp)
+            tmp.replace(dst)
+    for path in sorted(VIEW.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_file() and path.relative_to(VIEW) not in wanted:
+            path.unlink(missing_ok=True)
+        elif path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    return VIEW
 
 
 # --- For the dashboard --------------------------------------------------------------------

@@ -25,8 +25,13 @@ docker build -t demo3 -f docker/Dockerfile .
 bash docker/run.sh            # or DEV=1 bash docker/run.sh to use this folder's code live
 ```
 
-`run.sh` keeps saved runs in `outputs/` and model weights (~90 GB, downloaded on each model's
-first run) in `~/.cache/demo3`; set `DEMO3_CACHE` to reuse an existing cache.
+`run.sh` keeps saved runs in `outputs/` and its cache (model weights, ~21 GB, plus the starting
+conditions runs download; ~90 GB over time) in `~/.cache/demo3`; set `DEMO3_CACHE` to reuse an existing cache.
+
+**Model weights:** `bash docker/prefetch.sh` downloads every model's weights into that cache in the
+background (container `demo3-weights`: `docker logs -f demo3-weights`), so no model's first run waits
+for them. `spark-setup` runs it after building the image, the Spark's own setup after each update
+included; it skips the models already fetched (`runners/prefetch_weights.py --missing` lists the rest).
 
 **From your laptop:** open a tunnel, then browse to http://localhost:8502.
 
@@ -63,6 +68,7 @@ demo3/theme.py         styling, matching the Demo 5 platform
 runners/run_model.py   runner entry point
 runners/fgn_convert.py FGN starting conditions from ECMWF open data (see the FGN section)
 runners/sync_bucket.py push/pull saved runs to/from a shared bucket
+runners/prefetch_weights.py  downloads every model's weights ahead (docker/prefetch.sh runs it)
 timings.json           measured Spark runtimes shown in brackets in the app
 docker/                the image: Dockerfile, run.sh, per-environment package locks
 outputs/               saved runs: outputs/{model}/{YYYYMMDDTHH}_{lead}h_m{members}.nc
@@ -95,7 +101,7 @@ is rendered once per request and saved under `outputs/_movies/`.
 
 **Heat observations:** CHIRTS daily Tmax (CHIRTS-ERA5) from the yearly country files on the
 models' 0.25° grid in `gs://aim4scale_training_2026/CHIRTS_Country_0p25deg/Tmax` (from 2000), read
-from this Spark's country data first (what Demo 1's country-data button downloaded, mounted at
+from this Spark's country data first (every country Demo 1's country-data picker downloaded, mounted at
 `/country_data`), else downloaded once into `outputs/_obs/chirts_0p25/`. Programme countries only; for other regions
 the page falls back to ERA5 from Google's ARCO copy (cached in `outputs/_obs_cache/`). Two
 things to know when reading heat results: the models give a value every 6 hours, so their daily
@@ -213,5 +219,6 @@ Google's 1° Mini model (`WeatherNextCyclones_Mini`, the only Mini weights publi
 
 1. Create `runners/runner_<model_key>.py` with `run(init, lead_hours, members, report) -> xr.Dataset`, returning `tp`, `t2m` and `z500` in the units above.
 2. Make sure the model's environment exists at `/opt/envs/<env>/bin/python` inside the container.
-3. Set `status="ready"` for that model in `demo3/catalog.py`.
-4. Add its measured runtime to `timings.json`.
+3. Add its entry to `MODELS` in `demo3/catalog.py`: it runs live once its environment and runner exist.
+4. Teach `runners/prefetch_weights.py` where its weights come from (`E2S` for an Earth2Studio model).
+5. Add its measured runtime to `timings.json`.
