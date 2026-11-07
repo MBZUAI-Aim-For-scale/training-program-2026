@@ -23,8 +23,9 @@ import xarray as xr
 from demo3 import catalog, compare, movie, obs, onset_view, results, runs, store, theme
 from demo3.regions import COUNTRIES, GROUPS, Box, country_box
 
+# (the sidebar holds only developer options: closed until someone opens it)
 st.set_page_config(page_title="Demo 3 · AI Weather Forecast", layout="wide",
-                   initial_sidebar_state="expanded")
+                   initial_sidebar_state="collapsed")
 theme.apply()
 
 

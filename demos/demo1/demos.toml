@@ -16,7 +16,8 @@
 # its code, unless `spark_setup.py run --rebuild`), start its container with `run`, and wait
 # for its Streamlit health endpoint on 127.0.0.1:<port> (or for the page at `health`, if the
 # container isn't a Streamlit app). Every demo needs its own port. `--build-only` does the
-# first step only.
+# first step only. A demo with `prefetch` gets a last step, after its build in either case:
+# that command starts a background download of what the demo fetches on first use, and returns.
 #
 # "Up to date with its code": the image is labelled with a fingerprint of the committed
 # files it's built from, its `watch` paths (repo-relative; default: `context` and
@@ -57,6 +58,10 @@ context = "demos/demo3"
 dockerfile = "demos/demo3/docker/Dockerfile"
 run = ["bash", "demos/demo3/docker/run.sh"]
 port = 8502
+# Every model's weights (~21 GB), downloaded in the background after each build (only what's
+# missing), so no model's first run in class waits for them
+prefetch = ["bash", "demos/demo3/docker/prefetch.sh"]
+prefetch_title = "Download the models' weights (in the background)"
 
 [[demo]]
 id = "demo4"

@@ -543,6 +543,15 @@ def step_start(run, sid, log, demo):
     return "container started"
 
 
+def step_prefetch(run, sid, log, demo):
+    """Start a demo's background download of what it fetches on first use (Demo 3's model weights):
+    its `prefetch` command in demos.toml returns at once, saying what it started or that it's done."""
+    rc, out = sh(demo["prefetch"], log, timeout=600)
+    if rc:
+        raise Warn(f"couldn't start it: {last_line(out)}")
+    return last_line(out)
+
+
 def step_health(run, sid, log, demo, timeout=240):
     name, port = demo["container"], demo["port"]
     deadline = time.time() + timeout
@@ -664,7 +673,21 @@ def plan(cfg: dict, only: list[str] | None, host_only: bool,
         if not build_only:  # (--build-only: the dashboard's Launch starts it, one demo at a time)
             steps += [{"id": f"{d['id']}.start", "group": d["id"], "title": f"Start container `{d['container']}`"},
                       {"id": f"{d['id']}.health", "group": d["id"], "title": f"Page answers on :{d['port']}"}]
+        if d.get("prefetch") and not d.get("checkout"):
+            steps.append({"id": f"{d['id']}.prefetch", "group": d["id"], "title": d.get(
+                "prefetch_title", "Download what it needs on first use (in the background)")})
     return demos, steps
+
+
+def prefetch(run, demo: dict, build_sid: str):
+    """The prefetch step, after a demo's build (it runs in the image)."""
+    if not demo.get("prefetch"):
+        return
+    sid = f"{demo['id']}.prefetch"
+    if run.status(build_sid) in ("failed", "skipped"):
+        run.skip(sid, "no image")
+    else:
+        run.step(sid, step_prefetch, demo)
 
 
 def cmd_run(args, argv):
@@ -713,6 +736,7 @@ def cmd_run(args, argv):
                     run.step(ids[0], step_build, d, args.rebuild)
                 else:
                     run.skip(ids[0], "Docker isn't running")
+                prefetch(run, d, ids[0])
                 continue
             if not docker_ok:
                 for sid in ids[1:] if d.get("checkout") else ids:
@@ -737,6 +761,7 @@ def cmd_run(args, argv):
                 run.skip(ids[2], "container not running")
             else:
                 run.step(ids[2], step_health, d)
+            prefetch(run, d, ids[0])
 
         failed = any(s["status"] == "failed" for s in run.data["steps"])
         run.data.update(state="failed" if failed else "done", finished=time.time())

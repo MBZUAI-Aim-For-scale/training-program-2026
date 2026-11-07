@@ -65,9 +65,11 @@ export ROMP_OUT="${ROMP_DEMO_OUT_DIR:-$here/ai_weather/data/ROMP_OUT}"
 
 mkdir -p "$OUTPUTS" "$CACHE" "$ROMP_OUT"
 
-# This Spark's country data (Demo 1's country-data button), mounted read-only at /country_data:
-# files there are read first, the bucket for the rest (ai_weather/config.py). Nothing if there's none.
-cd_dir="${DEMO_COUNTRY_DATA_DIR:-$(python3 "$root/demos/demo1/country_data.py" --path 2>/dev/null || true)}"
+# The country data on this Spark (Demo 1's country-data downloads, every country's in one folder,
+# kept up to date in place, so countries downloaded later show up without a restart), mounted
+# read-only at /country_data: files there are read first, the bucket for the rest
+# (ai_weather/config.py). DEMO_COUNTRY_DATA_DIR overrides it.
+cd_dir="${DEMO_COUNTRY_DATA_DIR:-$(python3 "$root/demos/demo1/country_data.py" --view 2>/dev/null || true)}"
 if [ -n "$cd_dir" ] && [ -d "$cd_dir" ]; then export COUNTRY_DATA="$cd_dir"; else export COUNTRY_DATA=""; fi
 
 FLEET_KEY="/etc/fleet-gcs-key.json"

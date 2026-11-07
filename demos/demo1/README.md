@@ -65,8 +65,11 @@ here (✓, or partial):
 Sizes range from about 2 GB (Rwanda) to about 269 GB (Chile), and it checks the disk first. Clicking
 again skips files already downloaded. Nothing else in the bucket is downloaded.
 
-Demos 3 and 4 read these files there first, and the bucket for anything else: their start scripts
-mount this folder read-only at `/country_data` (`python3 country_data.py --path` says where it is).
+Demos 3 and 4 read these files first, and the bucket for anything else, for every country downloaded
+here: their start scripts mount `~/.cache/country-data` read-only at `/country_data`. That folder holds
+every country's files as hard links (no extra space), and each download updates it in place, so a
+demo that's already running sees a country downloaded after it started (`python3 country_data.py
+--view` updates it and says where it is).
 They're all on the forecasts' 0.25° grid, which is the one both demos compare on.
 
 **Host checks:** GPU, Docker, GPU access from containers, the after-reboot GPU wait
