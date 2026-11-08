@@ -30,40 +30,27 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 
 > #### Prerequisites
 > 
-> * Complete the Docker container setup in [Demo 1: Setting Up AI Weather Forecasting Lab](/training-program-2026/01-setup/) before proceeding.
-> * The container stack must be running (`bash demos/demo4/docker/run.sh start`). ROMP and all model environments are pre-installed inside the container.  See [Demo 1, Section 7](/training-program-2026/01-setup#7-rompmomp-benchmarking-configuration).
+> * Access to the Demo 1 dashboard (see [Access the Dashboard](/training-program-2026/01-setup/#access-the-dashboard) in Demo 1).
 > * Familiarity with the Demo 3 Streamlit interface (`http://localhost:8502`) and NetCDF output format.
 > {: .prereq}
 
 
-## Environment Setup
+## Open Demo 4
 
-1. **Open a terminal on the Spark** (**Ctrl + Alt + T**)
+Start Demo 4 from the Demo 1 dashboard. The Spark's setup has already built Demo 4, with ROMP and all model environments installed inside it, so there is nothing to install.
 
-2. **Clone the repository and navigate to the project directory**
+1. Open the dashboard at **http://localhost:8500** in the Spark's web browser.
+2. Click **Demo 4** in the top bar.
+3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then opens Demo 4 straight on the **Benchmarking** page.
 
-	```{bash}
-	git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
-	cd training-program-2026
+If Demo 4 is already running, you can open **http://localhost:8503** directly and click **Benchmarking** in the top menu.
 
-	```
+> #### One demo at a time
+>
+> The demos share the Spark's GPU and memory. If another demo is running, the dashboard asks before stopping it, so check with your group first.
+{: .callout}
 
-
-
-3. **Start the container stack**
-
-	```{bash}
-	bash demos/demo4/docker/run.sh start
-
-	```
-
-	Use `bash demos/demo4/docker/run.sh rebuild` after image/dependency changes. The Demo 4 Compose file mounts `demos/demo4` at `/app` and the root runner at `/app/run_momp.py`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
-
-4. **Open the dashboard** in the Spark's web browser:
-
-	* **Streamlit UI**: `http://localhost:8503`; click **Benchmarking** in the top menu.
-
-	The numerical and figure-reading exercises use the saved CSVs and figures. Run benchmarks through `run_momp.py` or the existing dashboard at `demos/demo4/ui/pages/short_medium_benchmarking.py`. Scientific regeneration requires the matching prepared input files and the settings stated below.
+The numerical and figure-reading exercises use the saved CSVs and figures. To start Demo 4 from the terminal instead, see [Extra: Run Demo 4 from the Terminal](#extra-run-demo-4-from-the-terminal) at the end of this lesson.
 
 
 ## Learning Objectives
@@ -780,5 +767,34 @@ Ask each pair to identify one conclusion supported by a saved artifact, one hypo
 > - The saved probability results are uncalibrated. A calibration or 1° extension needs new implementation/data processing and held-out verification before any improvement can be claimed.
 > - Resolution, period, tolerance and sample size all affect scores. Document them with every result.
 {: .keypoints}
+
+## Extra: Run Demo 4 from the Terminal
+
+You don't need this section in class: the dashboard's **Launch** button does all of it. It is here for running Demo 4 by hand, for example while developing it. For the full ROMP/MOMP environment, see [Demo 1](/training-program-2026/01-setup/), section 7.
+
+1. **Open a terminal on the Spark** (**Ctrl + Alt + T**).
+
+2. **Go to the project directory.** The code is already on the Spark; if it isn't, clone it first:
+
+   ```bash
+   # only if ~/training-program-2026 doesn't exist yet
+   git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git ~/training-program-2026
+
+   cd ~/training-program-2026
+   ```
+
+3. **Start the container stack:**
+
+   ```bash
+   bash demos/demo4/docker/run.sh start
+   ```
+
+   Use `bash demos/demo4/docker/run.sh rebuild` after image/dependency changes. The Demo 4 Compose file mounts `demos/demo4` at `/app` and the root runner at `/app/run_momp.py`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
+
+   Starting Demo 4 this way doesn't stop other demos for you. If another demo is running, stop it first (from the dashboard, or `docker stop <name>`), since they share the GPU and memory.
+
+4. **Open the dashboard** in the Spark's web browser: `http://localhost:8503`, then click **Benchmarking** in the top menu.
+
+Run benchmarks through `run_momp.py` (see the Command-Line Execution section above) or the dashboard page at `demos/demo4/ui/pages/short_medium_benchmarking.py`. Scientific regeneration requires the matching prepared input files and the settings stated in this lesson.
 
 

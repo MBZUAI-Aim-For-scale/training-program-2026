@@ -41,13 +41,14 @@ By the end of this lesson, you will be able to:
 | Section | Purpose |
 | --- | --- |
 | Application Overview | Understanding the Demo 3 architecture and capabilities |
-| Quick Start | Starting Demo 3 |
+| Quick Start | Opening Demo 3 from the Demo 1 dashboard |
 | Model Execution | Running forecasts with the Streamlit interface |
 | Output Interpretation | Understanding NetCDF outputs and visualization |
 | Use-Case Customization | Tailoring models for specific forecasting challenges |
 | Model Integration | Adding new models to the framework |
 | Performance Benchmarks | Comparing model execution times and resource usage |
 | Exercises | Hands-on practice with model execution |
+| Extra: Run Demo 3 from the Terminal | Starting Demo 3 without the dashboard |
 
 ## Application Overview
 
@@ -92,51 +93,20 @@ The Demo 3 application consists of:
 
 ## 1. Quick Start
 
-> #### Complete Setup Guide
-> 
-> For detailed setup instructions including GPU verification, container building, runtime configuration flags, model environments, and troubleshooting, see [Demo 1: Setting Up AI Weather Forecasting Lab](/training-program-2026/01-setup).
-{: .tip}
+Start Demo 3 from the Demo 1 dashboard. The Spark's setup has already built Demo 3 and downloaded the models' weights, so there is nothing to install.
 
-### 1.1 Core Commands
+1. Open the dashboard at **http://localhost:8500** in the Spark's web browser (see [Access the Dashboard](/training-program-2026/01-setup/#access-the-dashboard) in Demo 1).
+2. Click **Demo 3** in the top bar.
+3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then shows Demo 3 at **http://localhost:8502**.
 
-```bash
-# 1. Clone and navigate to the demo
-git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git
-cd training-program-2026/demos/demo3
+If Demo 3 is already running, you can open **http://localhost:8502** directly.
 
-# 2. Build the container (first time only, up to an hour)
-docker build -t demo3 -f docker/Dockerfile .
+> #### One demo at a time
+>
+> The demos share the Spark's GPU and memory. If another demo is running, the dashboard asks before stopping it, so check with your group first.
+{: .callout}
 
-# 3. Start the container
-bash docker/run.sh
-
-# (optional) Download every model's weights (~21 GB) in the background, as setup does
-bash docker/prefetch.sh
-
-# 4. Open http://localhost:8502 in the Spark's web browser
-```
-
-On a Spark set up with Demo 1, you can skip these steps: open the dashboard (http://localhost:8500), click **Demo 3** and then **Launch**. The Spark's setup has already built the image and downloaded the models' weights. See [`demos/BEGINNER_GUIDE.md`](https://github.com/MBZUAI-Aim-For-scale/training-program-2026/blob/main/demos/BEGINNER_GUIDE.md).
-
-### 1.2 Runtime Options
-
-Common configuration flags (see [Demo 1](/training-program-2026/01-setup) for the complete list):
-
-```bash
-# Development mode (live code updates without rebuild)
-DEV=1 bash docker/run.sh
-
-# Custom cache location for model weights
-DEMO3_CACHE=/shared/cache bash docker/run.sh
-
-# Try the Azure mirror for ECMWF data first (the other mirror is tried if one fails)
-DEMO3_IFS_SOURCE=azure bash docker/run.sh
-```
-
-> #### First-Run Downloads
-> 
-> The first execution of each model downloads weights (~75 GB total). This can take 30+ minutes for large models like Atlas CRPS. Subsequent runs start in seconds. Pre-run heavy models before the session for a smooth demonstration.
-{: .warning}
+To start Demo 3 from the terminal instead, see [Extra: Run Demo 3 from the Terminal](#extra-run-demo-3-from-the-terminal) at the end of this lesson.
 
 ## 2. Model Execution
 
@@ -467,6 +437,51 @@ FGN is Google DeepMind's Functional Generative Network for probabilistic forecas
 | `Conflict. The container name "/demo3" is already in use` | `docker rm -f demo3`, then `bash docker/run.sh` (the latest `run.sh` does this itself) |
 | Model run fails during download | ECMWF mirrors throttle at times; Demo 3 tries the other one by itself. If both fail, try again later |
 | Out of memory errors | Check GPU memory with `nvidia-smi` and stop other demos' containers (`docker stop <name>`); members run one after another, so fewer members don't lower the peak |
+
+## Extra: Run Demo 3 from the Terminal
+
+You don't need this section in class: the dashboard's **Launch** button does all of it. It is here for running Demo 3 by hand, for example while developing it. For detailed setup (GPU verification, container building, runtime configuration flags, model environments), see [Demo 1](/training-program-2026/01-setup).
+
+### Core Commands
+
+```bash
+# 1. Go to the demo (the code is already on the Spark; if it isn't, first run
+#    git clone https://github.com/MBZUAI-Aim-For-scale/training-program-2026.git ~/training-program-2026)
+cd ~/training-program-2026/demos/demo3
+
+# 2. Build the container (first time only, up to an hour)
+docker build -t demo3 -f docker/Dockerfile .
+
+# 3. Start the container
+bash docker/run.sh
+
+# (optional) Download every model's weights (~21 GB) in the background, as setup does
+bash docker/prefetch.sh
+
+# 4. Open http://localhost:8502 in the Spark's web browser
+```
+
+Starting Demo 3 this way doesn't stop other demos for you. If another demo is running, stop it first (from the dashboard, or `docker stop <name>`), since they share the GPU and memory.
+
+### Runtime Options
+
+Common configuration flags (see [Demo 1](/training-program-2026/01-setup) for the complete list):
+
+```bash
+# Development mode (live code updates without rebuild)
+DEV=1 bash docker/run.sh
+
+# Custom cache location for model weights
+DEMO3_CACHE=/shared/cache bash docker/run.sh
+
+# Try the Azure mirror for ECMWF data first (the other mirror is tried if one fails)
+DEMO3_IFS_SOURCE=azure bash docker/run.sh
+```
+
+> #### First-Run Downloads
+>
+> If you skip `bash docker/prefetch.sh`, each model downloads its weights the first time it runs (~21 GB for all seven). This adds about 31 minutes to Atlas CRPS's first run. Later runs start in seconds.
+{: .warning}
 
 ## Next Steps
 
