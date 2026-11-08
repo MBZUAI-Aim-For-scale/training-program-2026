@@ -11,6 +11,7 @@ shown and press **Enter**.
 | [Demo 3](#demo-3--run-your-first-ai-weather-forecast) | Run AI weather models and compare them with observations | http://localhost:8502 |
 | [Demo 4](#demo-4--the-ai-weather-model-scorecard) | Benchmark AI models for rainy-season onset | http://localhost:8503 |
 | [Demo 5](#demo-5--put-your-forecast-to-the-test) | Verify GraphCast and IFS over years of past forecasts (ForecastCheck) | http://localhost:8505 |
+| [AI Almanac](#ai-almanac--assess-blend-and-forecast) | Benchmark AI models for rainy-season onset, blend them, and forecast this season | http://localhost:8765 (open it from the dashboard) |
 
 ---
 
@@ -358,8 +359,6 @@ fcstcheck logs pipeline    # follow the pipeline (Ctrl + C stops following, not 
 fcstcheck stop             # stop Demo 5's dashboard (your results are kept)
 ```
 
-Use `sierra-leone`, `kenya` or `rwanda` in place of `senegal`.
-
 ### If something goes wrong
 
 | What you see | What to do |
@@ -375,6 +374,102 @@ More detail: the [Demo 5 lesson](https://mbzuai-aim-for-scale.github.io/training
 
 ---
 
+## AI Almanac · Assess, blend and forecast
+
+AI Almanac is a web app for the **rainy-season onset**. Pick a region, see how well AI and
+conventional weather models predicted the onset there, combine the best of them into a
+**blend**, and run that blend for the current season. A built-in **assistant** can set up
+each step from a plain-language request.
+
+AI Almanac is a separate program from the demos. It lives in its own folder on the Spark,
+**`~/ai-almanac`** (not in `~/training-program-2026`), and keeps its data and results in
+`~/.local/share/ai-almanac-spark`. The Spark's setup installs it there for you.
+
+### Step 1: Open AI Almanac
+
+1. In the dashboard, click **AI Almanac** in the top bar.
+2. Click **Launch ↗**. A new browser tab opens AI Almanac.
+
+Always open it from the dashboard. The link the dashboard opens carries a private **access
+token**; typing `http://localhost:8765` by hand gets you a page that asks for it.
+
+AI Almanac counts as a demo: **only one runs at a time**, and launching it stops the
+others (the dashboard asks first).
+
+### Step 2: Find your way around
+
+The bar at the top of AI Almanac has:
+
+| Link | What it's for |
+|---|---|
+| **Home** | Where to start, and what each part does |
+| **Almanac** | Reference pages on AI weather models, their designs and observation datasets, plus a glossary |
+| **Benchmarks** | Score models against observations |
+| **Blends** | Combine several models into one forecast |
+| **Forecasts** | Run a blend for the current season |
+| **Data** | The observations and model forecasts AI Almanac knows about |
+
+Click **?** at the top right of any page for a short guided tour of that page.
+
+### Step 3: Run a benchmark
+
+1. Open **Benchmarks**. Example results are shown first: maps of each model's skill at every
+   grid point.
+2. Click **New benchmark**.
+3. Either describe what you want to the assistant (for example, *"which models best predict
+   Kiremt onset in Ethiopia?"*), or choose **Manual configuration** and fill in the region,
+   season, models and observations yourself.
+4. Click **Run benchmark**.
+
+The results show, for every grid point, the **false alarm rate**, the **miss rate** and the
+**onset error in days**, plus how skill changes with lead time. For ensemble models there are
+also probability scores (Brier, RPS, AUC, reliability). You can limit the scores to a smaller
+area by drawing a box or picking administrative areas.
+
+### Step 4: Train a blend
+
+1. Open **Blends** and click **New blend**.
+2. Choose the models to combine (ones you benchmarked), or ask the assistant to set it up.
+3. Click **Train blend**.
+
+A blend learns how much weight to give each model from past seasons, then is checked on
+years it didn't learn from (the **holdout years**). You can download its weights and scores.
+
+### Step 5: Run a forecast
+
+1. Open **Forecasts** and click **New forecast**.
+2. Choose a trained blend.
+3. Click **Run forecast**.
+
+The map shows the **blended probability of onset** across the region. Click a grid cell to see
+its probabilities in detail. The same numbers are in a table under the map, which you can
+download.
+
+### Using the assistant
+
+Type a question or request into the assistant, in plain language. It can fill in a benchmark
+or blend for you, explain results, and look into a run that failed. **Nothing runs until you
+click Approve.** You can always do the same by hand instead.
+
+Runs keep going in the background, even if you close the tab. Come back to the page to see
+the results.
+
+### If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| The page asks for an access token, or says you're not allowed in | Open AI Almanac from the dashboard (Step 1) |
+| The dashboard says AI Almanac isn't on this Spark | Ask an organiser. The dashboard shows the command that installs it into `~/ai-almanac` |
+| The assistant doesn't answer | Use **Manual configuration** instead; every step works without the assistant |
+| The page doesn't load | Check that AI Almanac shows **Running** in the dashboard; if not, launch it again |
+
+More detail: [AI Almanac on GitHub](https://github.com/AI-Almanac/ai-almanac) (the Spark runs its
+`hcwf-demo-spark` branch). There is also a hosted version at
+[ai-almanac.org](https://ai-almanac.org), where you can browse example results without
+installing anything.
+
+---
+
 ## When you're done for the day
 
 - **Just leaving:** close your browser tabs and log out of the desktop. The demos keep
@@ -382,3 +477,64 @@ More detail: the [Demo 5 lesson](https://mbzuai-aim-for-scale.github.io/training
 - **Shutting everything down** (organisers): in the terminal, type
   `bash ~/training-program-2026/demos/demo1/shutdown.sh`. Nothing is deleted. Start again with
   `spark-setup dashboard`.
+
+---
+
+## Using the dashboard from your own computer (over SSH)
+
+Everything above assumes you are sitting at the Spark. If instead you connect to the Spark
+from your own computer with **SSH**, the dashboard and the demos still run on the Spark, but
+you open them in your own computer's browser. SSH carries each page across, one **port** per
+page.
+
+### Step 1: Connect with the ports forwarded
+
+On **your own computer**, open a terminal (on Windows, PowerShell) and type, all on one line:
+
+```bash
+ssh -L 8500:localhost:8500 -L 8502:localhost:8502 -L 8503:localhost:8503 -L 8504:localhost:8504 -L 8505:localhost:8505 -L 8765:localhost:8765 <user>@<spark>
+```
+
+Replace `<user>` with your user name on the Spark and `<spark>` with the Spark's name, for
+example `rwanda-spark`. Enter your password when asked.
+
+Each `-L` brings one page to your computer:
+
+| Port | Page |
+|---|---|
+| 8500 | The dashboard |
+| 8502 | Demo 3 |
+| 8503 | Demo 4 |
+| 8504 | Demo 2 (CDT) |
+| 8505 | Demo 5 |
+| 8765 | AI Almanac |
+
+### Step 2: Start the dashboard
+
+In the **same** terminal, now connected to the Spark, type:
+
+```bash
+spark-setup dashboard
+```
+
+If this is the Spark's first setup, use `python3 ~/training-program-2026/demos/demo1/spark_setup.py dashboard`
+instead.
+
+### Step 3: Open it
+
+Open **http://localhost:8500** in **your own computer's** browser. Everything works as in
+the rest of this guide: when you click **Launch ↗**, the demo opens in a new tab on your
+computer.
+
+**Keep the SSH terminal open** while you use the demos. If you close it, or your computer
+sleeps, the pages stop loading. Connect again with the command in Step 1 and refresh the
+browser. The dashboard and demos keep running on the Spark meanwhile.
+
+### If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| "Unable to connect" or "This site can't be reached" | Check that the SSH terminal is still connected; if not, run the Step 1 command again. If it is, start the dashboard (Step 2) |
+| The dashboard opens, but a demo's tab doesn't load | That demo's port isn't forwarded. Reconnect with the full command in Step 1 |
+| `bind: Address already in use` when connecting | Something on your computer already uses that port, often an earlier SSH session. Close other SSH terminals and connect again |
+| `ssh: Could not resolve hostname` | The Spark's name is wrong, or your computer isn't on the Spark's network. Ask an organiser |
