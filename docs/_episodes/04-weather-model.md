@@ -40,12 +40,7 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 
 ## Environment Setup
 
-1. **SSH into the server** (from your local machine)
-
-	```{bash}
-	ssh <you>@country-spark
-
-	```
+1. **Open a terminal on the Spark** (**Ctrl + Alt + T**)
 
 2. **Clone the repository and navigate to the project directory**
 
@@ -66,15 +61,7 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 
 	Use `bash demos/demo4/docker/run.sh rebuild` after image/dependency changes. The Demo 4 Compose file mounts `demos/demo4` at `/app` and the root runner at `/app/run_momp.py`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
 
-4. **Create the SSH tunnel** (Open a separate terminal window on your local laptop)
-
-	```{bash}
-	ssh -N -L 8503:127.0.0.1:8503 <you>@country-spark
-
-	```
-
-
-5. **Access dashboards**:
+4. **Open the dashboard** in the Spark's web browser:
 
 	* **Streamlit UI**: `http://localhost:8503`; click **Benchmarking** in the top menu.
 

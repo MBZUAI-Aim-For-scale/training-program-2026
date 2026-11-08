@@ -110,9 +110,7 @@ docker build -t demo3 -f docker/Dockerfile .
 # 3. Start the container
 bash docker/run.sh
 
-# 4. Access from your laptop (on Tailscale)
-ssh -L 8502:localhost:8502 <user>@<spark>
-# Then browse to http://localhost:8502
+# 4. Open http://localhost:8502 in the Spark's web browser
 ```
 
 On a Spark set up with Demo 1, you can skip these steps: open the dashboard (http://localhost:8500), click **Demo 3** and then **Launch**. See [`demos/BEGINNER_GUIDE.md`](https://github.com/MBZUAI-Aim-For-scale/training-program-2026/blob/main/demos/BEGINNER_GUIDE.md).
