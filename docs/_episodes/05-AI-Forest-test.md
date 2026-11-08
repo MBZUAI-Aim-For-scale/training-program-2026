@@ -1,5 +1,4 @@
 ---
-layout: default
 title: "Demo 5"
 teaching: 45
 exercises: 75
