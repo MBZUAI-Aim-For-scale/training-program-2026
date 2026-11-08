@@ -11,7 +11,7 @@ questions:
 - "How do we read MAE, bias, correlation, CRPS, ROC, reliability and cost-loss value, and which question does each answer?"
 objectives:
 - "Set up ForecastCheck on the DGX Spark with Docker and fetch your country's forecasts and truth data from the cloud bucket (Heat: Senegal, Sierra Leone; Rainfall: Kenya, Rwanda)."
-- "Start the three pipeline stages (raw metrics, IDR calibration, calibrated metrics) with one command, and know the command behind each stage."
+- "Start the three pipeline stages (raw metrics, IDR calibration, calibrated metrics) from the Demo 1 dashboard, and know the command behind each stage."
 - "Explain how IDR turns a single forecast value into a calibrated probability distribution, and why it is trained and tested on different years."
 - "Interpret deterministic, probabilistic and threshold diagnostics in the ForecastCheck dashboard, per region, season and altitude band."
 - "Identify what the results depend on (truth product, years, thresholds, sample size) and carry those questions into the ground truth challenge."
@@ -42,7 +42,7 @@ You will do this with **ForecastCheck**, a local verification framework. Each ag
 By the end of this lesson, you will be able to:
 
 - Set up ForecastCheck with Docker and fetch a country's data from the cloud bucket.
-- Run the whole pipeline with one command, and find the command behind each stage.
+- Run the whole pipeline from the Demo 1 dashboard, and find the command behind each stage.
 - Explain how IDR is trained and what it produces.
 - Read MAE, bias, correlation, CRPS, ROC/AUC, reliability diagrams and cost-loss value curves.
 - Use the dashboard to compare models by region, season, altitude band and lead time.
@@ -54,7 +54,7 @@ By the end of this lesson, you will be able to:
 | --- | --- |
 | 1. From One Forecast to a Track Record | The question, the two tracks and four countries, what is verified |
 | 2. ForecastCheck in One Picture | The three stages and the files that connect them |
-| 3. Set Up and Start Everything | One block of commands: the image, your country, the data, the pipeline, the dashboard |
+| 3. Open Demo 5 and Start Everything | From the Demo 1 dashboard: your country, the data, the pipeline, the dashboard |
 | 4. The Data | What `fetch` brought in, and how to add your own data |
 | 5. The Country Settings | Thresholds, seasons, altitude bands and regions |
 | 6. Stage 1: Raw Forecast Metrics | What the pipeline does first: MAE, bias and correlation |
@@ -64,6 +64,7 @@ By the end of this lesson, you will be able to:
 | 10. What the Results Say | The Heat track and the Rainfall track, side by side |
 | 11. Before You Quote a Number | Limits of the data, and the bridge to Demo 6 |
 | Exercises and Discussion Sheet | Hands-on practice in country teams, within your track |
+| Extra: Run Demo 5 from the Terminal | The same setup with `fcstcheck`, and how to run the commands in Sections 4–8 |
 
 ## 1. From One Forecast to a Track Record
 
@@ -131,11 +132,21 @@ Two naming rules make the files self-describing:
 - A model token without a suffix (`graphcast`, `ifs`) is the **raw** forecast. The suffix `-idr` (`graphcast-idr`) is the **calibrated** one.
 - Anything derived from observations carries the name of the truth product it came from (`chirts`, `era5` or `chirps`). A raw forecast does not.
 
-## 3. Set Up and Start Everything
+## 3. Open Demo 5 and Start Everything
 
-ForecastCheck runs in **Docker**, the way Demos 1–4 do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU.
+ForecastCheck is part of the course: Demo 1's setup fetches its code from [its own repository](https://github.com/africlimate-research/forecastcheck), keeps it up to date and builds it, and the Demo 1 dashboard has everything you need to run it. You start it all from the dashboard, now. The computation then runs in the background, and Sections 4–8 explain what it is doing, stage by stage, while it works.
 
-On the Spark, ForecastCheck is part of the course: Demo 1's setup fetches its code from [its own repository](https://github.com/africlimate-research/forecastcheck) into `demos/demo5/forecastcheck`, keeps it up to date, and builds its image, and the Demo 1 dashboard has a **Launch** button for it. Every command is `fcstcheck …`, typed in any folder: it runs ForecastCheck's own `docker/run.sh` with the course's settings (Demo 5's port, the Spark's key for the bucket, your country, and Demo 5's data folder). Paths in this lesson are given in full; `fcstcheck where` prints them:
+1. **Open the Demo 5 page.** Open the Demo 1 dashboard at **http://localhost:8500** in the Spark's web browser (see [Access the Dashboard](/training-program-2026/01-setup/#access-the-dashboard) in Demo 1) and click **Demo 5** in the top bar. If the buttons below are greyed out with **Launch Demo 5 first**, click **Launch ↗** once: the first launch builds Demo 5. Then come back to this page.
+2. **Score your country.** Under **Country data for ForecastCheck**, click your country under **Download data for**, then click **Run pipeline**. It downloads your country's forecasts and observations (Section 4), then runs the three stages (Sections 6–8). Two progress bars show how far it has got, and **Command-line output** shows what it prints. It keeps going if you close the page.
+3. **Choose the country Demo 5 shows.** Above **Launch ↗**, under **Show in Demo 5**, click your country. Each country is marked **✓ scored**, **data, no scores yet** or **no data**.
+4. **Launch Demo 5.** Click **Launch ↗**. A new browser tab opens ForecastCheck's dashboard at **http://localhost:8505**. If it is already running, open that address directly. The dashboard fills in when the pipeline ends: refresh the browser.
+
+> #### One demo at a time
+>
+> The demos share the Spark's GPU and memory. If another demo is running, the dashboard asks before stopping it, so check with your group first.
+{: .callout}
+
+ForecastCheck keeps its files here (the commands in Sections 4–8 refer to them):
 
 | | |
 | --- | --- |
@@ -143,71 +154,14 @@ On the Spark, ForecastCheck is part of the course: Demo 1's setup fetches its co
 | Your data and every result (`data/` in the outputs below) | `~/training-program-2026/demos/demo5/data` |
 | The settings (Section 5) | `~/training-program-2026/demos/demo5/forecastcheck/config/verification.toml` |
 
-You type **one block of commands**, now. The computation then runs in the background, and Sections 4–8 explain what it is doing, stage by stage, while it works.
-
-Open a terminal on the Spark (**Ctrl + Alt + T**). Demo 5's dashboard uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's). In the terminal, type:
-
-```bash
-# 1. Get the code, the image and the `fcstcheck` command (about 5 minutes the first
-#    time; skip this if the Demo 1 dashboard already shows Demo 5 as ready)
-spark-setup --only demo5 --build-only
-
-# 2. Everything else, for your country (senegal, sierra-leone, kenya or rwanda):
-fcstcheck setup senegal
-```
-
-`fcstcheck setup` does, in order, what you could also type one at a time:
-
-```bash
-fcstcheck country senegal     # your country (on those countries' Sparks it's already theirs)
-fcstcheck fetch --apply       # fetch its data (Section 4 explains what arrives)
-fcstcheck pipeline            # the whole pipeline, in the background, even if you log out
-fcstcheck start               # the dashboard (or Launch Demo 5 from the Demo 1 dashboard)
-```
-
-If the terminal says `fcstcheck: command not found` right after step 1, log out and in again (or run `source ~/.profile`): the command is new. (`forecastcheck` is the same command, under its long name.)
-
-Open <http://localhost:8505> in the Spark's web browser. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `fcstcheck logs pipeline` (Ctrl-C stops following, not the run).
-
-When you have finished with the dashboard, stop it. Your results stay in the data folder, and `fcstcheck start` brings it back:
-
-```bash
-fcstcheck stop                # when you are done (your data is kept)
-```
-
+To do all of this from the terminal instead, and to run the commands shown in Sections 4–8 yourself, see [Extra: Run Demo 5 from the Terminal](#extra-run-demo-5-from-the-terminal) at the end of this lesson.
 
 | | Senegal | Sierra Leone | Kenya | Rwanda |
 | --- | --- | --- | --- | --- |
 | Whole pipeline | about 1.5 h | about 45 min | about 10 min | under 2 min |
 | Results on disk | about 19 GB | about 7 GB | about 9 GB | about 1.4 GB |
 
-*Heat-track times measured on a DGX Spark, Rainfall-track times on a 12-core laptop. Most of the disk goes to the calibrated threshold probabilities. If the session is short, your trainer may have run the pipeline for your country in advance; the dashboard then shows the results at once.*
-
-> #### Where you type the commands
->
-> Everything above runs in the Spark's terminal, and so do `status`, `logs`, `restart` and `stop`. The `python -m …` commands shown in Sections 6–8 are the ones `pipeline` runs for you. To try one yourself, open a terminal inside ForecastCheck, where they work exactly as shown:
->
-> ```bash
-> fcstcheck shell              # the prompt changes; type `exit` to leave
-> ```
->
-> Or run a single one from the Spark's terminal: `fcstcheck run python -m verification.run …`. Everything reads and writes the same `data/` folder. `fcstcheck help` lists every command.
-{: .tip}
-
-> #### Where ForecastCheck lives on the Spark
->
-> Its code is in `~/training-program-2026/demos/demo5/forecastcheck`, a copy of [ForecastCheck's repository](https://github.com/africlimate-research/forecastcheck) that Demo 1's setup keeps on its newest `main`, rebuilding the image when it changes. Your data and every result are in `~/training-program-2026/demos/demo5/data`, next to the code rather than inside it (as the other demos keep theirs), so updates never touch them, and git leaves them out. ForecastCheck's own messages say `bash docker/run.sh …`; on the Spark, type `fcstcheck …` instead, which adds the course's port, key and data folder.
-{: .tip}
-
-> #### Which country am I?
->
-> The one-line file `.deployment` (in `~/training-program-2026/demos/demo5/forecastcheck`, set by `fcstcheck country`) decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. To see or change it: `fcstcheck country` or `fcstcheck country kenya` (a running dashboard follows by itself).
-{: .tip}
-
-> #### Without Docker
->
-> On a machine without Docker, use conda instead: `conda env create -f environment.yml` and `conda activate forecastcheck`, then drop `fcstcheck` from the commands (`./scripts/fetch_country.sh`, `./scripts/run_pipeline.sh`, and `streamlit run ui/app.py` for the dashboard, on port 8501). The repository's README has the details.
-{: .tip}
+*Heat-track times measured on a DGX Spark, Rainfall-track times on a 12-core laptop. Most of the disk goes to the calibrated threshold probabilities. If the session is short, your trainer may have run the pipeline for your country in advance (marked **✓ scored**); the dashboard then shows the results at once.*
 
 ## 4. The Data
 
@@ -568,7 +522,7 @@ ForecastCheck picks, for each $\alpha$, the cut-off $p^*$ that gives the best va
 
 ## 9. The Dashboard
 
-The dashboard has been running since Section 3 (`fcstcheck start`). Open <http://localhost:8505> in the Spark's web browser. It discovers results when it starts: after `fcstcheck pipeline` it restarts by itself, and after commands you ran yourself, run `fcstcheck restart` and refresh the browser.
+You launched the dashboard in Section 3. Open <http://localhost:8505> in the Spark's web browser. It discovers results when it starts: after `fcstcheck pipeline` it restarts by itself, and after commands you ran yourself, run `fcstcheck restart` and refresh the browser.
 
 The tour below uses the Heat track's screenshots (Senegal). Every country sees the same pages with its own regions and thresholds; Section 9.7 shows what is different in the Rainfall track.
 
@@ -910,3 +864,67 @@ Fill one sheet per team and share it at the end.
 > - Rainfall is harder to place than temperature, and most days are dry: read the wet-day and heavy-rain thresholds separately, and convert dashboard rainfall from mm/hr to mm/day.
 > - Every number depends on the truth product, the year and the season. Say which ones you used.
 {: .keypoints}
+
+## Extra: Run Demo 5 from the Terminal
+
+You don't need this section to run the demo: the Demo 1 dashboard does all of Section 3. It is here for doing the same from the terminal, and for running the commands shown in Sections 4–8 yourself.
+
+ForecastCheck runs in **Docker**, the way Demos 1–4 do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU. Every command is `fcstcheck …`, typed in any folder: it runs ForecastCheck's own `docker/run.sh` with the course's settings (Demo 5's port, the Spark's key for the bucket, your country, and Demo 5's data folder). `fcstcheck where` prints the paths from Section 3.
+
+Open a terminal on the Spark (**Ctrl + Alt + T**). Demo 5's dashboard uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's). In the terminal, type:
+
+```bash
+# 1. Get the code, the image and the `fcstcheck` command (about 5 minutes the first
+#    time; skip this if the Demo 1 dashboard already shows Demo 5 as ready)
+spark-setup --only demo5 --build-only
+
+# 2. Everything else, for your country (senegal, sierra-leone, kenya or rwanda):
+fcstcheck setup senegal
+```
+
+`fcstcheck setup` does, in order, what you could also type one at a time:
+
+```bash
+fcstcheck country senegal     # your country (on those countries' Sparks it's already theirs)
+fcstcheck fetch --apply       # fetch its data (Section 4 explains what arrives)
+fcstcheck pipeline            # the whole pipeline, in the background, even if you log out
+fcstcheck start               # the dashboard (or Launch Demo 5 from the Demo 1 dashboard)
+```
+
+If the terminal says `fcstcheck: command not found` right after step 1, log out and in again (or run `source ~/.profile`): the command is new. (`forecastcheck` is the same command, under its long name.)
+
+Starting Demo 5 this way doesn't stop other demos for you. If another demo is running, stop it first (from the dashboard, or `docker stop <name>`), since they share the GPU and memory.
+
+Open <http://localhost:8505> in the Spark's web browser. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `fcstcheck logs pipeline` (Ctrl-C stops following, not the run).
+
+When you have finished with the dashboard, stop it. Your results stay in the data folder, and `fcstcheck start` brings it back:
+
+```bash
+fcstcheck stop                # when you are done (your data is kept)
+```
+
+> #### Where you type the commands
+>
+> Everything above runs in the Spark's terminal, and so do `status`, `logs`, `restart` and `stop`. The `python -m …` commands shown in Sections 6–8 are the ones `pipeline` runs for you. To try one yourself, open a terminal inside ForecastCheck, where they work exactly as shown:
+>
+> ```bash
+> fcstcheck shell              # the prompt changes; type `exit` to leave
+> ```
+>
+> Or run a single one from the Spark's terminal: `fcstcheck run python -m verification.run …`. Everything reads and writes the same `data/` folder. `fcstcheck help` lists every command.
+{: .tip}
+
+> #### Where ForecastCheck lives on the Spark
+>
+> Its code is in `~/training-program-2026/demos/demo5/forecastcheck`, a copy of [ForecastCheck's repository](https://github.com/africlimate-research/forecastcheck) that Demo 1's setup keeps on its newest `main`, rebuilding the image when it changes. Your data and every result are in `~/training-program-2026/demos/demo5/data`, next to the code rather than inside it (as the other demos keep theirs), so updates never touch them, and git leaves them out. ForecastCheck's own messages say `bash docker/run.sh …`; on the Spark, type `fcstcheck …` instead, which adds the course's port, key and data folder.
+{: .tip}
+
+> #### Which country am I?
+>
+> The one-line file `.deployment` (in `~/training-program-2026/demos/demo5/forecastcheck`, set by `fcstcheck country` or the dashboard's **Show in Demo 5**) decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. To see or change it: `fcstcheck country` or `fcstcheck country kenya` (a running dashboard follows by itself).
+{: .tip}
+
+> #### Without Docker
+>
+> On a machine without Docker, use conda instead: `conda env create -f environment.yml` and `conda activate forecastcheck`, then drop `fcstcheck` from the commands (`./scripts/fetch_country.sh`, `./scripts/run_pipeline.sh`, and `streamlit run ui/app.py` for the dashboard, on port 8501). The repository's README has the details.
+{: .tip}

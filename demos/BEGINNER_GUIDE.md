@@ -10,7 +10,7 @@ shown and press **Enter**.
 | [Demo 1](#demo-1--set-up-the-spark) | Sets up the Spark and starts the other demos | http://localhost:8500 |
 | [Demo 3](#demo-3--run-your-first-ai-weather-forecast) | Run AI weather models and compare them with observations | http://localhost:8502 |
 | [Demo 4](#demo-4--the-ai-weather-model-scorecard) | Benchmark AI models for rainy-season onset | http://localhost:8503 |
-| Demo 5 ([lesson](../docs/_episodes/05-AI-Forest-test.md)) | Verify GraphCast and IFS over years of past forecasts (ForecastCheck) | http://localhost:8505 |
+| [Demo 5](#demo-5--put-your-forecast-to-the-test) | Verify GraphCast and IFS over years of past forecasts (ForecastCheck) | http://localhost:8505 |
 
 ---
 
@@ -93,7 +93,7 @@ you close the page, and clicking again skips files you already have.
 1. Click a demo in the top bar (for example **Demo 3**).
 2. Read the short summary of what you'll learn.
 3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then shows the demo.
-   The first launch of each demo also builds it, which can take up to an hour. For Demo 2, click
+   The first launch of each demo also builds it. For Demo 2, click
    **Launch CDT ↗**.
 
 **Only one demo runs at a time** on a Spark, because they share the GPU and memory. If another
@@ -279,6 +279,99 @@ Results are saved on the Spark in `~/training-program-2026/demos/demo4/ai_weathe
 | `DEMO_BUCKET is ... not a valid Google bucket name` | Fix or remove the `DEMO_BUCKET=` line in `~/training-program-2026/.env` ([Step 1](#step-1-where-the-data-is-nothing-to-do)), then restart Demo 4 |
 | `Observation folder not found` or `Region mask not found` | Demo 4 can't reach the bucket. Run `python3 demos/demo1/verify_bucket_access.py` on the Spark and show the result to an organiser |
 | The page doesn't load | Check that Demo 4 shows **Running** in the dashboard; if not, launch it again |
+
+---
+
+## Demo 5 · Put your forecast to the test
+
+Demo 5 uses **ForecastCheck** to answer the question a forecaster asks before trusting a
+model: over years of past forecasts, how good is it here, in my regions and my seasons? It
+scores GraphCast and IFS against observations, then **calibrates** them (a method called IDR)
+and scores them again. There are two tracks:
+
+- **Heat** (daily maximum temperature): Senegal and Sierra Leone.
+- **Rainfall** (daily rainfall): Kenya and Rwanda.
+
+### Step 1: Open the Demo 5 page
+
+In the dashboard, click **Demo 5** in the top bar.
+
+If the buttons in Step 2 are greyed out with **Launch Demo 5 first**, click **Launch ↗** once.
+The first launch builds Demo 5. Then come back to this page.
+
+### Step 2: Score your country
+
+Under **Country data for ForecastCheck**:
+
+1. Under **Download data for**, click your country.
+2. Click **Run pipeline**. It downloads your country's forecasts and observations, then scores
+   and calibrates them. Two progress bars show how far it has got.
+
+The pipeline keeps going if you close the page.
+
+Your trainer may have run it already. A country marked **✓ scored** is ready.
+
+### Step 3: Choose the country Demo 5 shows
+
+Above **Launch ↗**, under **Show in Demo 5**, click your country. Each country is marked
+**✓ scored**, **data, no scores yet** or **no data**.
+
+### Step 4: Launch Demo 5
+
+Click **Launch ↗**. A new browser tab opens Demo 5's own dashboard. Or, if Demo 5 is already
+running, open **http://localhost:8505** directly.
+
+### Step 5: Explore the results
+
+1. **Pick an area** at the top of every page: the whole country, a region, or **More regions**
+   for smaller areas.
+2. **Set what to show** in the **Configuration** panel on the left of each chart:
+   - **Forecast & Truth**: the variable (Tmax, Tmin or Rainfall), the models, and the
+     observations to compare against (CHIRTS, ERA5 or CHIRPS).
+   - **Score**: the metric.
+   - **Conditioning**: the year, season, lead time and altitude band.
+3. **Read the pages:**
+
+| Page | What it shows |
+|---|---|
+| **National Overview → Raw Forecast Metrics** | How far off the forecasts are before calibration (MAE, bias, correlation), by lead time, by month, or as a map |
+| **National Overview → Calibrated Forecast Metrics** | The error left after calibration (CRPS) |
+| **Score Decomposition → Miscalibration** | How much error calibration removed. **Below zero means calibration helped** |
+| **Threshold Diagnostics** | Hot-day or heavy-rain warnings: can I trust the probability (reliability), can the model tell event days apart (ROC), and is it worth acting on (cost-loss value) |
+
+**How to read the scores:**
+
+- **Always say which observations you compared against.** CHIRTS and ERA5 can disagree by more
+  than the two models disagree with each other.
+- **Rainfall scores are in mm per hour.** Multiply by 24 for mm per day.
+- **Check the number of events** in the box under each Threshold Diagnostics chart. A curve built
+  on a few events can look excellent by chance.
+
+### Advanced: run from the command line
+
+Everything above also works from the terminal on the Spark, with the `fcstcheck` command:
+
+```bash
+fcstcheck setup senegal    # choose the country, download its data, run the pipeline, start the dashboard
+fcstcheck status           # what's running
+fcstcheck logs pipeline    # follow the pipeline (Ctrl + C stops following, not the run)
+fcstcheck stop             # stop Demo 5's dashboard (your results are kept)
+```
+
+Use `sierra-leone`, `kenya` or `rwanda` in place of `senegal`.
+
+### If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| The buttons say **Launch Demo 5 first** | Click **Launch ↗** once (Step 1), then come back |
+| Demo 5 says there are no scores for your country | Run its pipeline ([Step 2](#step-2-score-your-country)), or wait for the one that's running to finish |
+| New results don't appear in Demo 5 | Refresh the browser. If they still don't appear, type `fcstcheck restart` in the terminal and refresh again |
+| Rainfall values look 24 times too small | They're in mm per hour. Multiply by 24 for mm per day |
+| The page doesn't load | Check that Demo 5 shows **Running** in the dashboard; if not, launch it again |
+| `fcstcheck: command not found` | Log out of the desktop and back in, then try again |
+
+More detail: the [Demo 5 lesson](https://mbzuai-aim-for-scale.github.io/training-program-2026/05-ai-forest-test/).
 
 ---
 
