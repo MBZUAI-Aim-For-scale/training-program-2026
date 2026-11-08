@@ -60,6 +60,12 @@ This starts the dashboard only. No demo starts until you launch it.
 
 Then open **http://localhost:8500** in the browser.
 
+After the first time, you can start the dashboard from any folder with:
+
+```bash
+spark-setup dashboard
+```
+
 You will see:
 
 - A **top bar** with one button per demo.
