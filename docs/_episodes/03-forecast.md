@@ -113,9 +113,7 @@ bash docker/run.sh
 # (optional) Download every model's weights (~21 GB) in the background, as setup does
 bash docker/prefetch.sh
 
-# 4. Access from your laptop (on Tailscale)
-ssh -L 8502:localhost:8502 <user>@<spark>
-# Then browse to http://localhost:8502
+# 4. Open http://localhost:8502 in the Spark's web browser
 ```
 
 On a Spark set up with Demo 1, you can skip these steps: open the dashboard (http://localhost:8500), click **Demo 3** and then **Launch**. The Spark's setup has already built the image and downloaded the models' weights. See [`demos/BEGINNER_GUIDE.md`](https://github.com/MBZUAI-Aim-For-scale/training-program-2026/blob/main/demos/BEGINNER_GUIDE.md).

@@ -28,7 +28,7 @@ This lesson documents the complete environmental setup and configuration for AI 
 
 > #### Prerequisites
 >
-> - Access to a DGX Spark node (e.g., `country-spark`) via Tailscale.
+> - Access to a DGX Spark (e.g., `country-spark`): its keyboard, mouse and screen.
 > - A user account on the Spark with sudo privileges for Docker configuration.
 > - Familiarity with the Linux command line and basic Docker concepts.
 {: .prereq}
@@ -48,6 +48,7 @@ By the end of this lesson, you will be able to:
 
 | Section | Purpose |
 | --- | --- |
+| Access the Dashboard | Opening the Demo 1 dashboard, where you check the Spark and launch the demos |
 | Why Environment Setup Matters | The importance of reproducible AI forecasting environments |
 | GPU Verification | Confirming GPU visibility via CDI |
 | Docker Configuration | Setting up rootless Docker with GPU support |
@@ -60,6 +61,52 @@ By the end of this lesson, you will be able to:
 | Troubleshooting | Resolving common setup issues |
 | Best Practices | Checklists and performance optimization |
 | Exercises | Hands-on practice with environment verification |
+
+## Access the Dashboard
+
+Demo 1 has a **dashboard**: a web page on the Spark that shows what is running and has a **Launch** button for each demo. It is the starting point for every demo in this program.
+
+### Start the dashboard
+
+Work directly on the Spark, at its own keyboard and screen. Log in to the desktop, then either:
+
+- double-click the **AI Weather Lab** shortcut on the desktop, which starts the dashboard and opens it in the browser, or
+- open a terminal (**Ctrl + Alt + T**) and type:
+
+  ```bash
+  cd ~/training-program-2026
+  python3 demos/demo1/spark_setup.py dashboard
+  ```
+
+  then open **http://localhost:8500** in the Spark's web browser.
+
+  After the first time, you can start the dashboard from any folder with:
+
+  ```bash
+  spark-setup dashboard
+  ```
+
+Starting the dashboard does not start any demo. Each demo starts only when you launch it.
+
+### What you see
+
+- A **top bar** with one button per demo.
+- A **card for each demo** with its status:
+  - **Running**: it's started; click it to open the demo.
+  - **Ready to launch**: built but not started.
+  - **Stopped** or **Image not built**: click it, then **Launch ↗** on the page that opens.
+- A **Run checks** button on the Demo 1 card, which checks the GPU, Docker, disk space and access to the program's data bucket.
+- A **Country data** section at the bottom of the page, for downloading your country's data.
+
+> #### Only one demo at a time
+>
+> The demos share the Spark's GPU and memory, so only one runs at a time. If another demo is running, the dashboard asks before stopping it. Anyone else using that demo loses their place, so check with your group first.
+{: .callout}
+
+> #### The page doesn't load
+>
+> If the browser says "Unable to connect" or "This site can't be reached" at `localhost:8500`, the dashboard isn't running: start it with the shortcut or the command above.
+{: .warning}
 
 ## Why Environment Setup Matters
 
@@ -187,7 +234,7 @@ To avoid rebuilding on every Spark node, transfer a pre-built image:
 # On the source Spark:
 docker save ai_weather | gzip > ai_weather_image.tar.gz
 
-# Transfer via scp/rsync over Tailscale:
+# Copy it to the target Spark (scp or rsync):
 scp ai_weather_image.tar.gz <user>@<target-spark>:~/
 
 # On the target Spark:
@@ -384,12 +431,7 @@ The ROMP/MOMP (Rainy season Onset Metrics Package) benchmarking pipeline is full
 
 ### 7.1 Docker Stack Setup & Connection
 
-1. **SSH into the server** (from your local terminal):
-```bash
-ssh <you>@country-spark
-
-```
-
+1. **Open a terminal on the Spark** (**Ctrl + Alt + T**).
 
 2. **Clone the repository and navigate to the project root**:
 ```bash
@@ -429,14 +471,7 @@ bash demos/demo4/docker/run.sh rebuild
 > 
 
 
-5. **Create the SSH tunnel** (run in a new terminal window on your local machine):
-```bash
-ssh -L 8503:localhost:8503 -L 8888:localhost:8888 <you>@country-spark
-
-```
-
-
-6. **Access web interfaces**:
+5. **Open the web interfaces** in the Spark's web browser:
 * **Streamlit Benchmarking UI**: `http://localhost:8503`
 * **Jupyter Lab Workstation**: `http://localhost:8888`
 
@@ -562,7 +597,7 @@ Pinned in `demos/demo4/docker/locks/` for reproducibility. Key versions:
 | Port 8503 already in use when starting | Another container holds it | `docker ps`, then `docker stop <name>` and `bash demos/demo4/docker/run.sh` |
 | Port 8502 already in use when starting Demo 3 | Another container holds it (ForecastCheck started by hand, without `fcstcheck`, also defaults to 8502) | `docker ps`, then `docker stop <name>`; start Demo 5 with `fcstcheck start` (port 8505) |
 | A code change doesn't show (with `DEV=1`) | The page keeps imported modules loaded | `bash demos/demo4/docker/run.sh restart` |
-| Browser can't reach `localhost:8503` | SSH tunnel not open, or 8503 is taken on your laptop | Reconnect with `ssh -N -L 8503:127.0.0.1:8503 <you>@<country>-spark`; if 8503 is taken on your laptop, use another local port (`-L 9503:127.0.0.1:8503`, then `localhost:9503`) |
+| Browser can't reach `localhost:8503` | The Demo 4 container isn't running | `docker ps -a \| grep ai_weather`; launch Demo 4 from the dashboard, or `bash demos/demo4/docker/run.sh start` |
 | Run fails during starting condition download | ECMWF mirrors throttled ("503 Service Unavailable") | Demo 3 tries the other mirror by itself after a few retries; if both fail, try again later |
 | First model run is exceptionally slow | Downloading model weights (~30 min for Atlas CRPS) | Expected behavior; subsequent runs are fast |
 | ROMP run stops after switching tracks | DET and PROB mixed in one run | Set mode in config or with `--mode`, run separately |
@@ -626,7 +661,6 @@ Before running AI weather models, verify:
 - [ ] Docker service is running (`systemctl --user status docker`)
 - [ ] Container image is built or loaded (`docker images | grep ai_weather`)
 - [ ] Sufficient disk space for model weights (~75 GB)
-- [ ] SSH tunnel is active (if accessing remotely)
 - [ ] Network connectivity to ECMWF/Google data sources
 - [ ] ROMP config file is properly configured (if running benchmarks)
 
@@ -670,7 +704,7 @@ Every benchmark result should document:
 
 > #### Exercise 2: Diagnose GPU Access (10 min)
 >
-> You SSH into a DGX Spark after a reboot and try to run a container, but get the error:
+> You log in to a DGX Spark after a reboot and try to run a container, but get the error:
 >
 > ```
 > docker: Error response from daemon: unresolvable CDI devices nvidia.com/gpu=all

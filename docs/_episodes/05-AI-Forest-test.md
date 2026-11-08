@@ -32,7 +32,7 @@ You will do this with **ForecastCheck**, a local verification framework. Each ag
 
 > #### Prerequisites
 >
-> - An account on the DGX Spark and the SSH tunnel from [Demo 1](training-program-2026/01-setup). ForecastCheck runs in the Spark's rootless Docker, as in Demos 1–3. You do **not** need a GPU or a Google Cloud account.
+> - An account on the DGX Spark and the dashboard from [Demo 1](training-program-2026/01-setup). ForecastCheck runs in the Spark's rootless Docker, as in Demos 1–3. You do **not** need a GPU or a Google Cloud account.
 > - Your use case from [Demo 3](training-program-2026/03-forecast): temperature exceedance (what a hot-day threshold is) or precipitation exceedance (what a heavy-rain threshold is), and what a lead time is.
 > - The IDR section of [Demo 4](training-program-2026/04-weather-model.md) (what calibration can and cannot fix).
 {: .prereq}
@@ -145,13 +145,7 @@ On the Spark, ForecastCheck is part of the course: Demo 1's setup fetches its co
 
 You type **one block of commands**, now. The computation then runs in the background, and Sections 4–8 explain what it is doing, stage by stage, while it works.
 
-Log in to the Spark with a port forward, so the dashboard will reach your laptop. Demo 5 uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's):
-
-```bash
-ssh -L 8505:localhost:8505 <user>@<spark>
-```
-
-Then:
+Open a terminal on the Spark (**Ctrl + Alt + T**). Demo 5's dashboard uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's). In the terminal, type:
 
 ```bash
 # 1. Get the code, the image and the `fcstcheck` command (about 5 minutes the first
@@ -173,7 +167,7 @@ fcstcheck start               # the dashboard (or Launch Demo 5 from the Demo 1 
 
 If the terminal says `fcstcheck: command not found` right after step 1, log out and in again (or run `source ~/.profile`): the command is new. (`forecastcheck` is the same command, under its long name.)
 
-Open <http://localhost:8505> on your laptop. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `fcstcheck logs pipeline` (Ctrl-C stops following, not the run).
+Open <http://localhost:8505> in the Spark's web browser. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `fcstcheck logs pipeline` (Ctrl-C stops following, not the run).
 
 When you have finished with the dashboard, stop it. Your results stay in the data folder, and `fcstcheck start` brings it back:
 
@@ -574,7 +568,7 @@ ForecastCheck picks, for each $\alpha$, the cut-off $p^*$ that gives the best va
 
 ## 9. The Dashboard
 
-The dashboard has been running since Section 3 (`fcstcheck start`). Open <http://localhost:8505> on your laptop; the SSH tunnel from Section 3 forwards it. It discovers results when it starts: after `fcstcheck pipeline` it restarts by itself, and after commands you ran yourself, run `fcstcheck restart` and refresh the browser.
+The dashboard has been running since Section 3 (`fcstcheck start`). Open <http://localhost:8505> in the Spark's web browser. It discovers results when it starts: after `fcstcheck pipeline` it restarts by itself, and after commands you ran yourself, run `fcstcheck restart` and refresh the browser.
 
 The tour below uses the Heat track's screenshots (Senegal). Every country sees the same pages with its own regions and thresholds; Section 9.7 shows what is different in the Rainfall track.
 
@@ -798,7 +792,7 @@ Every number in the dashboard is true *for a given truth product, year, area and
 | `python: command not found`, or `ModuleNotFoundError` | The command ran in the Spark's terminal, not inside ForecastCheck | Open `fcstcheck shell` first, or prefix it with `fcstcheck run` |
 | *"no 'forecastcheck' image yet"* | The image is not built or loaded on this Spark | `spark-setup --only demo5 --build-only` (or `fcstcheck load` your trainer's file) |
 | *"Docker is not answering"*, or `Cannot connect to the Docker daemon` | Docker is not running in your account | `systemctl --user restart docker`, as in Demo 1 |
-| *"port is already allocated"* or *"address already in use"* on `start` | Something else uses 8505 (another dashboard, or an SSH tunnel on this machine) | `PORT=8506 fcstcheck start`, and tunnel 8506 instead |
+| *"port is already allocated"* or *"address already in use"* on `start` | Something else uses 8505 (another dashboard) | `PORT=8506 fcstcheck start`, then open `http://localhost:8506` instead |
 | *"the data bucket needs a Google Cloud key"* | This Spark has no `/etc/fleet-gcs-key.json`, and no key is set in this terminal | Ask your trainer, or `export GOOGLE_APPLICATION_CREDENTIALS=<key>.json` (Section 4.2) |
 | *"cannot read gs://…"* when fetching | The key cannot read the bucket, or the path you exported is wrong | Check the path in your `export` line, if any (Section 4.2) |
 | *"no country selected"* | No country chosen yet | `fcstcheck country senegal` (or `sierra-leone`, `kenya`, `rwanda`) |
@@ -810,7 +804,7 @@ Every number in the dashboard is true *for a given truth product, year, area and
 | `SKIP — missing file` for IFS before 2018 | Expected: IFS starts in 2018 | Nothing |
 | New results do not appear in the dashboard | The dashboard caches what it found at start-up | `fcstcheck restart`, then refresh the browser |
 | No altitude selector | `data/{country}/assets/dem.nc` is missing | Re-run the fetch; it prints a note when the DEM is absent |
-| The dashboard does not open on the laptop | No port forward, or the dashboard is not running | Reconnect with `ssh -L 8505:localhost:8505 <user>@<spark>`; check `fcstcheck status` |
+| The dashboard does not open at `localhost:8505` | The dashboard is not running | Check `fcstcheck status`, then `fcstcheck start` (or Launch Demo 5 from the Demo 1 dashboard) |
 
 ## Exercises
 
