@@ -442,11 +442,11 @@ GraphCast and FuXi have very similar short-lead summaries here. Their small diff
 
 The climatology reference uses the same observation source, configured mask and 2000–2024 period. It supplies separate verification-window metrics; a mean onset day-of-year map alone is not a reference MAE/FAR/MR map.
 
-![Climatology spatial metrics days 1-15](../fig/spatial_metrics_climatology_1-15.png)
+![Climatology spatial metrics days 1-15](../fig/climatology/spatial_metrics_climatology_1-15.png)
 
 *Figure 5a. Climatology MAE, FAR and MR for Days 1–15; mean MAE is 14.617057 days. This is a direct MOMP output.*
 
-![Climatology spatial metrics days 16-30](../fig/spatial_metrics_climatology_16-30.png)
+![Climatology spatial metrics days 16-30](../fig/climatology/spatial_metrics_climatology_16-30.png)
 
 *Figure 5b. Climatology MAE, FAR and MR for Days 16–30; mean MAE is 14.534112 days. This is a direct MOMP output.*
 

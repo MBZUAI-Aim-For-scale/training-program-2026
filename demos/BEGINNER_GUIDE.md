@@ -173,8 +173,9 @@ Above the button, a small table lists each model with a **Status**:
 The button says what will happen, for example **Load 2 saved runs and run 1 model**. Click it.
 Models that need to run go one after another, and the table shows their progress.
 
-The first time a model is used on a Spark, it downloads its weights first. This can take up
-to 30 minutes, but only happens once.
+The Spark's setup downloads every model's weights in advance, so a model's first run doesn't
+wait for them. If the setup hasn't finished downloading a model's weights yet, its first run
+downloads them first, which can take up to 30 minutes. This only happens once.
 
 ### Step 5: Read the results
 
@@ -197,7 +198,7 @@ From top to bottom:
 | The page doesn't load | Check that Demo 3 shows **Running** in the dashboard; if not, launch it again |
 | A run fails while downloading starting conditions | The data server is busy. Wait a minute and try again |
 | Onset maps say observations aren't available | Observed rainfall (CHIRPS) runs about a month behind. Pick an earlier start date |
-| A model's first run is very slow | It is downloading its weights once. Later runs start in seconds |
+| A model's first run is very slow | The setup hasn't finished downloading its weights, so the run is downloading them. This only happens once; later runs start in seconds |
 
 More detail for organisers: [demo3/SETUP.md](demo3/SETUP.md) and [demo3/README.md](demo3/README.md).
 

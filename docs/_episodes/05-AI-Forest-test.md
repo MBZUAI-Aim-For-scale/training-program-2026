@@ -26,15 +26,15 @@ keypoints:
 
 # Putting Your Forecast to the Test
 
-In [Demo 3](training-program-2026/03-forecast) you ran AI models and produced one forecast for one event. In [Demo 4](training-program-2026/04-weather-model) you benchmarked rainy-season onset and met calibration with IDR for the first time. This demo answers the question a forecaster asks before using any of it operationally: **over years of past forecasts, how good is this model here, in my regions, in my seasons, and for the thresholds my warnings use?**
+In [Demo 3](/training-program-2026/03-forecast/) you ran AI models and produced one forecast for one event. In [Demo 4](/training-program-2026/04-weather-model/) you benchmarked rainy-season onset and met calibration with IDR for the first time. This demo answers the question a forecaster asks before using any of it operationally: **over years of past forecasts, how good is this model here, in my regions, in my seasons, and for the thresholds my warnings use?**
 
 You will do this with **ForecastCheck**, a local verification framework. Each agency runs its own copy, on its own machine, with its own regions and thresholds. You will work in the use-case track you chose in Demo 3: **Heat** (temperature exceedance; Senegal and Sierra Leone) or **Rainfall** (precipitation exceedance; Kenya and Rwanda). You will fetch your country's data from the cloud, score GraphCast and IFS against observations, calibrate them with IDR, and read the results in a dashboard. Both tracks run the same commands; where they differ, this lesson shows a box for each.
 
 > #### Prerequisites
 >
-> - An account on the DGX Spark and the dashboard from [Demo 1](training-program-2026/01-setup). ForecastCheck runs in the Spark's rootless Docker, as in Demos 1–3. You do **not** need a GPU or a Google Cloud account.
-> - Your use case from [Demo 3](training-program-2026/03-forecast): temperature exceedance (what a hot-day threshold is) or precipitation exceedance (what a heavy-rain threshold is), and what a lead time is.
-> - The IDR section of [Demo 4](training-program-2026/04-weather-model.md) (what calibration can and cannot fix).
+> - An account on the DGX Spark and the dashboard from [Demo 1](/training-program-2026/01-setup/). ForecastCheck runs in the Spark's rootless Docker, as in Demos 1–3. You do **not** need a GPU or a Google Cloud account.
+> - Your use case from [Demo 3](/training-program-2026/03-forecast/): temperature exceedance (what a hot-day threshold is) or precipitation exceedance (what a heavy-rain threshold is), and what a lead time is.
+> - The IDR section of [Demo 4](/training-program-2026/04-weather-model/) (what calibration can and cannot fix).
 {: .prereq}
 
 ## Learning Objectives
@@ -93,7 +93,7 @@ Every season list also includes the whole year. Each country has a page in `docs
 >
 > **Rainfall track.** Both countries are verified against **CHIRPS**, a satellite rainfall product adjusted with rain gauges, the public truth both share. A national service usually holds better rainfall truth (its own gauges, or a gridded product corrected with them, such as ENACTS) that cannot be published. Section 4.2 shows how to add such data if your trainer gives it to you.
 >
-> Either way, how far to trust the truth is the subject of [Demo 6](training-program-2026/06-ground-truth-challenge).
+> Either way, how far to trust the truth is the subject of Demo 6.
 {: .tip}
 
 ## 2. ForecastCheck in One Picture
@@ -736,7 +736,7 @@ Every number in the dashboard is true *for a given truth product, year, area and
 >
 > **Rainfall track.** Every rainfall number here is measured against one satellite product. If your service holds its own gauges, or a gridded product corrected with them, add it as in Section 4.2 and score the same forecasts against it: the bias, the CRPS and the heavy-rain AUC can all move.
 >
-> That is the ground truth challenge of [Demo 6](training-program-2026/06-ground-truth-challenge).
+> That is the ground truth challenge of Demo 6.
 {: .tip}
 
 ## Troubleshooting

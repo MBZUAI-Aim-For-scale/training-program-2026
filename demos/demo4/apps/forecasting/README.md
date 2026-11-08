@@ -1,36 +1,37 @@
-# AI forecasting (Demo 3) — Running Your First AI Weather Forecast
+# AI forecasting: the AI Forecast page of Demo 4's site
 
-The **AI Forecast** page of the shared training site (`ui/app.py`; the page is
-`ui/pages/ai_forecasting.py`). Participants choose up to four models, a start date, lead time,
-region and use case (heat, precipitation or rainy-season onset), run the forecasts on the DGX
-Spark (or load saved runs), and compare them with each other and with observations.
+The **AI Forecast** page of Demo 4's site (`demos/demo4/ui/app.py`; the page is
+`demos/demo4/ui/pages/ai_forecasting.py`). Participants choose up to four models, a start date,
+lead time, region and use case (heat, precipitation or rainy-season onset), run the forecasts on
+the DGX Spark (or load saved runs), and compare them with each other and with observations.
 
-The page lives in `ui/pages/ai_forecasting.py`; everything it uses (models, runners, onset,
-event movies, the shared bucket) is in this folder, packaged as `apps.forecasting`.
+Everything the page uses (models, runners, onset, event movies, the shared bucket) is in this
+folder, packaged as `apps.forecasting`.
+
+> **This is not the course's Demo 3.** In the course, Demo 3 is the standalone app in
+> [`demos/demo3`](../../../demo3/README.md): its own container (`demo3`), on port 8502, started
+> from the Demo 1 dashboard. This page is the same kind of tool inside Demo 4's container.
 
 ## Run it
 
-**Full step-by-step setup (new Spark, GPU check, copying weights, troubleshooting): [SETUP.md](SETUP.md).**
+**Full step-by-step setup (GPU check, copying weights, troubleshooting): [SETUP.md](SETUP.md).**
 
-**On the Spark**, from the top of the repository (aarch64; build once, about an hour):
+On a Spark set up with Demo 1, launch **Demo 4** from the dashboard (http://localhost:8500), then
+choose **AI Forecast** in its top menu. By hand, from the top of the repository (build once):
 
 ```bash
 cd ~/training-program-2026
-docker build -t ai_weather -f docker/Dockerfile .
-bash docker/run.sh            # or DEV=1 bash docker/run.sh to use this folder's code live
+bash demos/demo4/docker/run.sh start   # or DEV=1 bash demos/demo4/docker/run.sh start to use this folder's code live
 ```
 
-`run.sh` keeps saved runs in `outputs/` and model weights (~90 GB, downloaded on each model's
-first run) in `~/.cache/ai_weather`; set `DEMO_OUTPUTS` / `DEMO_CACHE` to use other folders.
-It reads saved runs from `gs://aim4scale_training_2026/demo3` with the Spark's read-only key.
+Then open **http://localhost:8503** in the Spark's web browser and choose **AI Forecast**.
 
-**From your laptop:** open a tunnel, browse to http://localhost:8501 and choose **Demo3**.
+`run.sh` keeps saved runs in `demos/demo4/outputs/` and model weights (downloaded on each
+model's first run) in `~/.cache/ai_weather`; set `DEMO_OUTPUTS` / `DEMO_CACHE` to use other
+folders. It reads saved runs from `gs://aim4scale_training_2026/demo3` with the Spark's
+read-only key.
 
-```bash
-ssh -L 8501:localhost:8501 <you>@<spark>
-```
-
-**Environments in the image** (`/opt/envs/<env>`, pinned in `docker/locks/`):
+**Environments in the image** (`/opt/envs/<env>`, pinned in `demos/demo4/docker/locks/`):
 `e2s018` Atlas CRPS, Aurora 1.5, AIFS v2 single · `e2s018ens` AIFS v2 ENS ·
 `graphcast` GraphCast and NeuralGCM · `fgn` FGN · `ui` the site.
 
@@ -140,7 +141,7 @@ Saved runs can be loaded from the program's bucket,
 `gs://aim4scale_training_2026/demo3/<model>/` (same file names as `outputs/`). The Sparks can only
 read it, so runs made on a Spark stay on it.
 
-- **Start the container:** `bash docker/run.sh` uses that bucket by itself (add `DEV=1`,
+- **Start the container:** `bash demos/demo4/docker/run.sh start` uses that bucket by itself (add `DEV=1`,
   `DEMO_CACHE`, `DEMO_OUTPUTS` as usual). `DEMO3_BUCKET=gs://...` uses another one, and
   `DEMO3_BUCKET=` none.
 - **Credentials:** the bucket is private. On a Spark there is nothing to set up: `run.sh` passes the
@@ -186,6 +187,6 @@ Google's 1° Mini model (`WeatherNextCyclones_Mini`, the only Mini weights publi
 ## Adding a model
 
 1. Create `runners/runner_<model_key>.py` with `run(init, lead_hours, members, report) -> xr.Dataset`, returning `tp`, `t2m` and `z500` in the units above.
-2. Make sure the model's environment exists at `/opt/envs/<env>/bin/python` inside the container (`docker/Dockerfile`).
+2. Make sure the model's environment exists at `/opt/envs/<env>/bin/python` inside the container (`demos/demo4/docker/Dockerfile`).
 3. Add the model to `MODELS` in `catalog.py`; it runs live once its environment exists.
 4. Add its measured runtime to `timings.json`.

@@ -82,7 +82,7 @@ This starts a container named `demo3` that restarts by itself after reboots, and
 | What | Where on the Spark | Size |
 |---|---|---|
 | Saved forecasts, event movies, job logs | `training-program-2026/demos/demo3/outputs/` | grows with use |
-| Model weights (downloaded on each model's first run) | `~/.cache/demo3/` | up to ~75 GB |
+| Model weights (~21 GB, downloaded in the background by `bash docker/prefetch.sh`, which `spark-setup` runs after each build), plus the starting conditions runs download | `~/.cache/demo3/` | ~90 GB over time |
 
 Options (put them before `bash docker/run.sh`):
 
@@ -159,4 +159,4 @@ docker build -t demo3 -f docker/Dockerfile . && docker rm -f demo3 && bash docke
 | `docker: Conflict ... name "/demo3" is already in use` | a container exists already: `docker start demo3`, or `docker rm -f demo3` and run again |
 | Browser can't reach localhost:8502 | the SSH tunnel isn't open, or port 8502 is busy on your laptop: use `-L 8503:localhost:8502` and open :8503 |
 | A run fails while downloading starting conditions | ECMWF/Google mirror busy: try again, or start with `DEMO3_IFS_SOURCE=azure` |
-| First run of a model is slow | it is downloading the weights once (Atlas CRPS ~30 min); later runs start in seconds |
+| First run of a model is slow | its weights aren't downloaded yet (Atlas CRPS adds about 31 min). Setup downloads them in the background: `docker logs -f demo3-weights` shows how far it has got, and `bash docker/prefetch.sh` starts it again |

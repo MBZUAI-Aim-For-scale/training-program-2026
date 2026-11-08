@@ -441,16 +441,11 @@ cd training-program-2026
 ```
 
 
-3. **Initialize environment configuration**:
+3. **(Optional) Choose another data bucket.** Skip this step to use the program's bucket, `aim4scale_training_2026`, which is the default. To use another one, copy the example settings file and edit it:
 ```bash
 cp .env.example .env
-cat <<EOF > .env
-DEMO_BUCKET=<bucket>/demo
-DEMO3_BUCKET=<bucket>/demo3
-DEMO4_BUCKET=<bucket>/demo4
-EOF
-
 ```
+   Then, in `.env`, set `DEMO_BUCKET=<bucket-name>`: the bucket's name only, with no `gs://` and no folder after it (a `/` in the name stops Demo 4 with *"not a valid Google bucket name"*). Demo 3's saved runs have their own setting, `DEMO3_BUCKET=gs://<bucket-name>/demo3`.
 
 
 4. **Launch the container stack**:
