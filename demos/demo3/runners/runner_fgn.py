@@ -60,8 +60,8 @@ def _inputs(init: pd.Timestamp, steps: int, sample: Path, report) -> tuple[xr.Da
     if not cached.exists():
         # ECMWF's mirrors throttle at times ("503 Slow Down", a few kB/s): give each one
         # CONVERT_TIMEOUT_S and fall back to the other, rather than hang for hours
-        first = os.environ.get("DEMO3_IFS_SOURCE", "aws")
-        for source in (first, "azure" if first == "aws" else "aws"):
+        first = os.environ.get("DEMO3_IFS_SOURCE", "azure")
+        for source in (first, "aws" if first == "azure" else "azure"):
             report(f"Building starting conditions from ECMWF open data ({source} mirror)…", 0.05)
             cmd = [str(CONVERTER_PY), str(Path(__file__).with_name("fgn_convert.py")),
                    "--init", f"{init:%Y-%m-%dT%H}", "--steps", "0", "--static", str(sample),

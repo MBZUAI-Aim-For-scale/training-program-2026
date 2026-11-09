@@ -36,6 +36,10 @@ def fetch_one(key: str) -> None:
     if key in E2S:
         from earth2studio.models import px
         cls = getattr(px, E2S[key])
+        # AIFS v2's invariants first, from ECMWF open data's AWS or Azure mirror with short retries
+        # (load_model's own fetch waits 2 minutes between its 500 retries on a 503).
+        from wave_source import ensure_invariants
+        ensure_invariants(cls)
         # Loads the model on the CPU: that downloads every file it needs into Earth2Studio's cache,
         # as the runner's first load would.
         cls.load_model(cls.load_default_package())
