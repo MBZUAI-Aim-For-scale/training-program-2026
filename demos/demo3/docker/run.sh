@@ -40,6 +40,6 @@ docker run -d --name demo3 --restart unless-stopped \
   --device nvidia.com/gpu=all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 \
   -p "127.0.0.1:$PORT:8501" \
   "${code[@]}" "${cloud[@]}" ${countrydata[@]+"${countrydata[@]}"} -v "$OUTPUTS:/app/outputs" -v "$CACHE:/root/.cache" \
-  -e DEMO3_IFS_SOURCE="${DEMO3_IFS_SOURCE:-aws}" \
+  -e DEMO3_IFS_SOURCE="${DEMO3_IFS_SOURCE:-azure}" \
   demo3
 echo "Demo 3 starting: http://localhost:$PORT"

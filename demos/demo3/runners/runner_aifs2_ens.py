@@ -9,7 +9,7 @@ import os
 from _e2s import run_e2s
 
 # ECMWF mirrors: "aws" (default) or "azure"; switch when one is throttling.
-SOURCE = os.environ.get("DEMO3_IFS_SOURCE", "aws")
+SOURCE = os.environ.get("DEMO3_IFS_SOURCE", "azure")
 
 
 def run(init, lead_hours, members, report):

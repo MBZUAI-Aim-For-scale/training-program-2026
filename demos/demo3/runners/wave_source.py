@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import glob
 import os
+import time as clock
 from datetime import datetime
 from pathlib import Path
 
@@ -34,7 +35,7 @@ def available(init) -> bool:
     return init.hour == 0 and FIRST <= init.replace(tzinfo=None) <= LAST
 
 
-def source_for(init, ifs_mirror: str = "aws"):
+def source_for(init, ifs_mirror: str = "azure"):
     """Wave + ERA5 for 00Z starts in 2000-2025, else ECMWF open data (from 13 May 2026)."""
     if available(init):
         return WaveERA5()
@@ -42,16 +43,18 @@ def source_for(init, ifs_mirror: str = "aws"):
 
 
 class IFSFallback:
-    """ECMWF open data (IFS analyses) from one mirror, falling back to the other.
+    """ECMWF open data (IFS analyses) from one mirror (Azure by default), falling back to the other.
 
     The mirrors throttle at times ("503 Service Unavailable"), and ecmwf-opendata then
-    retries 500 times, 2 minutes apart (about 16 hours). Here each mirror gets a few
-    short retries before the other one is tried."""
+    retries 500 times, 2 minutes apart (about 16 hours). Here a mirror that fails gets one
+    retry 5 s later, then the other mirror is tried at once; both failing, the pair is tried
+    again (ROUNDS times, ROUND_PAUSE_S apart) before giving up."""
 
-    RETRIES, RETRY_AFTER_S, TIMEOUT_S = 4, 30, 1800
+    RETRIES, RETRY_AFTER_S, TIMEOUT_S = 1, 5, 1800
+    ROUNDS, ROUND_PAUSE_S = 3, 10
 
-    def __init__(self, first: str = "aws"):
-        self.mirrors = [first] + [m for m in ("aws", "azure") if m != first]
+    def __init__(self, first: str = "azure"):
+        self.mirrors = [first] + [m for m in ("azure", "aws") if m != first]
 
     def _source(self, mirror: str):
         from earth2studio.data import IFS
@@ -63,22 +66,57 @@ class IFSFallback:
 
     def __call__(self, time, variable):
         err = None
-        for mirror in self.mirrors:
-            src = self._source(mirror)
-            start = datetime.now().timestamp()
-            try:
-                return src(time, variable)
-            except Exception as e:  # noqa: BLE001 - any failure: try the other mirror
-                err = e
-                print(f"ECMWF open data from the {mirror} mirror failed ({type(e).__name__}: {e}); "
-                      "trying the other mirror", flush=True)
-                # a failed download can leave a partial GRIB at its cache path, which
-                # would be read as complete next time: drop what this attempt wrote
-                for p in Path(src.cache).glob("*"):
-                    if p.is_file() and p.stat().st_mtime >= start:
-                        p.unlink(missing_ok=True)
-        raise RuntimeError("Couldn't get ECMWF open data from either mirror (AWS or Azure); "
+        for round_ in range(self.ROUNDS):
+            if round_:
+                print(f"Both ECMWF mirrors failed; trying again in {self.ROUND_PAUSE_S} s "
+                      f"({round_ + 1} of {self.ROUNDS})", flush=True)
+                clock.sleep(self.ROUND_PAUSE_S)
+            for mirror in self.mirrors:
+                src = self._source(mirror)
+                start = datetime.now().timestamp()
+                try:
+                    return src(time, variable)
+                except Exception as e:  # noqa: BLE001 - any failure: try the other mirror
+                    err = e
+                    print(f"ECMWF open data from the {mirror} mirror failed ({type(e).__name__}: {e}); "
+                          "trying the other mirror", flush=True)
+                    # a failed download can leave a partial GRIB at its cache path, which
+                    # would be read as complete next time: drop what this attempt wrote
+                    for p in Path(src.cache).glob("*"):
+                        if p.is_file() and p.stat().st_mtime >= start:
+                            p.unlink(missing_ok=True)
+        raise RuntimeError("Couldn't get ECMWF open data from either mirror (Azure or AWS); "
                            "try again later") from err
+
+
+# AIFS v2's load_model fetches its invariants (land-sea mask, orography, wmb) from ECMWF open
+# data when they aren't cached yet, with a plain IFS() source: on a 503, ecmwf-opendata's own
+# retries (500, 2 minutes apart), and a download cut short there leaves a GRIB that every later
+# load fails to read. ensure_invariants() fetches them first through IFSFallback and caches them
+# where load_model looks (the same fields, date and tensor), so load_model never has to.
+INVARIANTS = {"AIFS2": "aifs-single-2.0", "AIFS2ENS": "aifs-ens-2.0"}  # model class -> its package's cache
+INVARIANT_VARS = ["lsm", "sdor", "slor", "z", "wmb"]
+INVARIANT_TIME = "2026-05-15T00:00:00"  # (Earth2Studio's: a date with wave data, for wmb)
+
+
+def ensure_invariants(model_cls, ifs_mirror: str = "azure") -> None:
+    """Before model_cls.load_model: an AIFS v2 model's invariants, from ECMWF open data's Azure
+    or AWS mirror (IFSFallback), cached as load_model's invariants.pt. Others: nothing."""
+    name = INVARIANTS.get(getattr(model_cls, "__name__", ""))
+    if not name:
+        return
+    from earth2studio.models.auto import Package
+    path = Path(Package.default_cache(name)) / "invariants.pt"
+    if path.exists():
+        return
+    import torch
+    from earth2studio.data import fetch_data
+    x, _ = fetch_data(source=IFSFallback(ifs_mirror), time=np.array([np.datetime64(INVARIANT_TIME)]),
+                      variable=INVARIANT_VARS)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    torch.save(x.squeeze(), tmp)
+    tmp.replace(path)
 
 
 def _wave_file(day: datetime) -> Path:

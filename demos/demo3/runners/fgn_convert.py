@@ -106,9 +106,12 @@ def _read(path: Path, lat_out, lon_out, names: dict) -> dict:
     return out
 
 
-def build(init: pd.Timestamp, steps: int, static_file: Path, source: str = "aws") -> xr.Dataset:
+def build(init: pd.Timestamp, steps: int, static_file: Path, source: str = "azure") -> xr.Dataset:
     from ecmwf.opendata import Client
     client = Client(source=source)
+    # (A busy mirror answers 503: one retry 5 s later, then fail, so the runner tries the other
+    # mirror at once, instead of ecmwf-opendata's 500 retries 2 minutes apart.)
+    client.maximum_retries, client.retry_after, client.use_server_retry_after = 1, 5, False
     static = xr.open_dataset(static_file)
     lat_out, lon_out = static.lat.values, static.lon.values
     ocean = static.land_sea_mask.values < 0.5
@@ -164,7 +167,7 @@ def main() -> int:
     ap.add_argument("--steps", type=int, required=True, help="number of 6 h forecast steps")
     ap.add_argument("--static", type=Path, required=True, help="Google's FGN sample file (1 deg)")
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--source", default="aws", help="ECMWF mirror: aws | azure | ecmwf")
+    ap.add_argument("--source", default="azure", help="ECMWF mirror: azure | aws | ecmwf")
     ap.add_argument("--regrid", choices=["mean", "point"], default=REGRID)
     a = ap.parse_args()
     globals()["REGRID"] = a.regrid

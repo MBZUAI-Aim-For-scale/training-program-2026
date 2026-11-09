@@ -91,7 +91,8 @@ Options (put them before `bash docker/run.sh`):
   Edits to `app.py` show on the next reload; edits to anything under `demo3/` need
   `docker restart demo3`, because the page keeps those modules loaded.
 - `DEMO3_CACHE=/path`: keep model weights somewhere else (e.g. an existing cache).
-- `DEMO3_IFS_SOURCE=azure`: download ECMWF data from the Azure mirror if AWS is slow.
+- `DEMO3_IFS_SOURCE=aws`: download ECMWF data from the AWS mirror first (the default is Azure; either way a
+  mirror that fails switches to the other within seconds).
 - `DEMO3_BUCKET=gs://...`: where saved runs are downloaded from. By default `run.sh` uses
   `gs://aim4scale_training_2026/demo3` (the program's bucket, also holding the ocean-wave inputs
   AIFS v2 needs for 2000–2025 starts); `DEMO3_BUCKET=` turns it off. On a Spark nothing else is
@@ -158,5 +159,5 @@ docker build -t demo3 -f docker/Dockerfile . && docker rm -f demo3 && bash docke
 | A code change doesn't show on the page | `docker restart demo3` (needed for anything under `demo3/`, even with `DEV=1`) |
 | `docker: Conflict ... name "/demo3" is already in use` | a container exists already: `docker start demo3`, or `docker rm -f demo3` and run again |
 | Browser can't reach localhost:8502 | the SSH tunnel isn't open, or port 8502 is busy on your laptop: use `-L 8503:localhost:8502` and open :8503 |
-| A run fails while downloading starting conditions | ECMWF/Google mirror busy: try again, or start with `DEMO3_IFS_SOURCE=azure` |
+| A run fails while downloading starting conditions | ECMWF/Google mirror busy (both ECMWF mirrors were tried): try again later, or start with `DEMO3_IFS_SOURCE=aws` |
 | First run of a model is slow | its weights aren't downloaded yet (Atlas CRPS adds about 31 min). Setup downloads them in the background: `docker logs -f demo3-weights` shows how far it has got, and `bash docker/prefetch.sh` starts it again |

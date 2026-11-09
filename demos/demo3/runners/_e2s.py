@@ -71,6 +71,8 @@ def run_e2s(model_cls, data, init: pd.Timestamp, lead_hours: int, members: int, 
 
     t0 = time.time()
     report("Loading model weights…", 0.02)
+    from wave_source import ensure_invariants
+    ensure_invariants(model_cls)  # (AIFS v2: its invariants from ECMWF's AWS/Azure mirrors, not load_model's slow retries)
     model = model_cls.load_model(model_cls.load_default_package()).to(device)
     load_s = round(time.time() - t0, 1)
     report(f"Model loaded in {load_s:.0f} s", 0.05, load_s=load_s)
