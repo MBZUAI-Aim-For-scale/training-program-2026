@@ -97,7 +97,7 @@ The Demo 3 application consists of:
 Start Demo 3 from the Demo 1 dashboard. The Spark's setup has already built Demo 3 and downloaded the models' weights, so there is nothing to install.
 
 1. Open the dashboard at **http://localhost:8500** in the Spark's web browser (see [Access the Dashboard](/training-program-2026/01-setup/#access-the-dashboard) in Demo 1).
-2. Click **Demo 3** in the top bar.
+2. Click **3 · Run AI Forecast** in the top bar.
 3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then shows Demo 3 at **http://localhost:8502**.
 
 If Demo 3 is already running, you can open **http://localhost:8502** directly.

@@ -33,7 +33,7 @@ import streamlit as st
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
 # launches with their own button (named by `label`); they count towards the one-demo-at-a-time rule too.
 DEMOS = [
-    {"n": 1, "title": "Setting up your AI weather forecasting lab",
+    {"n": 1, "title": "Setting up your AI weather forecasting lab", "nav": "Setup",
      "about": "Check the Spark and get a working environment before diving into the models.", "setup": "demo1"},
     {"n": 2, "title": "Climate Data Tools",
      "about": "How ENACTS is built by combining rain gauges with satellite products.",
@@ -100,9 +100,9 @@ CSS = f"""
   border-bottom: 3px solid {NAV_BORDER}; box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: .75rem 1.5rem; }}
 .st-key-top_navbar [data-testid="stHorizontalBlock"] {{ align-items: center; }}
 .st-key-top_navbar .stButton button {{ background: transparent !important; color: #fff !important;
-  border: 1px solid rgba(255,255,255,.3) !important; border-radius: 6px !important; white-space: nowrap;
-  box-shadow: none !important; }}
-.st-key-top_navbar .stButton button p {{ font-weight: 600; font-size: .9rem; }}
+  border: 1px solid rgba(255,255,255,.3) !important; border-radius: 6px !important; white-space: normal;
+  box-shadow: none !important; min-height: 3rem; padding: .25rem .5rem; }}
+.st-key-top_navbar .stButton button p {{ font-weight: 600; font-size: .85rem; line-height: 1.2; white-space: normal; }}
 .st-key-top_navbar .stButton button:hover {{ background: rgba(255,255,255,.1) !important;
   border-color: rgba(255,255,255,.5) !important; }}
 .st-key-top_navbar .stButton button[kind="primary"] {{ background: rgba(255,255,255,.2) !important;
@@ -335,6 +335,11 @@ def label(demo: dict) -> str:
     return demo.get("label") or f"Demo {demo['n']}"
 
 
+def nav_label(demo: dict) -> str:
+    """Its top-bar button: the number and short name (`nav`, else its title), or its own `label`."""
+    return demo.get("label") or f"{demo['n']} · {demo.get('nav') or demo['title']}"
+
+
 def uid(demo: dict) -> str:
     """Tells a demo's tools apart from the demo itself, in widget and session-state keys."""
     return demo.get("tool") or str(demo["n"])
@@ -468,12 +473,12 @@ def navbar(active: int):
     """Brand, one button per demo, live badge: the layout of the shared site's top bar."""
     gpu = gpu_name()
     with st.container(key="top_navbar"):
-        brand, menu, badge = st.columns([1.3, 5.2, 1.5], gap="small", vertical_alignment="center")
+        brand, menu, badge = st.columns([1.45, 5.8, 1.3], gap="small", vertical_alignment="center")
         brand.markdown('<div class="brand-text">AI Weather Lab<span>| Demo launcher</span></div>',
                        unsafe_allow_html=True)
         with menu:
             for col, d in zip(st.columns(len(DEMOS), gap="small"), DEMOS):
-                if col.button(label(d), key=f"nav-{d['n']}", help=d["title"], width="stretch",
+                if col.button(nav_label(d), key=f"nav-{d['n']}", help=f"{label(d)} · {d['title']}", width="stretch",
                               type="primary" if d["n"] == active else "secondary"):
                     st.query_params.clear()
                     st.query_params["demo"] = str(d["n"])

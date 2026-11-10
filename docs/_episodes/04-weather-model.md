@@ -41,7 +41,7 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 Start Demo 5 from the Demo 1 dashboard. The Spark's setup has already built Demo 5, with ROMP and all model environments installed inside it, so there is nothing to install.
 
 1. Open the dashboard at **http://localhost:8500** in the Spark's web browser.
-2. Click **Demo 5** in the top bar.
+2. Click **5 · Onset Benchmarking** in the top bar.
 3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then opens Demo 5 straight on the **Benchmarking** page.
 
 If Demo 5 is already running, you can open **http://localhost:8503** directly and click **Benchmarking** in the top menu.
