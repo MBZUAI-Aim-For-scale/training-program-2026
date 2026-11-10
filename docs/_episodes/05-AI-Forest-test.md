@@ -1,7 +1,8 @@
 ---
 math: true  # KaTeX ($...$ inline, $$...$$ display): the default layout loads it
 layout: default
-title: "Demo 5"
+title: "Demo 4"
+order: 4
 teaching: 45
 exercises: 75
 questions:
@@ -26,7 +27,7 @@ keypoints:
 
 # Putting Your Forecast to the Test
 
-In [Demo 3](/training-program-2026/03-forecast/) you ran AI models and produced one forecast for one event. In [Demo 4](/training-program-2026/04-weather-model/) you benchmarked rainy-season onset and met calibration with IDR for the first time. This demo answers the question a forecaster asks before using any of it operationally: **over years of past forecasts, how good is this model here, in my regions, in my seasons, and for the thresholds my warnings use?**
+In [Demo 3](/training-program-2026/03-forecast/) you ran AI models and produced one forecast for one event. This demo answers the question a forecaster asks before using any of it operationally: **over years of past forecasts, how good is this model here, in my regions, in my seasons, and for the thresholds my warnings use?**
 
 You will do this with **ForecastCheck**, a local verification framework. Each agency runs its own copy, on its own machine, with its own regions and thresholds. You will work in the use-case track you chose in Demo 3: **Heat** (temperature exceedance; Senegal and Sierra Leone) or **Rainfall** (precipitation exceedance; Kenya and Rwanda). You will fetch your country's data from the cloud, score GraphCast and IFS against observations, calibrate them with IDR, and read the results in a dashboard. Both tracks run the same commands; where they differ, this lesson shows a box for each.
 
@@ -34,7 +35,7 @@ You will do this with **ForecastCheck**, a local verification framework. Each ag
 >
 > - An account on the DGX Spark and the dashboard from [Demo 1](/training-program-2026/01-setup/). ForecastCheck runs in the Spark's rootless Docker, as in Demos 1–3. You do **not** need a GPU or a Google Cloud account.
 > - Your use case from [Demo 3](/training-program-2026/03-forecast/): temperature exceedance (what a hot-day threshold is) or precipitation exceedance (what a heavy-rain threshold is), and what a lead time is.
-> - The IDR section of [Demo 4](/training-program-2026/04-weather-model/) (what calibration can and cannot fix).
+> - Optional: the IDR section of [Demo 5](/training-program-2026/04-weather-model/), which comes after this lesson (what calibration can and cannot fix).
 {: .prereq}
 
 ## Learning Objectives
@@ -54,7 +55,7 @@ By the end of this lesson, you will be able to:
 | --- | --- |
 | 1. From One Forecast to a Track Record | The question, the two tracks and four countries, what is verified |
 | 2. ForecastCheck in One Picture | The three stages and the files that connect them |
-| 3. Open Demo 5 and Start Everything | From the Demo 1 dashboard: your country, the data, the pipeline, the dashboard |
+| 3. Open Demo 4 and Start Everything | From the Demo 1 dashboard: your country, the data, the pipeline, the dashboard |
 | 4. The Data | What `fetch` brought in, and how to add your own data |
 | 5. The Country Settings | Thresholds, seasons, altitude bands and regions |
 | 6. Stage 1: Raw Forecast Metrics | What the pipeline does first: MAE, bias and correlation |
@@ -64,7 +65,7 @@ By the end of this lesson, you will be able to:
 | 10. What the Results Say | The Heat track and the Rainfall track, side by side |
 | 11. Before You Quote a Number | Limits of the data, and the bridge to Demo 6 |
 | Exercises and Discussion Sheet | Hands-on practice in country teams, within your track |
-| Extra: Run Demo 5 from the Terminal | The same setup with `fcstcheck`, and how to run the commands in Sections 4–8 |
+| Extra: Run Demo 4 from the Terminal | The same setup with `fcstcheck`, and how to run the commands in Sections 4–8 |
 
 ## 1. From One Forecast to a Track Record
 
@@ -132,14 +133,14 @@ Two naming rules make the files self-describing:
 - A model token without a suffix (`graphcast`, `ifs`) is the **raw** forecast. The suffix `-idr` (`graphcast-idr`) is the **calibrated** one.
 - Anything derived from observations carries the name of the truth product it came from (`chirts`, `era5` or `chirps`). A raw forecast does not.
 
-## 3. Open Demo 5 and Start Everything
+## 3. Open Demo 4 and Start Everything
 
 ForecastCheck is part of the course: Demo 1's setup fetches its code from [its own repository](https://github.com/africlimate-research/forecastcheck), keeps it up to date and builds it, and the Demo 1 dashboard has everything you need to run it. You start it all from the dashboard, now. The computation then runs in the background, and Sections 4–8 explain what it is doing, stage by stage, while it works.
 
-1. **Open the Demo 5 page.** Open the Demo 1 dashboard at **http://localhost:8500** in the Spark's web browser (see [Access the Dashboard](/training-program-2026/01-setup/#access-the-dashboard) in Demo 1) and click **Demo 5** in the top bar. If the buttons below are greyed out with **Launch Demo 5 first**, click **Launch ↗** once: the first launch builds Demo 5. Then come back to this page.
+1. **Open the Demo 4 page.** Open the Demo 1 dashboard at **http://localhost:8500** in the Spark's web browser (see [Access the Dashboard](/training-program-2026/01-setup/#access-the-dashboard) in Demo 1) and click **4 · AfriclimateAI ForecastCheck** in the top bar. If the buttons below are greyed out with **Launch Demo 4 first**, click **Launch ↗** once: the first launch builds Demo 4. Then come back to this page.
 2. **Score your country.** Under **Country data for ForecastCheck**, click your country under **Download data for**, then click **Run pipeline**. It downloads your country's forecasts and observations (Section 4), then runs the three stages (Sections 6–8). Two progress bars show how far it has got, and **Command-line output** shows what it prints. It keeps going if you close the page.
-3. **Choose the country Demo 5 shows.** Above **Launch ↗**, under **Show in Demo 5**, click your country. Each country is marked **✓ scored**, **data, no scores yet** or **no data**.
-4. **Launch Demo 5.** Click **Launch ↗**. A new browser tab opens ForecastCheck's dashboard at **http://localhost:8505**. If it is already running, open that address directly. The dashboard fills in when the pipeline ends: refresh the browser.
+3. **Choose the country Demo 4 shows.** Above **Launch ↗**, under **Show in Demo 4**, click your country. Each country is marked **✓ scored**, **data, no scores yet** or **no data**.
+4. **Launch Demo 4.** Click **Launch ↗**. A new browser tab opens ForecastCheck's dashboard at **http://localhost:8505**. If it is already running, open that address directly. The dashboard fills in when the pipeline ends: refresh the browser.
 
 > #### One demo at a time
 >
@@ -154,7 +155,7 @@ ForecastCheck keeps its files here (the commands in Sections 4–8 refer to them
 | Your data and every result (`data/` in the outputs below) | `~/training-program-2026/demos/demo5/data` |
 | The settings (Section 5) | `~/training-program-2026/demos/demo5/forecastcheck/config/verification.toml` |
 
-To do all of this from the terminal instead, and to run the commands shown in Sections 4–8 yourself, see [Extra: Run Demo 5 from the Terminal](#extra-run-demo-5-from-the-terminal) at the end of this lesson.
+To do all of this from the terminal instead, and to run the commands shown in Sections 4–8 yourself, see [Extra: Run Demo 4 from the Terminal](#extra-run-demo-4-from-the-terminal) at the end of this lesson.
 
 | | Senegal | Sierra Leone | Kenya | Rwanda |
 | --- | --- | --- | --- | --- |
@@ -447,7 +448,7 @@ The calibrated files are large, mostly because of the threshold probabilities (`
 > It takes a few minutes (Heat about 5–10, Rainfall less). Use the time for Exercise 3.
 {: .tip}
 
-> #### What IDR can and cannot do (recap from Demo 4)
+> #### What IDR can and cannot do (Demo 5 comes back to it)
 >
 > IDR removes bias and fixes over- and under-confidence. It cannot create skill the raw forecast does not have: if the raw forecast does not move with the observations (low correlation), the calibrated distribution will just be wide.
 {: .tip}
@@ -750,7 +751,7 @@ Every number in the dashboard is true *for a given truth product, year, area and
 | *"the data bucket needs a Google Cloud key"* | This Spark has no `/etc/fleet-gcs-key.json`, and no key is set in this terminal | Ask your trainer, or `export GOOGLE_APPLICATION_CREDENTIALS=<key>.json` (Section 4.2) |
 | *"cannot read gs://…"* when fetching | The key cannot read the bucket, or the path you exported is wrong | Check the path in your `export` line, if any (Section 4.2) |
 | *"no country selected"* | No country chosen yet | `fcstcheck country senegal` (or `sierra-leone`, `kenya`, `rwanda`) |
-| `fcstcheck: command not found` | The command is new since you logged in, or Demo 5 isn't set up on this Spark | Log out and in again (or `source ~/.profile`); if it's still missing, `spark-setup --only demo5 --build-only` |
+| `fcstcheck: command not found` | The command is new since you logged in, or Demo 4 isn't set up on this Spark | Log out and in again (or `source ~/.profile`); if it's still missing, `spark-setup --only demo5 --build-only` |
 | *"… holds 2 truth products and none is configured"* | `--product` is missing (Heat track) | Add `--product chirts` or `--product era5` |
 | *"unknown truth product …"* | A misspelt `--product` | Use one of the products the message lists (`chirps` for the Rainfall track) |
 | A Heat-track run looks for `precipitation` files | `--variable` is missing | Add `--variable temperature_max` or `temperature_min` |
@@ -758,7 +759,7 @@ Every number in the dashboard is true *for a given truth product, year, area and
 | `SKIP — missing file` for IFS before 2018 | Expected: IFS starts in 2018 | Nothing |
 | New results do not appear in the dashboard | The dashboard caches what it found at start-up | `fcstcheck restart`, then refresh the browser |
 | No altitude selector | `data/{country}/assets/dem.nc` is missing | Re-run the fetch; it prints a note when the DEM is absent |
-| The dashboard does not open at `localhost:8505` | The dashboard is not running | Check `fcstcheck status`, then `fcstcheck start` (or Launch Demo 5 from the Demo 1 dashboard) |
+| The dashboard does not open at `localhost:8505` | The dashboard is not running | Check `fcstcheck status`, then `fcstcheck start` (or Launch Demo 4 from the Demo 1 dashboard) |
 
 ## Exercises
 
@@ -795,7 +796,7 @@ Work in your country team. Exercises 1–3 run while the pipeline computes; Exer
 > #### Solution
 >
 > 1. The CRPS would drop, because IDR would be scored on days it was fitted to. With one fit per grid cell it can bend to the quirks of those exact days.
-> 2. Next year's forecasts are days IDR has never seen. Only a test year kept out of training tells you how the calibrated forecast will behave in operations. The same rule appeared in Demo 4: calibrating and scoring on the same years overstates skill.
+> 2. Next year's forecasts are days IDR has never seen. Only a test year kept out of training tells you how the calibrated forecast will behave in operations. The same rule comes back in Demo 5: calibrating and scoring on the same years overstates skill.
 {: .solution}
 
 </details>
@@ -865,17 +866,17 @@ Fill one sheet per team and share it at the end.
 > - Every number depends on the truth product, the year and the season. Say which ones you used.
 {: .keypoints}
 
-## Extra: Run Demo 5 from the Terminal
+## Extra: Run Demo 4 from the Terminal
 
 You don't need this section to run the demo: the Demo 1 dashboard does all of Section 3. It is here for doing the same from the terminal, and for running the commands shown in Sections 4–8 yourself.
 
-ForecastCheck runs in **Docker**, the way Demos 1–4 do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU. Every command is `fcstcheck …`, typed in any folder: it runs ForecastCheck's own `docker/run.sh` with the course's settings (Demo 5's port, the Spark's key for the bucket, your country, and Demo 5's data folder). `fcstcheck where` prints the paths from Section 3.
+ForecastCheck runs in **Docker**, the way the other demos do: one image holds everything (the Python environment, the Google Cloud tools, the map data), and one script wraps every command so you never type Docker flags. The Spark's rootless Docker from Demo 1 is all you need; ForecastCheck needs no GPU. Every command is `fcstcheck …`, typed in any folder: it runs ForecastCheck's own `docker/run.sh` with the course's settings (Demo 4's port, the Spark's key for the bucket, your country, and Demo 4's data folder). `fcstcheck where` prints the paths from Section 3.
 
-Open a terminal on the Spark (**Ctrl + Alt + T**). Demo 5's dashboard uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's). In the terminal, type:
+Open a terminal on the Spark (**Ctrl + Alt + T**). Demo 4's dashboard uses port **8505** (every demo has its own; ForecastCheck's own default, 8502, is Demo 3's). In the terminal, type:
 
 ```bash
 # 1. Get the code, the image and the `fcstcheck` command (about 5 minutes the first
-#    time; skip this if the Demo 1 dashboard already shows Demo 5 as ready)
+#    time; skip this if the Demo 1 dashboard already shows Demo 4 as ready)
 spark-setup --only demo5 --build-only
 
 # 2. Everything else, for your country (senegal, sierra-leone, kenya or rwanda):
@@ -888,12 +889,12 @@ fcstcheck setup senegal
 fcstcheck country senegal     # your country (on those countries' Sparks it's already theirs)
 fcstcheck fetch --apply       # fetch its data (Section 4 explains what arrives)
 fcstcheck pipeline            # the whole pipeline, in the background, even if you log out
-fcstcheck start               # the dashboard (or Launch Demo 5 from the Demo 1 dashboard)
+fcstcheck start               # the dashboard (or Launch Demo 4 from the Demo 1 dashboard)
 ```
 
 If the terminal says `fcstcheck: command not found` right after step 1, log out and in again (or run `source ~/.profile`): the command is new. (`forecastcheck` is the same command, under its long name.)
 
-Starting Demo 5 this way doesn't stop other demos for you. If another demo is running, stop it first (from the dashboard, or `docker stop <name>`), since they share the GPU and memory.
+Starting Demo 4 this way doesn't stop other demos for you. If another demo is running, stop it first (from the dashboard, or `docker stop <name>`), since they share the GPU and memory.
 
 Open <http://localhost:8505> in the Spark's web browser. The dashboard fills in when the pipeline ends: it restarts by itself, so refresh the browser. To see where the pipeline is, `fcstcheck logs pipeline` (Ctrl-C stops following, not the run).
 
@@ -921,7 +922,7 @@ fcstcheck stop                # when you are done (your data is kept)
 
 > #### Which country am I?
 >
-> The one-line file `.deployment` (in `~/training-program-2026/demos/demo5/forecastcheck`, set by `fcstcheck country` or the dashboard's **Show in Demo 5**) decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. To see or change it: `fcstcheck country` or `fcstcheck country kenya` (a running dashboard follows by itself).
+> The one-line file `.deployment` (in `~/training-program-2026/demos/demo5/forecastcheck`, set by `fcstcheck country` or the dashboard's **Show in Demo 4**) decides: `senegal`, `sierra-leone`, `kenya` or `rwanda`. Every team runs the same code from the same `main`; the country file it names (for example `deployments/kenya.toml`) sets the map, the regions, the seasons and where the data comes from. `.deployment` is not in git, so `git pull` never changes it. There is nothing else to set. To see or change it: `fcstcheck country` or `fcstcheck country kenya` (a running dashboard follows by itself).
 {: .tip}
 
 > #### Without Docker

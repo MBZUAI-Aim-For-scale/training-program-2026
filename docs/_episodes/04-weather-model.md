@@ -1,6 +1,7 @@
 ---
 math: true  # KaTeX ($...$ inline, $$...$$ display): the default layout loads it
-title: "Demo 4"
+title: "Demo 5"
+order: 5
 teaching: 30
 exercises: 40
 questions:
@@ -35,22 +36,22 @@ It is used to evaluate AI weather forecast models (AIFS, FuXi, GraphCast, GenCas
 > {: .prereq}
 
 
-## Open Demo 4
+## Open Demo 5
 
-Start Demo 4 from the Demo 1 dashboard. The Spark's setup has already built Demo 4, with ROMP and all model environments installed inside it, so there is nothing to install.
+Start Demo 5 from the Demo 1 dashboard. The Spark's setup has already built Demo 5, with ROMP and all model environments installed inside it, so there is nothing to install.
 
 1. Open the dashboard at **http://localhost:8500** in the Spark's web browser.
-2. Click **Demo 4** in the top bar.
-3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then opens Demo 4 straight on the **Benchmarking** page.
+2. Click **5 · Onset Benchmarking** in the top bar.
+3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then opens Demo 5 straight on the **Benchmarking** page.
 
-If Demo 4 is already running, you can open **http://localhost:8503** directly and click **Benchmarking** in the top menu.
+If Demo 5 is already running, you can open **http://localhost:8503** directly and click **Benchmarking** in the top menu.
 
 > #### One demo at a time
 >
 > The demos share the Spark's GPU and memory. If another demo is running, the dashboard asks before stopping it, so check with your group first.
 {: .callout}
 
-The numerical and figure-reading exercises use the saved CSVs and figures. To start Demo 4 from the terminal instead, see [Extra: Run Demo 4 from the Terminal](#extra-run-demo-4-from-the-terminal) at the end of this lesson.
+The numerical and figure-reading exercises use the saved CSVs and figures. To start Demo 5 from the terminal instead, see [Extra: Run Demo 5 from the Terminal](#extra-run-demo-5-from-the-terminal) at the end of this lesson.
 
 
 ## Learning Objectives
@@ -768,9 +769,9 @@ Ask each pair to identify one conclusion supported by a saved artifact, one hypo
 > - Resolution, period, tolerance and sample size all affect scores. Document them with every result.
 {: .keypoints}
 
-## Extra: Run Demo 4 from the Terminal
+## Extra: Run Demo 5 from the Terminal
 
-You don't need this section in class: the dashboard's **Launch** button does all of it. It is here for running Demo 4 by hand, for example while developing it. For the full ROMP/MOMP environment, see [Demo 1](/training-program-2026/01-setup/), section 7.
+You don't need this section in class: the dashboard's **Launch** button does all of it. It is here for running Demo 5 by hand, for example while developing it. For the full ROMP/MOMP environment, see [Demo 1](/training-program-2026/01-setup/), section 7.
 
 1. **Open a terminal on the Spark** (**Ctrl + Alt + T**).
 
@@ -789,9 +790,9 @@ You don't need this section in class: the dashboard's **Launch** button does all
    bash demos/demo4/docker/run.sh start
    ```
 
-   Use `bash demos/demo4/docker/run.sh rebuild` after image/dependency changes. The Demo 4 Compose file mounts `demos/demo4` at `/app` and the root runner at `/app/run_momp.py`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
+   Use `bash demos/demo4/docker/run.sh rebuild` after image/dependency changes. The Demo 5 Compose file mounts `demos/demo4` at `/app` and the root runner at `/app/run_momp.py`; confirm that the source checkout and data mounts belong to this run. Benchmark scoring is CPU work; the shared forecasting container also supports GPU model inference.
 
-   Starting Demo 4 this way doesn't stop other demos for you. If another demo is running, stop it first (from the dashboard, or `docker stop <name>`), since they share the GPU and memory.
+   Starting Demo 5 this way doesn't stop other demos for you. If another demo is running, stop it first (from the dashboard, or `docker stop <name>`), since they share the GPU and memory.
 
 4. **Open the dashboard** in the Spark's web browser: `http://localhost:8503`, then click **Benchmarking** in the top menu.
 

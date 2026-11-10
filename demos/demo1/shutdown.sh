@@ -11,7 +11,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 
 pkill -f 'python[0-9.]* \S*spark_setup\.py' && echo "setup run stopped"
 pkill -f 'python[0-9.]* \S*country_data\.py' && echo "country data download stopped"
-pkill -f 'python[0-9.]* \S*forecastcheck_data\.py' && echo "Demo 5 data download stopped"
+pkill -f 'python[0-9.]* \S*forecastcheck_data\.py' && echo "Demo 4 (ForecastCheck) data download stopped"
 python3 "$here/spark_setup.py" dashboard --stop
 running=$(docker ps --format '{{.Names}}')
 if [ -n "$running" ]; then

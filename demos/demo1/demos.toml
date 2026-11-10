@@ -4,9 +4,9 @@
 # `port` as PORT, and every demo's start script uses it (with the same number as its
 # default, for running it by hand). All on 127.0.0.1 only. In use:
 #   8500  this dashboard              8504  Demo 2 (CDT, noVNC)
-#   8501  the repo's top-level app    8505  Demo 5 (ForecastCheck)
-#   8502  Demo 3                      8888  Demo 4's Jupyter Lab (demos/demo4/docker)
-#   8503  Demo 4                      8889  Demo 1's JupyterLab sandbox (docker-compose.yml)
+#   8501  the repo's top-level app    8505  Demo 4 (ForecastCheck, id demo5)
+#   8502  Demo 3                      8888  Demo 5's Jupyter Lab (demos/demo4/docker)
+#   8503  Demo 5 (onset, id demo4)    8889  Demo 1's JupyterLab sandbox (docker-compose.yml)
 #   8765  AI Almanac (its own default)
 # A new demo takes the next free one (8506, ...). A person's own intro-to-Spark JupyterLab
 # (Lab 00: run.sh <port>) uses one outside these, 8890 and up.
@@ -51,7 +51,7 @@ health = "/vnc.html"
 
 [[demo]]
 id = "demo3"
-title = "Demo 3 · AI forecast lab"
+title = "Demo 3 · Run AI Forecast"
 image = "demo3"
 container = "demo3"
 context = "demos/demo3"
@@ -65,7 +65,7 @@ prefetch_title = "Download the models' weights (in the background)"
 
 [[demo]]
 id = "demo4"
-title = "Demo 4 · Forecasting & benchmarking"
+title = "Demo 5 · Onset Benchmarking"
 image = "ai_weather"
 container = "ai_weather"
 context = "."
@@ -75,13 +75,14 @@ watch = ["demos/demo4", "run_momp.py", "setup.py", "setup.cfg", "pyproject.toml"
 run = ["bash", "demos/demo4/docker/run.sh", "start"]
 port = 8503
 
-# Demo 5's code is ForecastCheck's own repository: cloned into `path` (not part of this repo,
+# Demo 4 (it was Demo 5: hence its id, folder and lesson file) is ForecastCheck's own
+# repository: cloned into `path` (not part of this repo,
 # see .gitignore) and pulled to the branch's newest commit on every setup run, so it stays
 # up to date with it; the image is rebuilt when that commit changes. Its port isn't
 # ForecastCheck's default 8502 (Demo 3's): demos/demo5/run.sh passes this one.
 [[demo]]
 id = "demo5"
-title = "Demo 5 · Putting your forecast to the test (ForecastCheck)"
+title = "Demo 4 · AfriclimateAI ForecastCheck"
 image = "forecastcheck"
 container = "forecastcheck"
 context = "demos/demo5/forecastcheck"

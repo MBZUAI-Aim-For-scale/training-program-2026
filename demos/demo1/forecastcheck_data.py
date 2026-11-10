@@ -187,8 +187,8 @@ def main(argv=None) -> int:
     country = args.country or demo_country()
     if not country:
         print(f"ForecastCheck has no data for this Spark ({country_data.hostname()}) and no country was chosen "
-              f"for Demo 5 (the Demo 5 page, or fcstcheck country <name>); it has: "
-              f"{', '.join(title(c) for c in supported()) or 'nothing yet (set up Demo 5 first)'}",
+              f"for Demo 4 (the Demo 4 page, or fcstcheck country <name>); it has: "
+              f"{', '.join(title(c) for c in supported()) or 'nothing yet (set up Demo 4 first)'}",
               file=sys.stderr)
         return 2
     LOG.parent.mkdir(parents=True, exist_ok=True)
@@ -257,7 +257,7 @@ def main(argv=None) -> int:
         save(done_files=n, done_bytes=b)
         return pipeline(country, job, save)
     save(state=state, finished=time.time(), done_files=n, done_bytes=b,
-         detail=(f"{title(country)}'s data is in Demo 5's data folder" if ok else last[:200] or f"exit {rc}"))
+         detail=(f"{title(country)}'s data is in Demo 4's data folder" if ok else last[:200] or f"exit {rc}"))
     record(job)
     return 0 if ok else 1
 

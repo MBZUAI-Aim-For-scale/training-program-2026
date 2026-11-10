@@ -33,22 +33,24 @@ import streamlit as st
 # that says it's up, for containers that aren't Streamlit apps. `tools` are extra containers a demo's page
 # launches with their own button (named by `label`); they count towards the one-demo-at-a-time rule too.
 DEMOS = [
-    {"n": 1, "title": "Setting up your AI weather forecasting lab",
+    {"n": 1, "title": "Setting up your AI weather forecasting lab", "nav": "Setup",
      "about": "Check the Spark and get a working environment before diving into the models.", "setup": "demo1"},
-    {"n": 2, "title": "Observational data readiness",
+    {"n": 2, "title": "Climate Data Tools",
      "about": "How ENACTS is built by combining rain gauges with satellite products.",
      "tools": [{"n": 2, "tool": "cdt", "label": "CDT", "title": "Climate Data Tools",
                 "about": "The CDT desktop app, in the browser over VNC.", "setup": "cdt",
                 "path": "/vnc.html?autoconnect=1&reconnect=1&resize=remote", "health": "/vnc.html"}]},
-    {"n": 3, "title": "Running your first AI weather forecast",
+    {"n": 3, "title": "Run AI Forecast",
      "about": "Run AI weather models locally, end to end, for your use case.",
      "setup": "demo3"},
-    {"n": 4, "title": "The AI weather model scorecard",
-     "about": "Compare models across evaluation metrics and explore the AI Almanac for your use case.",
-     "setup": "demo4", "path": "/?page=SM_Benchmarking"},
-    {"n": 5, "title": "Putting your forecast to the test",
+    # Demos 4 and 5 swapped places: their code, containers and lessons keep their old numbers
+    # (demos/demo5 + 05-*.md is Demo 4, demos/demo4 + 04-*.md is Demo 5), so `lesson` names the file.
+    {"n": 4, "title": "AfriclimateAI ForecastCheck",
      "about": "Evaluate the forecasts you ran in Demo 3 against different metrics.",
-     "setup": "demo5"},
+     "setup": "demo5", "lesson": 5},
+    {"n": 5, "title": "Onset Benchmarking",
+     "about": "Compare models across evaluation metrics and explore the AI Almanac for your use case.",
+     "setup": "demo4", "path": "/?page=SM_Benchmarking", "lesson": 4},
     {"n": "almanac", "label": "AI Almanac", "badge": "AI",
      "title": "Assess, blend and forecast with AI weather models",
      "about": "Pick a region, compare how well AI and conventional models predicted the rainy season "
@@ -98,9 +100,9 @@ CSS = f"""
   border-bottom: 3px solid {NAV_BORDER}; box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: .75rem 1.5rem; }}
 .st-key-top_navbar [data-testid="stHorizontalBlock"] {{ align-items: center; }}
 .st-key-top_navbar .stButton button {{ background: transparent !important; color: #fff !important;
-  border: 1px solid rgba(255,255,255,.3) !important; border-radius: 6px !important; white-space: nowrap;
-  box-shadow: none !important; }}
-.st-key-top_navbar .stButton button p {{ font-weight: 600; font-size: .9rem; }}
+  border: 1px solid rgba(255,255,255,.3) !important; border-radius: 6px !important; white-space: normal;
+  box-shadow: none !important; min-height: 3rem; padding: .25rem .5rem; }}
+.st-key-top_navbar .stButton button p {{ font-weight: 600; font-size: .85rem; line-height: 1.2; white-space: normal; }}
 .st-key-top_navbar .stButton button:hover {{ background: rgba(255,255,255,.1) !important;
   border-color: rgba(255,255,255,.5) !important; }}
 .st-key-top_navbar .stButton button[kind="primary"] {{ background: rgba(255,255,255,.2) !important;
@@ -263,7 +265,7 @@ def page_header(n: int, title: str, sub: str = ""):
                   unsafe_allow_html=True)
     if url := lesson_url(n):
         button.link_button("Additional information ↗", url, width="content",
-                           help=f"Opens the Demo {n} lesson in a new tab" if n else "Opens its lesson in a new tab")
+                           help="Opens its lesson in a new tab")
 
 
 def access_token(demo: dict) -> str:
@@ -331,6 +333,11 @@ def tracked(demo: dict) -> dict:
 
 def label(demo: dict) -> str:
     return demo.get("label") or f"Demo {demo['n']}"
+
+
+def nav_label(demo: dict) -> str:
+    """Its top-bar button: the number and short name (`nav`, else its title), or its own `label`."""
+    return demo.get("label") or f"{demo['n']} · {demo.get('nav') or demo['title']}"
 
 
 def uid(demo: dict) -> str:
@@ -466,12 +473,12 @@ def navbar(active: int):
     """Brand, one button per demo, live badge: the layout of the shared site's top bar."""
     gpu = gpu_name()
     with st.container(key="top_navbar"):
-        brand, menu, badge = st.columns([1.3, 5.2, 1.5], gap="small", vertical_alignment="center")
+        brand, menu, badge = st.columns([1.45, 5.8, 1.3], gap="small", vertical_alignment="center")
         brand.markdown('<div class="brand-text">AI Weather Lab<span>| Demo launcher</span></div>',
                        unsafe_allow_html=True)
         with menu:
             for col, d in zip(st.columns(len(DEMOS), gap="small"), DEMOS):
-                if col.button(label(d), key=f"nav-{d['n']}", help=d["title"], width="stretch",
+                if col.button(nav_label(d), key=f"nav-{d['n']}", help=f"{label(d)} · {d['title']}", width="stretch",
                               type="primary" if d["n"] == active else "secondary"):
                     st.query_params.clear()
                     st.query_params["demo"] = str(d["n"])
@@ -694,7 +701,7 @@ def demo_page(demo: dict):
             forecastcheck_data_card()
 
 
-# --- Demo 5: download this Spark's country data for ForecastCheck ------------------------------
+# --- Demo 4: download this Spark's country data for ForecastCheck ------------------------------
 
 def start_forecastcheck_download(country: str, pipeline: bool = False):
     """Run forecastcheck_data.py in the background (with --setup: the country, the data and the full
@@ -709,7 +716,7 @@ def start_forecastcheck_download(country: str, pipeline: bool = False):
 
 
 def choose_forecastcheck_country(name: str | None = None):
-    """The Show in Demo 5 picker's on_change (or its Show button): the country Demo 5's dashboard shows,
+    """The Show in Demo 4 picker's on_change (or its Show button): the country Demo 4's dashboard shows,
     as `fcstcheck country <name>` sets it. A running dashboard restarts with it."""
     name = name or st.session_state.get("fcshow-country")
     if name:
@@ -720,7 +727,7 @@ def choose_forecastcheck_country(name: str | None = None):
 
 
 def forecastcheck_show_picker():
-    """On Demo 5's launch card, above Launch: the country its dashboard shows. Separate from the
+    """On Demo 4's launch card, above Launch: the country its dashboard shows. Separate from the
     downloads and pipeline runs below, which have their country set when they start, so it can change
     while they run."""
     countries = forecastcheck_data.supported()
@@ -730,10 +737,10 @@ def forecastcheck_show_picker():
     if shown in countries and st.session_state.get("fcshow-country") != shown:
         st.session_state["fcshow-country"] = shown  # (changed elsewhere too: fcstcheck country)
     mark = {"scored": " ✓ scored", "complete": " · data, no scores yet", "partial": " · partial data"}
-    st.pills("Show in Demo 5", countries, key="fcshow-country", on_change=choose_forecastcheck_country,
+    st.pills("Show in Demo 4", countries, key="fcshow-country", on_change=choose_forecastcheck_country,
                  required=True, format_func=lambda c: forecastcheck_data.title(c) + mark.get(found.get(c), " · no data"),
                  help="The country ForecastCheck's dashboard shows (the same as fcstcheck country <name>). "
-                      "A running Demo 5 restarts with it; downloads and pipeline runs below carry on.")
+                      "A running Demo 4 restarts with it; downloads and pipeline runs below carry on.")
     if msg := st.session_state.get("fcshow-msg"):
         st.error(f"The country wasn't changed: {msg}")
     elif shown and found.get(shown) != "scored":
@@ -744,14 +751,14 @@ def forecastcheck_show_picker():
 @st.fragment(run_every=3)
 def forecastcheck_data_card():
     """Downloads and pipeline runs for ForecastCheck's countries (Kenya, Rwanda, Senegal, Sierra Leone), one
-    at a time. Which country Demo 5 shows is the launch card's picker (forecastcheck_show_picker)."""
+    at a time. Which country Demo 4 shows is the launch card's picker (forecastcheck_show_picker)."""
     countries = forecastcheck_data.supported()
     country = forecastcheck_data.shown_country()
     with st.container(key="d1launch-fcdata"):
         st.markdown('<div class="d1-launch-k">Country data for ForecastCheck</div>', unsafe_allow_html=True)
         if not countries:
             st.button("Download country data", key="fcdata-none", disabled=True, width="stretch")
-            st.markdown("<div class='d1-launch-note'>Launch Demo 5 first: its code isn't on this Spark yet.</div>",
+            st.markdown("<div class='d1-launch-note'>Launch Demo 4 first: its code isn't on this Spark yet.</div>",
                         unsafe_allow_html=True)
             return
         job = forecastcheck_data.read_status()
@@ -764,9 +771,9 @@ def forecastcheck_data_card():
             st.session_state["fcdata-get"] = next(c for c in (latest, country, countries[0]) if c in countries)
         get = st.pills(
             "Download data for", countries, key="fcdata-get", disabled=running, required=True,
-            format_func=lambda c: forecastcheck_data.title(c) + (" (shown in Demo 5)" if c == country else "")
+            format_func=lambda c: forecastcheck_data.title(c) + (" (shown in Demo 4)" if c == country else "")
             + {"scored": " ✓ scored", "complete": " ✓", "partial": " (partial)"}.get(found.get(c), ""),
-            help="Downloads and pipeline runs, one country at a time; the country Demo 5 shows is chosen above, "
+            help="Downloads and pipeline runs, one country at a time; the country Demo 4 shows is chosen above, "
                  "and can change while they run")
         job = job if job and job.get("country") == get else None
         state = job["state"] if job else ("done" if found.get(get) in ("complete", "scored") else None)
@@ -785,7 +792,7 @@ def forecastcheck_data_card():
                            "stopped part-way starts over when it's run again")
         elif not forecastcheck_data.image_ready():
             st.button(go, key="fcdata-go", type="primary", width="stretch", disabled=True)
-            st.markdown('<div class="d1-launch-note">Launch Demo 5 first: the download runs in its image.</div>',
+            st.markdown('<div class="d1-launch-note">Launch Demo 4 first: the download runs in its image.</div>',
                         unsafe_allow_html=True)
         else:
             dl, full = st.columns(2)
@@ -794,21 +801,21 @@ def forecastcheck_data_card():
                                         "Keeps going if you close this page.")
             full.button("Run pipeline", key="fcdata-setup", type="primary", width="stretch",
                         on_click=start_forecastcheck_download, args=(get, True),
-                        help=f"Scores {forecastcheck_data.title(get)} for Demo 5: downloads what's missing, then "
+                        help=f"Scores {forecastcheck_data.title(get)} for Demo 4: downloads what's missing, then "
                              "runs ForecastCheck's full pipeline (fcstcheck pipeline --full: up to a few hours). "
-                             "Demo 5 keeps showing the country chosen above meanwhile. Keeps going if you close "
+                             "Demo 4 keeps showing the country chosen above meanwhile. Keeps going if you close "
                              "this page.")
         st.markdown(f'<div class="d1-launch-note">{escape(forecastcheck_data.title(get))}\'s forecasts and '
-                    'observations, from the program\'s bucket into Demo 5\'s data folder '
+                    'observations, from the program\'s bucket into Demo 4\'s data folder '
                     '(<code>fcstcheck where</code>), the same as <code>fcstcheck fetch --apply</code>. '
                     f'{escape(here_line(found, forecastcheck_data.title))}</div>', unsafe_allow_html=True)
         if job:
             st.markdown(pipeline_progress(job) if job.get("phase") == "pipeline" else country_progress(job),
                         unsafe_allow_html=True)
             if job.get("phase") == "pipeline" and job["state"] == "done" and get != country:
-                st.button(f"Show {forecastcheck_data.title(get)} in Demo 5", key="fcdata-show", width="stretch",
+                st.button(f"Show {forecastcheck_data.title(get)} in Demo 4", key="fcdata-show", width="stretch",
                           on_click=choose_forecastcheck_country, args=(get,),
-                          help="Switches Demo 5's dashboard to it, like the picker above")
+                          help="Switches Demo 4's dashboard to it, like the picker above")
             with st.expander("Command-line output"):
                 log = forecastcheck_data.pipeline_log(get) if job.get("phase") == "pipeline" else forecastcheck_data.LOG
                 st.code(setup.tail(log, 200) or "no output yet", language=None, height=320)

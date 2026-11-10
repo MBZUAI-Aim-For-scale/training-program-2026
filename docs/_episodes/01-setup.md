@@ -1,5 +1,6 @@
 ---
 title: "Demo 1"
+order: 1
 teaching: 30
 exercises: 15
 questions:
@@ -24,7 +25,7 @@ keypoints:
 
 # Setting Up the AI Weather Forecasting Lab
 
-This lesson documents the complete environmental setup and configuration for AI weather forecasting on DGX Spark infrastructure. It is the single source of truth for all configuration — covering GPU verification, container configuration, runtime options, model-specific environments, FGN integration, and the ROMP/MOMP benchmarking pipeline. It is required reading before [Demo 3: Running AI Weather Forecasts](/training-program-2026/03-forecast) and [Demo 4: AI Weather Model Scorecard](/training-program-2026/04-weather-model).
+This lesson documents the complete environmental setup and configuration for AI weather forecasting on DGX Spark infrastructure. It is the single source of truth for all configuration — covering GPU verification, container configuration, runtime options, model-specific environments, FGN integration, and the ROMP/MOMP benchmarking pipeline. It is required reading before [Demo 3: Run AI Forecast](/training-program-2026/03-forecast) and [Demo 5: Onset Benchmarking](/training-program-2026/04-weather-model).
 
 > #### Prerequisites
 >
@@ -292,9 +293,9 @@ The Demo 1 dashboard is how you set up and start the demos. These steps are for 
 | --- | --- | --- |
 | Demo 1 dashboard | None (runs directly on the Spark) | http://localhost:8500 |
 | Demo 2: Climate Data Tools (CDT) | `cdt` | http://localhost:8504 |
-| Demo 3 | `demo3` | http://localhost:8502 |
-| Demo 4 | `ai_weather` | http://localhost:8503 |
-| Demo 5: ForecastCheck | `forecastcheck` | http://localhost:8505 |
+| Demo 3: Run AI Forecast | `demo3` | http://localhost:8502 |
+| Demo 5: Onset Benchmarking | `ai_weather` | http://localhost:8503 |
+| Demo 4: AfriclimateAI ForecastCheck | `forecastcheck` | http://localhost:8505 |
 
 If you're working on Demo 3 itself, you can also start it by hand:
 
@@ -445,7 +446,7 @@ cd training-program-2026
 ```bash
 cp .env.example .env
 ```
-   Then, in `.env`, set `DEMO_BUCKET=<bucket-name>`: the bucket's name only, with no `gs://` and no folder after it (a `/` in the name stops Demo 4 with *"not a valid Google bucket name"*). Demo 3's saved runs have their own setting, `DEMO3_BUCKET=gs://<bucket-name>/demo3`.
+   Then, in `.env`, set `DEMO_BUCKET=<bucket-name>`: the bucket's name only, with no `gs://` and no folder after it (a `/` in the name stops Demo 5 with *"not a valid Google bucket name"*). Demo 3's saved runs have their own setting, `DEMO3_BUCKET=gs://<bucket-name>/demo3`.
 
 
 4. **Launch the container stack**:
@@ -552,7 +553,7 @@ Models are registered centrally in `BENCHMARK_MODEL_CATALOG` within `config.py`:
 
 > #### Next Steps
 >
-> ROMP installation is complete. For detailed instructions on running benchmarks, configuring experiments, and interpreting results, see [Demo 4: AI Weather Model Scorecard](/training-program-2026/04-weather-model).
+> ROMP installation is complete. For detailed instructions on running benchmarks, configuring experiments, and interpreting results, see [Demo 5: Onset Benchmarking](/training-program-2026/04-weather-model).
 {: .tip}
 
 ## 8. Essential Libraries
@@ -590,9 +591,9 @@ Pinned in `demos/demo4/docker/locks/` for reproducibility. Key versions:
 | `docker run` fails: `unresolvable CDI devices` | Docker started before GPU registry populated | `systemctl --user restart docker`, then `bash demos/demo4/docker/run.sh restart` |
 | `docker run` fails: `failed to fulfil mount request ... libnvidia-...: no such file` | NVIDIA libraries updated since boot | An admin runs `sudo systemctl start nvidia-cdi-refresh.service`, or reboot (section 1.1) |
 | Port 8503 already in use when starting | Another container holds it | `docker ps`, then `docker stop <name>` and `bash demos/demo4/docker/run.sh` |
-| Port 8502 already in use when starting Demo 3 | Another container holds it (ForecastCheck started by hand, without `fcstcheck`, also defaults to 8502) | `docker ps`, then `docker stop <name>`; start Demo 5 with `fcstcheck start` (port 8505) |
+| Port 8502 already in use when starting Demo 3 | Another container holds it (ForecastCheck started by hand, without `fcstcheck`, also defaults to 8502) | `docker ps`, then `docker stop <name>`; start Demo 4 with `fcstcheck start` (port 8505) |
 | A code change doesn't show (with `DEV=1`) | The page keeps imported modules loaded | `bash demos/demo4/docker/run.sh restart` |
-| Browser can't reach `localhost:8503` | The Demo 4 container isn't running | `docker ps -a \| grep ai_weather`; launch Demo 4 from the dashboard, or `bash demos/demo4/docker/run.sh start` |
+| Browser can't reach `localhost:8503` | The Demo 5 container isn't running | `docker ps -a \| grep ai_weather`; launch Demo 5 from the dashboard, or `bash demos/demo4/docker/run.sh start` |
 | Run fails during starting condition download | ECMWF mirrors throttled ("503 Service Unavailable") | Demo 3 tries the other mirror by itself after a few retries; if both fail, try again later |
 | First model run is exceptionally slow | Downloading model weights (~30 min for Atlas CRPS) | Expected behavior; subsequent runs are fast |
 | ROMP run stops after switching tracks | DET and PROB mixed in one run | Set mode in config or with `--mode`, run separately |
@@ -785,6 +786,7 @@ Every benchmark result should document:
 
 After completing this setup, proceed to:
 
-- **[Demo 3: Running AI Weather Forecasts](/training-program-2026/03-forecast)** — Learn how to run AI weather models and generate forecasts.
-- **[Demo 4: AI Weather Model Scorecard](/training-program-2026/04-weather-model)** — Learn systematic benchmarking with ROMP/MOMP.
+- **[Demo 3: Run AI Forecast](/training-program-2026/03-forecast)** — Learn how to run AI weather models and generate forecasts.
+- **[Demo 4: AfriclimateAI ForecastCheck](/training-program-2026/05-ai-forest-test)** — Verify AI models over years of past forecasts with ForecastCheck.
+- **[Demo 5: Onset Benchmarking](/training-program-2026/04-weather-model)** — Learn systematic benchmarking with ROMP/MOMP.
 

@@ -8,9 +8,9 @@ shown and press **Enter**.
 | Demo | What it is | Page address |
 |---|---|---|
 | [Demo 1](#demo-1--set-up-the-spark) | Sets up the Spark and starts the other demos | http://localhost:8500 |
-| [Demo 3](#demo-3--run-your-first-ai-weather-forecast) | Run AI weather models and compare them with observations | http://localhost:8502 |
-| [Demo 4](#demo-4--the-ai-weather-model-scorecard) | Benchmark AI models for rainy-season onset | http://localhost:8503 |
-| [Demo 5](#demo-5--put-your-forecast-to-the-test) | Verify GraphCast and IFS over years of past forecasts (ForecastCheck) | http://localhost:8505 |
+| [Demo 3](#demo-3--run-ai-forecast) | Run AI weather models and compare them with observations | http://localhost:8502 |
+| [Demo 4](#demo-4--africlimateai-forecastcheck) | Verify GraphCast and IFS over years of past forecasts (AfriclimateAI ForecastCheck) | http://localhost:8505 |
+| [Demo 5](#demo-5--onset-benchmarking) | Benchmark AI models for rainy-season onset | http://localhost:8503 |
 | [AI Almanac](#ai-almanac--assess-blend-and-forecast) | Benchmark AI models for rainy-season onset, blend them, and forecast this season | http://localhost:8765 (open it from the dashboard) |
 
 ---
@@ -91,7 +91,7 @@ you close the page, and clicking again skips files you already have.
 
 ### Step 4: Launch a demo
 
-1. Click a demo in the top bar (for example **Demo 3**).
+1. Click a demo in the top bar (for example **3 · Run AI Forecast**).
 2. Read the short summary of what you'll learn.
 3. Click **Launch ↗**. A new browser tab opens, shows the start-up progress, then shows the demo.
    The first launch of each demo also builds it. For Demo 2, click
@@ -130,14 +130,14 @@ To stop a demo, click **Stop** on its page in the dashboard.
 
 ---
 
-## Demo 3 · Run your first AI weather forecast
+## Demo 3 · Run AI Forecast
 
 Demo 3 is a web page where you pick AI weather models, run a forecast for your country, and
 compare it with what was actually observed.
 
 ### Step 1: Open Demo 3
 
-From the dashboard, click **Demo 3** in the top bar, then **Launch ↗**. Or, if Demo 3 is
+From the dashboard, click **3 · Run AI Forecast** in the top bar, then **Launch ↗**. Or, if Demo 3 is
 already running, open **http://localhost:8502** directly.
 
 ### Step 2: Pick your models
@@ -204,22 +204,113 @@ More detail for organisers: [demo3/SETUP.md](demo3/SETUP.md) and [demo3/README.m
 
 ---
 
-## Demo 4 · The AI weather model scorecard
+## Demo 4 · AfriclimateAI ForecastCheck
 
-Demo 4 measures how well AI models forecast the **rainy-season onset**, compared with
+Demo 4 uses **ForecastCheck** to answer the question a forecaster asks before trusting a
+model: over years of past forecasts, how good is it here, in my regions and my seasons? It
+scores GraphCast and IFS against observations, then **calibrates** them (a method called IDR)
+and scores them again. There are two tracks:
+
+- **Heat** (daily maximum temperature): Senegal and Sierra Leone.
+- **Rainfall** (daily rainfall): Kenya and Rwanda.
+
+### Step 1: Open the Demo 4 page
+
+In the dashboard, click **4 · AfriclimateAI ForecastCheck** in the top bar.
+
+If the buttons in Step 2 are greyed out with **Launch Demo 4 first**, click **Launch ↗** once.
+The first launch builds Demo 4. Then come back to this page.
+
+### Step 2: Score your country
+
+Under **Country data for ForecastCheck**:
+
+1. Under **Download data for**, click your country.
+2. Click **Run pipeline**. It downloads your country's forecasts and observations, then scores
+   and calibrates them. Two progress bars show how far it has got.
+
+The pipeline keeps going if you close the page.
+
+Your trainer may have run it already. A country marked **✓ scored** is ready.
+
+### Step 3: Choose the country Demo 4 shows
+
+Above **Launch ↗**, under **Show in Demo 4**, click your country. Each country is marked
+**✓ scored**, **data, no scores yet** or **no data**.
+
+### Step 4: Launch Demo 4
+
+Click **Launch ↗**. A new browser tab opens Demo 4's own dashboard. Or, if Demo 4 is already
+running, open **http://localhost:8505** directly.
+
+### Step 5: Explore the results
+
+1. **Pick an area** at the top of every page: the whole country, a region, or **More regions**
+   for smaller areas.
+2. **Set what to show** in the **Configuration** panel on the left of each chart:
+   - **Forecast & Truth**: the variable (Tmax, Tmin or Rainfall), the models, and the
+     observations to compare against (CHIRTS, ERA5 or CHIRPS).
+   - **Score**: the metric.
+   - **Conditioning**: the year, season, lead time and altitude band.
+3. **Read the pages:**
+
+| Page | What it shows |
+|---|---|
+| **National Overview → Raw Forecast Metrics** | How far off the forecasts are before calibration (MAE, bias, correlation), by lead time, by month, or as a map |
+| **National Overview → Calibrated Forecast Metrics** | The error left after calibration (CRPS) |
+| **Score Decomposition → Miscalibration** | How much error calibration removed. **Below zero means calibration helped** |
+| **Threshold Diagnostics** | Hot-day or heavy-rain warnings: can I trust the probability (reliability), can the model tell event days apart (ROC), and is it worth acting on (cost-loss value) |
+
+**How to read the scores:**
+
+- **Always say which observations you compared against.** CHIRTS and ERA5 can disagree by more
+  than the two models disagree with each other.
+- **Rainfall scores are in mm per hour.** Multiply by 24 for mm per day.
+- **Check the number of events** in the box under each Threshold Diagnostics chart. A curve built
+  on a few events can look excellent by chance.
+
+### Advanced: run from the command line
+
+Everything above also works from the terminal on the Spark, with the `fcstcheck` command:
+
+```bash
+fcstcheck setup senegal    # choose the country, download its data, run the pipeline, start the dashboard
+fcstcheck status           # what's running
+fcstcheck logs pipeline    # follow the pipeline (Ctrl + C stops following, not the run)
+fcstcheck stop             # stop Demo 4's dashboard (your results are kept)
+```
+
+### If something goes wrong
+
+| What you see | What to do |
+|---|---|
+| The buttons say **Launch Demo 4 first** | Click **Launch ↗** once (Step 1), then come back |
+| Demo 4 says there are no scores for your country | Run its pipeline ([Step 2](#step-2-score-your-country)), or wait for the one that's running to finish |
+| New results don't appear in Demo 4 | Refresh the browser. If they still don't appear, type `fcstcheck restart` in the terminal and refresh again |
+| Rainfall values look 24 times too small | They're in mm per hour. Multiply by 24 for mm per day |
+| The page doesn't load | Check that Demo 4 shows **Running** in the dashboard; if not, launch it again |
+| `fcstcheck: command not found` | Log out of the desktop and back in, then try again |
+
+More detail: the [Demo 4 lesson](https://mbzuai-aim-for-scale.github.io/training-program-2026/05-ai-forest-test/).
+
+---
+
+## Demo 5 · Onset Benchmarking
+
+Demo 5 measures how well AI models forecast the **rainy-season onset**, compared with
 observed rainfall and with a simple climatology forecast. Climatology means "onset happens on
 its usual date". A model is only useful if it beats climatology.
 
 ### Step 1: Where the data is (nothing to do)
 
-Demo 4 reads its forecasts and observations from the program's Google bucket,
+Demo 5 reads its forecasts and observations from the program's Google bucket,
 `aim4scale_training_2026`, with the Spark's own key. That's the default, so there's nothing to
 set up. To use another bucket, put `DEMO_BUCKET=<bucket-name>` in `~/training-program-2026/.env`,
-then restart Demo 4 (`docker rm -f ai_weather`, then launch it again from the dashboard).
+then restart Demo 5 (`docker rm -f ai_weather`, then launch it again from the dashboard).
 
-### Step 2: Open Demo 4
+### Step 2: Open Demo 5
 
-From the dashboard, click **Demo 4** in the top bar, then **Launch ↗**. It opens straight
+From the dashboard, click **5 · Onset Benchmarking** in the top bar, then **Launch ↗**. It opens straight
 on the benchmarking page. Or open **http://localhost:8503** and choose **Benchmarking**.
 
 ### Step 3: Choose what to benchmark
@@ -266,7 +357,7 @@ tabs fill in.
 You can also run a benchmark without the web page. On the Spark, type:
 
 ```bash
-docker exec -it ai_weather bash                          # step inside the Demo 4 container
+docker exec -it ai_weather bash                          # step inside the Demo 5 container
 python run_momp.py --mode det --model GraphCast     # one deterministic model
 python run_momp.py --mode prob --model AIFS_ENS     # one ensemble (probabilistic) model
 exit                                                # leave the container
@@ -278,100 +369,9 @@ Results are saved on the Spark in `~/training-program-2026/demos/demo4/ai_weathe
 
 | What you see | What to do |
 |---|---|
-| `DEMO_BUCKET is ... not a valid Google bucket name` | Fix or remove the `DEMO_BUCKET=` line in `~/training-program-2026/.env` ([Step 1](#step-1-where-the-data-is-nothing-to-do)), then restart Demo 4 |
-| `Observation folder not found` or `Region mask not found` | Demo 4 can't reach the bucket. Run `python3 demos/demo1/verify_bucket_access.py` on the Spark and show the result to an organiser |
-| The page doesn't load | Check that Demo 4 shows **Running** in the dashboard; if not, launch it again |
-
----
-
-## Demo 5 · Put your forecast to the test
-
-Demo 5 uses **ForecastCheck** to answer the question a forecaster asks before trusting a
-model: over years of past forecasts, how good is it here, in my regions and my seasons? It
-scores GraphCast and IFS against observations, then **calibrates** them (a method called IDR)
-and scores them again. There are two tracks:
-
-- **Heat** (daily maximum temperature): Senegal and Sierra Leone.
-- **Rainfall** (daily rainfall): Kenya and Rwanda.
-
-### Step 1: Open the Demo 5 page
-
-In the dashboard, click **Demo 5** in the top bar.
-
-If the buttons in Step 2 are greyed out with **Launch Demo 5 first**, click **Launch ↗** once.
-The first launch builds Demo 5. Then come back to this page.
-
-### Step 2: Score your country
-
-Under **Country data for ForecastCheck**:
-
-1. Under **Download data for**, click your country.
-2. Click **Run pipeline**. It downloads your country's forecasts and observations, then scores
-   and calibrates them. Two progress bars show how far it has got.
-
-The pipeline keeps going if you close the page.
-
-Your trainer may have run it already. A country marked **✓ scored** is ready.
-
-### Step 3: Choose the country Demo 5 shows
-
-Above **Launch ↗**, under **Show in Demo 5**, click your country. Each country is marked
-**✓ scored**, **data, no scores yet** or **no data**.
-
-### Step 4: Launch Demo 5
-
-Click **Launch ↗**. A new browser tab opens Demo 5's own dashboard. Or, if Demo 5 is already
-running, open **http://localhost:8505** directly.
-
-### Step 5: Explore the results
-
-1. **Pick an area** at the top of every page: the whole country, a region, or **More regions**
-   for smaller areas.
-2. **Set what to show** in the **Configuration** panel on the left of each chart:
-   - **Forecast & Truth**: the variable (Tmax, Tmin or Rainfall), the models, and the
-     observations to compare against (CHIRTS, ERA5 or CHIRPS).
-   - **Score**: the metric.
-   - **Conditioning**: the year, season, lead time and altitude band.
-3. **Read the pages:**
-
-| Page | What it shows |
-|---|---|
-| **National Overview → Raw Forecast Metrics** | How far off the forecasts are before calibration (MAE, bias, correlation), by lead time, by month, or as a map |
-| **National Overview → Calibrated Forecast Metrics** | The error left after calibration (CRPS) |
-| **Score Decomposition → Miscalibration** | How much error calibration removed. **Below zero means calibration helped** |
-| **Threshold Diagnostics** | Hot-day or heavy-rain warnings: can I trust the probability (reliability), can the model tell event days apart (ROC), and is it worth acting on (cost-loss value) |
-
-**How to read the scores:**
-
-- **Always say which observations you compared against.** CHIRTS and ERA5 can disagree by more
-  than the two models disagree with each other.
-- **Rainfall scores are in mm per hour.** Multiply by 24 for mm per day.
-- **Check the number of events** in the box under each Threshold Diagnostics chart. A curve built
-  on a few events can look excellent by chance.
-
-### Advanced: run from the command line
-
-Everything above also works from the terminal on the Spark, with the `fcstcheck` command:
-
-```bash
-fcstcheck setup senegal    # choose the country, download its data, run the pipeline, start the dashboard
-fcstcheck status           # what's running
-fcstcheck logs pipeline    # follow the pipeline (Ctrl + C stops following, not the run)
-fcstcheck stop             # stop Demo 5's dashboard (your results are kept)
-```
-
-### If something goes wrong
-
-| What you see | What to do |
-|---|---|
-| The buttons say **Launch Demo 5 first** | Click **Launch ↗** once (Step 1), then come back |
-| Demo 5 says there are no scores for your country | Run its pipeline ([Step 2](#step-2-score-your-country)), or wait for the one that's running to finish |
-| New results don't appear in Demo 5 | Refresh the browser. If they still don't appear, type `fcstcheck restart` in the terminal and refresh again |
-| Rainfall values look 24 times too small | They're in mm per hour. Multiply by 24 for mm per day |
+| `DEMO_BUCKET is ... not a valid Google bucket name` | Fix or remove the `DEMO_BUCKET=` line in `~/training-program-2026/.env` ([Step 1](#step-1-where-the-data-is-nothing-to-do)), then restart Demo 5 |
+| `Observation folder not found` or `Region mask not found` | Demo 5 can't reach the bucket. Run `python3 demos/demo1/verify_bucket_access.py` on the Spark and show the result to an organiser |
 | The page doesn't load | Check that Demo 5 shows **Running** in the dashboard; if not, launch it again |
-| `fcstcheck: command not found` | Log out of the desktop and back in, then try again |
-
-More detail: the [Demo 5 lesson](https://mbzuai-aim-for-scale.github.io/training-program-2026/05-ai-forest-test/).
 
 ---
 
@@ -504,10 +504,10 @@ Each `-L` brings one page to your computer:
 | Port | Page |
 |---|---|
 | 8500 | The dashboard |
-| 8502 | Demo 3 |
-| 8503 | Demo 4 |
+| 8502 | Demo 3 (Run AI Forecast) |
+| 8503 | Demo 5 (Onset Benchmarking) |
 | 8504 | Demo 2 (CDT) |
-| 8505 | Demo 5 |
+| 8505 | Demo 4 (AfriclimateAI ForecastCheck) |
 | 8765 | AI Almanac |
 
 ### Step 2: Start the dashboard
