@@ -34,9 +34,9 @@ ssh -N -L 8500:127.0.0.1:8500 <you>@<country>-spark
 |------|------|------|----------------|
 | [1](demos/demo1/README.md) | Spark setup + dashboard | 8500 | `spark-setup dashboard` |
 | 2 | Climate Data Tools (CDT) | 8504 | `bash demos/demo2/docker/run.sh` |
-| [3](demos/demo3/README.md) | AI forecast lab | 8502 | `bash demos/demo3/docker/run.sh` |
-| [4](demos/demo4/README.md) | Forecasting & benchmarking | 8503 | `bash demos/demo4/docker/run.sh start` |
-| [5](docs/_episodes/05-AI-Forest-test.md) | ForecastCheck | 8505 | `fcstcheck setup <country>` |
+| [3](demos/demo3/README.md) | Run AI Forecast | 8502 | `bash demos/demo3/docker/run.sh` |
+| [4](docs/_episodes/05-AI-Forest-test.md) | AfriclimateAI ForecastCheck (code in `demos/demo5`) | 8505 | `fcstcheck setup <country>` |
+| [5](demos/demo4/README.md) | Onset Benchmarking (code in `demos/demo4`) | 8503 | `bash demos/demo4/docker/run.sh start` |
 | AI Almanac | Assess, blend and forecast with AI weather models | 8765 | the dashboard's **AI Almanac** tab (`~/ai-almanac`) |
 
 Other setup commands: `spark-setup --help`. To stop everything:
@@ -53,18 +53,18 @@ Other setup commands: `spark-setup --help`. To stop everything:
 │   ├── intro-to-spark/     Intro to DGX Spark: background docs, Africa-focused labs 00-13 in five topic folders, docker/
 │   ├── demo1/              Spark setup: dashboard, spark_setup.py, demos.toml (the demo list), country_data.py
 │   ├── demo2/              CDT (Climate Data Tools) container
-│   ├── demo3/              AI forecast lab (Streamlit app + runners)
-│   ├── demo4/              forecasting & benchmarking: ai_weather package, apps/, ui/, docker/, tests/
-│   └── demo5/              ForecastCheck launcher (run.sh; its code is cloned into demo5/forecastcheck/)
+│   ├── demo3/              Demo 3, Run AI Forecast (Streamlit app + runners)
+│   ├── demo4/              Demo 5, Onset Benchmarking: ai_weather package, apps/, ui/, docker/, tests/
+│   └── demo5/              Demo 4, AfriclimateAI ForecastCheck launcher (run.sh; its code is cloned into demo5/forecastcheck/)
 ├── docs/                   lesson site (GitHub Pages); lessons in docs/_episodes/
 ├── apps/onset_blending/    onset blending pipeline (run_blending.py)
 ├── data/ROMP_OUTPUT/       sample benchmark results
-├── tests/                  repository-level tests (Demo 4 layout, country benchmarks)
-├── run_momp.py             Demo 4 benchmark CLI
-├── run_app.py              Demo 4 UI without Docker (streamlit)
+├── tests/                  repository-level tests (demos/demo4 layout, country benchmarks)
+├── run_momp.py             Demo 5 (onset) benchmark CLI
+├── run_app.py              Demo 5 (onset) UI without Docker (streamlit)
 ├── run.sh, docker-compose.yml, config.py
-│                           shims that forward to Demo 4 (demos/demo4)
+│                           shims that forward to Demo 5 (demos/demo4)
 ├── pyproject.toml, setup.py, uv.lock, requirements.txt
-│                           the ai_weather package (Demo 4's code)
+│                           the ai_weather package (Demo 5's code)
 └── models/, references/, reports/   placeholders
 ```
