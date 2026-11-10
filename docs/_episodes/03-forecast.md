@@ -486,4 +486,4 @@ DEMO3_IFS_SOURCE=azure bash docker/run.sh
 
 ## Next Steps
 
-After completing this demo, proceed to **Demo 4** (AfriclimateAI ForecastCheck) to verify AI models over years of past forecasts, then **Demo 5** (Onset Benchmarking) to learn systematic benchmarking of AI weather models against local observations for rainy season onset detection.
+After completing this demo, proceed to **Demo 4** (AfriClimate AI ForecastCheck) to verify AI models over years of past forecasts, then **Demo 5** (Onset Benchmarking) to learn systematic benchmarking of AI weather models against local observations for rainy season onset detection.

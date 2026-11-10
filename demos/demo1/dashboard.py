@@ -45,7 +45,7 @@ DEMOS = [
      "setup": "demo3"},
     # Demos 4 and 5 swapped places: their code, containers and lessons keep their old numbers
     # (demos/demo5 + 05-*.md is Demo 4, demos/demo4 + 04-*.md is Demo 5), so `lesson` names the file.
-    {"n": 4, "title": "AfriclimateAI ForecastCheck",
+    {"n": 4, "title": "AfriClimate AI ForecastCheck",
      "about": "Evaluate the forecasts you ran in Demo 3 against different metrics.",
      "setup": "demo5", "lesson": 5},
     {"n": 5, "title": "Onset Benchmarking",

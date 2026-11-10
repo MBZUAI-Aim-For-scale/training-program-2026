@@ -82,7 +82,7 @@ port = 8503
 # ForecastCheck's default 8502 (Demo 3's): demos/demo5/run.sh passes this one.
 [[demo]]
 id = "demo5"
-title = "Demo 4 · AfriclimateAI ForecastCheck"
+title = "Demo 4 · AfriClimate AI ForecastCheck"
 image = "forecastcheck"
 container = "forecastcheck"
 context = "demos/demo5/forecastcheck"

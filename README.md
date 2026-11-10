@@ -35,7 +35,7 @@ ssh -N -L 8500:127.0.0.1:8500 <you>@<country>-spark
 | [1](demos/demo1/README.md) | Spark setup + dashboard | 8500 | `spark-setup dashboard` |
 | 2 | Climate Data Tools (CDT) | 8504 | `bash demos/demo2/docker/run.sh` |
 | [3](demos/demo3/README.md) | Run AI Forecast | 8502 | `bash demos/demo3/docker/run.sh` |
-| [4](docs/_episodes/05-AI-Forest-test.md) | AfriclimateAI ForecastCheck (code in `demos/demo5`) | 8505 | `fcstcheck setup <country>` |
+| [4](docs/_episodes/05-AI-Forest-test.md) | AfriClimate AI ForecastCheck (code in `demos/demo5`) | 8505 | `fcstcheck setup <country>` |
 | [5](demos/demo4/README.md) | Onset Benchmarking (code in `demos/demo4`) | 8503 | `bash demos/demo4/docker/run.sh start` |
 | AI Almanac | Assess, blend and forecast with AI weather models | 8765 | the dashboard's **AI Almanac** tab (`~/ai-almanac`) |
 
@@ -55,7 +55,7 @@ Other setup commands: `spark-setup --help`. To stop everything:
 │   ├── demo2/              CDT (Climate Data Tools) container
 │   ├── demo3/              Demo 3, Run AI Forecast (Streamlit app + runners)
 │   ├── demo4/              Demo 5, Onset Benchmarking: ai_weather package, apps/, ui/, docker/, tests/
-│   └── demo5/              Demo 4, AfriclimateAI ForecastCheck launcher (run.sh; its code is cloned into demo5/forecastcheck/)
+│   └── demo5/              Demo 4, AfriClimate AI ForecastCheck launcher (run.sh; its code is cloned into demo5/forecastcheck/)
 ├── docs/                   lesson site (GitHub Pages); lessons in docs/_episodes/
 ├── apps/onset_blending/    onset blending pipeline (run_blending.py)
 ├── data/ROMP_OUTPUT/       sample benchmark results
