@@ -153,7 +153,7 @@ searching from mid-February and mid-August for the Andes' two seasons (`onset.RE
 
 Step 2 takes up to 4 models. The date picker offers the start dates all of them can use (if
 none is common, every date is offered and models that can't start are left out), the lead time
-goes up to the shortest maximum among them, and the member count applies to the ensemble
+is typed in whole days, with no upper limit (past 15 days it warns that skill may degrade), and the member count applies to the ensemble
 models, each capped at its own limit. One button then loads saved runs (any member count),
 downloads runs from the shared bucket, and runs the rest on the Spark one after another, never
 two at once.
