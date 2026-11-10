@@ -114,7 +114,7 @@ To start Demo 3 from the terminal instead, see [Extra: Run Demo 3 from the Termi
 ### 2.1 Interactive Workflow
 
 1. **Models**: pick up to four. Hover over a model's card for its Spark runtime and what it lacks (e.g., NeuralGCM has no 2 m temperature); **Model details** shows what each needs on the Spark.
-2. **Forecast setup**: the start date (only dates every chosen model can start from are offered), the hour (00Z or 12Z), the lead time (up to the shortest maximum among the chosen models) and, for ensemble models, the number of members.
+2. **Forecast setup**: the start date (only dates every chosen model can start from are offered), the hour (00Z or 12Z), the lead time (in whole days, typed into the box, with no upper limit; past 15 days it warns that the models may lose skill) and, for ensemble models, the number of members.
 3. **Region and use case**: a country (or a custom box), then **Heat**, **Precipitation** or **Onset**.
 4. **Run**: one button loads the saved runs (from this Spark or the shared bucket) and runs the rest on the Spark one after another; its label says which, e.g. *Load 1 saved run and run 2 models one after another*. A table shows each model's progress.
 5. **Results**: how each forecast was made (load, inputs, run, save, with times), event movies against observations (or, for Onset, onset maps and movies), a time-series comparison of every loaded model, and forecast maps with a NetCDF download.

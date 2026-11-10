@@ -86,7 +86,7 @@ class Model:
     kind: str                     # "deterministic" | "ensemble"
     init_source: str
     env: str                      # runner environment name
-    max_lead_days: int
+    max_lead_days: int            # its usual range (the lead box has no upper limit)
     default_members: int = 1
     member_cost: str = ""         # time and file size per member for 10 days on the Spark
     slow: bool = False            # suggest loading a saved run in class
@@ -224,8 +224,6 @@ def check(m: Model, init, lead_days: int, members: int, box, region_name: str,
         elif not wave_ready(init.date()):
             out.append(("error", f"The ocean-wave inputs {m.name} needs for {init:%-d %b %Y} aren't in "
                                  "the shared bucket yet (they are being copied from DSI)."))
-    if lead_days > m.max_lead_days:
-        out.append(("error", f"{m.name} forecasts at most {m.max_lead_days} days ahead."))
     if m.kind == "deterministic" and members != 1:
         out.append(("error", f"{m.name} is deterministic: it gives one forecast, not an ensemble."))
     need = USE_CASE_NEEDS.get(use_case)

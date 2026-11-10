@@ -332,11 +332,10 @@ else:
 init_day = c1.date_input("Start date (UTC)", value=default_init, min_value=init_lo, max_value=init_hi,
                          key=f"init_{'_'.join(sorted(model_keys))}", help=date_help)
 init_hour = c2.selectbox("Hour", [0, 12], format_func=lambda h: f"{h:02d}Z")
-max_lead = min(m.max_lead_days for m in models)
-lead_days = c3.slider("Lead time (days)", 1, max_lead, min(10, max_lead),
-                      help=f"Up to {max_lead} days" + (", the most every selected model can do"
-                                                       if max_lead < max(m.max_lead_days for m in models)
-                                                       else ""))
+# (No upper limit: a longer lead is just more model steps. Past LEAD_WARN_DAYS it warns, below.)
+LEAD_WARN_DAYS = 15
+lead_days = int(c3.number_input("Lead time (days)", min_value=1, value=10, step=1, format="%d",
+                                help=f"Whole days, 1 or more. Past {LEAD_WARN_DAYS} days the models may lose skill."))
 ens_models = [m for m in models if m.kind == "ensemble"]
 if ens_models:
     members = int(c4.number_input("Ensemble members", 1, None,
@@ -381,6 +380,10 @@ use_case = st.segmented_control(
          "For both: a movie of the forecast next to the observations, and a map of where the event "
          "went.  \n**Onset:** when the rainy season starts, by a definition you choose (ICPAC, "
          "Moron–Robertson), from observed rain so far plus the forecast.") or "Precipitation"
+
+if lead_days > LEAD_WARN_DAYS:
+    st.warning(f"The models may experience skill degradation after {LEAD_WARN_DAYS} days of lead time: "
+               f"this {lead_days}-day forecast runs, but treat the days past {LEAD_WARN_DAYS} with caution.")
 
 for m in models:
     for level, msg in catalog.check(m, init, lead_days, runs.members_for(m, members), box, region_name, use_case):
