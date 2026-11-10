@@ -32,7 +32,7 @@ class LauncherNamesTests(unittest.TestCase):
         cards = {d["n"]: d for d in demos()}
         self.assertEqual([d["n"] for d in demos()], [1, 2, 3, 4, 5, "almanac"])
         expected = {2: ("Climate Data Tools", None), 3: ("Run AI Forecast", "demo3"),
-                    4: ("AfriclimateAI ForecastCheck", "demo5"), 5: ("Onset Benchmarking", "demo4")}
+                    4: ("AfriClimate AI ForecastCheck", "demo5"), 5: ("Onset Benchmarking", "demo4")}
         for n, (title, setup) in expected.items():
             self.assertEqual(cards[n]["title"], title)
             self.assertEqual(cards[n].get("setup"), setup)

@@ -295,7 +295,7 @@ The Demo 1 dashboard is how you set up and start the demos. These steps are for 
 | Demo 2: Climate Data Tools (CDT) | `cdt` | http://localhost:8504 |
 | Demo 3: Run AI Forecast | `demo3` | http://localhost:8502 |
 | Demo 5: Onset Benchmarking | `ai_weather` | http://localhost:8503 |
-| Demo 4: AfriclimateAI ForecastCheck | `forecastcheck` | http://localhost:8505 |
+| Demo 4: AfriClimate AI ForecastCheck | `forecastcheck` | http://localhost:8505 |
 
 If you're working on Demo 3 itself, you can also start it by hand:
 
@@ -787,6 +787,6 @@ Every benchmark result should document:
 After completing this setup, proceed to:
 
 - **[Demo 3: Run AI Forecast](/training-program-2026/03-forecast)** — Learn how to run AI weather models and generate forecasts.
-- **[Demo 4: AfriclimateAI ForecastCheck](/training-program-2026/05-ai-forest-test)** — Verify AI models over years of past forecasts with ForecastCheck.
+- **[Demo 4: AfriClimate AI ForecastCheck](/training-program-2026/05-ai-forest-test)** — Verify AI models over years of past forecasts with ForecastCheck.
 - **[Demo 5: Onset Benchmarking](/training-program-2026/04-weather-model)** — Learn systematic benchmarking with ROMP/MOMP.
 

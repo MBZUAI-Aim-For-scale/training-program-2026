@@ -9,7 +9,7 @@ shown and press **Enter**.
 |---|---|---|
 | [Demo 1](#demo-1--set-up-the-spark) | Sets up the Spark and starts the other demos | http://localhost:8500 |
 | [Demo 3](#demo-3--run-ai-forecast) | Run AI weather models and compare them with observations | http://localhost:8502 |
-| [Demo 4](#demo-4--africlimateai-forecastcheck) | Verify GraphCast and IFS over years of past forecasts (AfriclimateAI ForecastCheck) | http://localhost:8505 |
+| [Demo 4](#demo-4--africlimate-ai-forecastcheck) | Verify GraphCast and IFS over years of past forecasts (AfriClimate AI ForecastCheck) | http://localhost:8505 |
 | [Demo 5](#demo-5--onset-benchmarking) | Benchmark AI models for rainy-season onset | http://localhost:8503 |
 | [AI Almanac](#ai-almanac--assess-blend-and-forecast) | Benchmark AI models for rainy-season onset, blend them, and forecast this season | http://localhost:8765 (open it from the dashboard) |
 
@@ -204,7 +204,7 @@ More detail for organisers: [demo3/SETUP.md](demo3/SETUP.md) and [demo3/README.m
 
 ---
 
-## Demo 4 · AfriclimateAI ForecastCheck
+## Demo 4 · AfriClimate AI ForecastCheck
 
 Demo 4 uses **ForecastCheck** to answer the question a forecaster asks before trusting a
 model: over years of past forecasts, how good is it here, in my regions and my seasons? It
@@ -216,7 +216,7 @@ and scores them again. There are two tracks:
 
 ### Step 1: Open the Demo 4 page
 
-In the dashboard, click **4 · AfriclimateAI ForecastCheck** in the top bar.
+In the dashboard, click **4 · AfriClimate AI ForecastCheck** in the top bar.
 
 If the buttons in Step 2 are greyed out with **Launch Demo 4 first**, click **Launch ↗** once.
 The first launch builds Demo 4. Then come back to this page.
@@ -507,7 +507,7 @@ Each `-L` brings one page to your computer:
 | 8502 | Demo 3 (Run AI Forecast) |
 | 8503 | Demo 5 (Onset Benchmarking) |
 | 8504 | Demo 2 (CDT) |
-| 8505 | Demo 4 (AfriclimateAI ForecastCheck) |
+| 8505 | Demo 4 (AfriClimate AI ForecastCheck) |
 | 8765 | AI Almanac |
 
 ### Step 2: Start the dashboard
