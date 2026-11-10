@@ -5,13 +5,12 @@ cdtUserInformation <- function(){
         userForms <- cdtUserInfo()
         if(!is.null(userForms)){
             userForms$created <- format(as.POSIXct(Sys.time()), '%Y%m%d%H%M%S', tz = 'UTC')
-            if(testConnection()){
-                sendForms <- TRUE
-            }else{
-                userForms$sent <- FALSE
-                saveRDS(userForms, userInfoFile)
-                sendForms <- FALSE
-            }
+            ## Saved now, before sending: the send below runs in a background future that
+            ## on.exit() stops as soon as this function returns, so it often never got to
+            ## save the file, and the form came back on every start. (Training program fix.)
+            userForms$sent <- FALSE
+            saveRDS(userForms, userInfoFile)
+            sendForms <- testConnection()
         }else{
             sendForms <- FALSE
         }
