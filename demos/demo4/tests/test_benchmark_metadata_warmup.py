@@ -67,7 +67,8 @@ class BenchmarkMetadataWarmupTests(unittest.TestCase):
             return {"dates": [(year, 5, day) for year in range(first, last + 1) for day in range(1, 29)],
                     "horizons": {year: 60 for year in range(first, last + 1)}, "failures": []}
 
-        with patch.object(self.page, "CONFIG_BENCHMARK_MODEL_CATALOG", catalog), \
+        with patch.object(self.page.config, "benchmark_country_sources", return_value={
+                 "models": catalog, "observations": {}, "available": True, "reason": ""}), \
              patch.object(self.page, "inspect_model_temporal_coverage", side_effect=inspect), \
              patch.object(self.page.st, "dataframe", side_effect=table), \
              patch.object(self.page, "detect_benchmark_models", return_value=rows), \

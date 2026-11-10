@@ -154,6 +154,30 @@ class CountryDataFirstTests(unittest.TestCase):
         self.cfg.glob.__globals__["gcs_fs"] = unreachable
         self.assertEqual(self.cfg.glob(pattern), [self.uri])
 
+    def test_runtime_listing_recovers_after_startup_timeout(self):
+        namespace = self.cfg.glob.__globals__
+        namespace["_REMOTE_PROBE_UNAVAILABLE"] = True
+        listed = self.uri.removeprefix("gs://")
+        namespace["gcs_fs"] = lambda: SimpleNamespace(glob=lambda pattern: [listed], exists=lambda path: True)
+        self.assertEqual(self.cfg.glob(self.uri.rsplit("/", 1)[0] + "/*.nc"), [self.uri])
+        self.assertTrue(self.cfg.exists(self.uri.replace("2020", "2021")))
+
+    def test_strict_listing_preserves_bucket_errors_without_a_local_copy(self):
+        def denied():
+            raise PermissionError("403 access denied")
+        self.cfg.glob.__globals__["gcs_fs"] = denied
+        with self.assertRaisesRegex(PermissionError, "403 access denied"):
+            self.cfg.glob(self.uri.replace("Kenya", "Peru"), raise_errors=True)
+        self.assertEqual(self.cfg.glob(self.uri.rsplit("/", 1)[0] + "/*.nc", raise_errors=True), [self.uri])
+
+    def test_recursive_listing_finds_country_copy_after_startup_timeout(self):
+        namespace = self.cfg.glob.__globals__
+        namespace["_REMOTE_PROBE_UNAVAILABLE"] = True
+        def unreachable():
+            raise OSError("no network")
+        namespace["gcs_fs"] = unreachable
+        self.assertEqual(self.cfg.glob(self.uri.rsplit("/", 1)[0] + "/**/*.nc"), [self.uri])
+
     def test_folder_counts_as_available_from_the_copy_when_the_bucket_is_down(self):
         self.assertEqual(self.cfg.DATA_SOURCES.get("observations"), "country data")
         self.assertEqual(self.cfg.OBS_DIR, "gs://weather-test-data/CHIRPSv3_Country_0p25deg/Kenya")

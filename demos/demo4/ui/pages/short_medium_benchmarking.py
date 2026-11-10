@@ -657,7 +657,7 @@ def render_benchmark_figure(path_str: str) -> None:
 # ======================================================================
 def _extract_time_range_from_nc(nc_path: str):
     try:
-        with xr.open_dataset(nc_path, decode_cf=False, decode_times=False) as ds:
+        with config.open_dataset(nc_path, decode_cf=False, decode_times=False) as ds:
             time_name = next(
                 (str(name) for name in ds.coords if "time" in str(name).lower() or str(name).lower() in {"t", "date"}),
                 None
@@ -670,7 +670,7 @@ def _extract_time_range_from_nc(nc_path: str):
                 return None, None
             
             try:
-                with xr.open_dataset(nc_path, decode_cf=True, decode_times=True) as ds_decoded:
+                with config.open_dataset(nc_path, decode_cf=True, decode_times=True) as ds_decoded:
                     da = ds_decoded[time_name]
                     min_t = pd.Timestamp(da.values.min()).date()
                     max_t = pd.Timestamp(da.values.max()).date()
@@ -719,13 +719,13 @@ def _detect_model_data_date_range(model_dir: str):
     model_dir = str(model_dir)
     remote = config.is_uri(model_dir)
     try:
-        if not config.exists(model_dir):
-            return None, None
         if remote:
-            nc_files = config.glob(model_dir.rstrip("/") + "/**/*.nc")
+            nc_files = config.glob(model_dir.rstrip("/") + "/**/*.nc", raise_errors=True)
         else:
             nc_files = [str(p) for p in Path(model_dir).rglob("*.nc")]
-    except Exception:
+    except Exception as error:
+        if remote:
+            raise RuntimeError(f"Could not list forecast data at {model_dir}: {error}" + config._auth_hint(error)) from error
         return None, None
 
     if not nc_files:
@@ -2527,10 +2527,7 @@ def _benchmark_inventory_key(country, ground_truth):
 
 
 def _benchmark_sources(country, ground_truth="CHIRPS"):
-    sources = config.benchmark_country_sources(country, ground_truth)
-    if country == "Ethiopia" and getattr(config, "region", "Ethiopia") == "Ethiopia":
-        sources["models"] = {key: dict(meta) for key, meta in CONFIG_BENCHMARK_MODEL_CATALOG.items()}
-    return sources
+    return config.benchmark_country_sources(country, ground_truth)
 
 
 def _coverage_label(name: str) -> str:
@@ -3270,10 +3267,6 @@ def _load_benchmark_inventory(ground_truth, country=None):
     import time
 
     country = country or getattr(config, "region", "Ethiopia")
-    if country == "Ethiopia" and getattr(config, "region", "Ethiopia") == "Ethiopia":
-        return {"ground_truth": ground_truth, "country": country,
-                "models": detect_benchmark_models(), "catalog": CONFIG_BENCHMARK_MODEL_CATALOG,
-                "observation_years": available_observation_years(ground_truth), "loaded_at": time.time()}
     sources = config.benchmark_country_sources(country, ground_truth)
     return {"ground_truth": ground_truth, "country": country, "catalog": sources["models"],
             "models": detect_benchmark_models(catalog=sources["models"]) if sources["available"] else [],
@@ -3487,6 +3480,7 @@ def page() -> None:
                  disabled=st.session_state.get("benchmark_inventory_task") is not None
                  or st.session_state.get("benchmark_coverage_task") is not None,
                  help="Rescan forecast files, metadata and observation years when inputs change."):
+        config.reset_gcs_connection()
         inventory_cache.clear()
         st.session_state.pop("benchmark_coverage_cache", None)
     inventory_key = _benchmark_inventory_key(benchmark_coverage, ground_truth)
@@ -3501,8 +3495,12 @@ def page() -> None:
             render_benchmark_run_controls()
         return
     if inventory.get("error"):
-        st.error(f"Could not load benchmark inputs: {inventory['error']}")
+        error = str(inventory["error"]).strip()
+        st.error(f"Could not load benchmark inputs: {error.splitlines()[-1]}")
+        with st.expander("Technical details"):
+            st.code(error, language="text")
         if st.button("Retry benchmark inputs", key="benchmark_retry_inventory"):
+            config.reset_gcs_connection()
             inventory_cache.pop(inventory_key, None)
             st.rerun()
         if st.session_state.get("benchmark_active_job") is not None:

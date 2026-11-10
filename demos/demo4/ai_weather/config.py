@@ -270,13 +270,19 @@ def _auth_token():
 def _auth_hint(err: Exception) -> str:
     t = str(err)
     if "401" in t or "Anonymous" in t or "403" in t or "credentials" in t.lower():
-        return (" No Google login was found and the bucket is not public. Run `gcloud auth login` "
-                "(or `gcloud auth application-default login`) on this machine, or set "
-                "GOOGLE_APPLICATION_CREDENTIALS.")
+        return (" Google Cloud credentials may be missing or expired, or the account may lack bucket access. "
+                "Run `gcloud auth login` (or `gcloud auth application-default login`) on this machine "
+                "with an account that can read the bucket, then click Retry benchmark inputs.")
     return ""
 
 
 _fs_cache = [0, 0.0, None]
+
+
+def reset_gcs_connection():
+    """Re-read credentials on the next explicit retry, including a renewed gcloud login."""
+    _token_cache[:] = [0.0, ""]
+    _fs_cache[:] = [0, 0.0, None]
 
 
 def gcs_fs():
@@ -288,7 +294,7 @@ def gcs_fs():
         or time.time() - _fs_cache[1] > 1500
     ):
         import gcsfs
-        _fs_cache[:] = [current_pid, time.time(), gcsfs.GCSFileSystem(token=_auth_token())]
+        _fs_cache[:] = [current_pid, time.time(), gcsfs.GCSFileSystem(token=_auth_token(), skip_instance_cache=True)]
     return _fs_cache[2]
 
 
@@ -324,8 +330,6 @@ def exists(path: Any) -> bool:
     if is_uri(path_str):
         if local_copy(path_str):
             return True
-        if globals().get("_REMOTE_PROBE_UNAVAILABLE"):  # (the bucket didn't answer at start-up)
-            return False
         try:
             return gcs_fs().exists(_strip(path_str))
         except Exception:
@@ -333,24 +337,22 @@ def exists(path: Any) -> bool:
     return Path(path_str).expanduser().exists()
 
 
-def glob(pattern: str) -> List[str]:
+def glob(pattern: str, *, raise_errors: bool = False) -> List[str]:
     """gs:// matches from the bucket's listing; this Spark's country data only if the bucket
     can't be listed (as gs:// paths too, which open_dataset then reads from the copy)."""
     if is_uri(pattern):
         try:
-            # (The bucket didn't answer at start-up: list the copy at once, instead of a minute of
-            # gcsfs retries per call.)
-            if globals().get("_REMOTE_PROBE_UNAVAILABLE"):
-                raise OSError("the bucket can't be reached")
+            # Startup probes are best effort; explicit discovery must retry the bucket.
             return sorted("gs://" + m for m in gcs_fs().glob(_strip(pattern)))
         except Exception:
             local = _country_data_path(pattern)
-            if local is None:
-                return []
             import glob as _glob
             bucket = _strip(pattern).partition("/")[0]
-            return sorted(f"gs://{bucket}/" + str(Path(m).relative_to(COUNTRY_DATA_DIR))
-                          for m in _glob.glob(str(local)) if Path(m).is_file())
+            matches = sorted(f"gs://{bucket}/" + str(Path(m).relative_to(COUNTRY_DATA_DIR))
+                             for m in _glob.glob(str(local), recursive=True) if Path(m).is_file()) if local else []
+            if matches or not raise_errors:
+                return matches
+            raise
     import glob as _glob
     return sorted(_glob.glob(str(pattern)))
 

@@ -54,8 +54,8 @@ class RuntimeStorageExistenceTests(unittest.TestCase):
     def test_existing_country_file_is_found_despite_startup_timeout(self):
         fs, config, _, inventory = self.runtime()
         fs.exists.return_value = True
-        self.assertFalse(config.exists(self.folder + "/" + self.pattern.format(2000)))
-        fs.exists.assert_not_called()
+        self.assertTrue(config.exists(self.folder + "/" + self.pattern.format(2000)))
+        fs.exists.reset_mock()
         config.exists.reset_mock()
         self.assertEqual(inventory((2000,), model_dir=self.folder, file_pattern=self.pattern), (2000,))
         fs.exists.assert_called_once_with(
