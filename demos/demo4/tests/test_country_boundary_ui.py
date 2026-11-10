@@ -23,7 +23,7 @@ class CountryBoundaryUITests(unittest.TestCase):
         return AppTest.from_string(
             'import streamlit as st\n'
             'from ui.pages.short_medium_benchmarking import render_country_boundaries\n'
-            'country = st.selectbox("Country", ["Peru", "Kenya"], key="country")\n'
+            'country = st.selectbox("Country", ["Peru", "Kenya", "Ethiopia"], key="country")\n'
             'st.number_input("Threshold", value=1, key="threshold")\n'
             'render_country_boundaries(country)\n', default_timeout=5)
 
@@ -69,6 +69,72 @@ class CountryBoundaryUITests(unittest.TestCase):
             self.assertEqual(app.button(key="benchmark_boundary_download_PER").label, "Retry boundary download")
             self.assertEqual(threads, ["dashboard-task"])
 
+    def test_ethiopia_download_control_uses_shared_country_flow(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(self.page, "EXTERNAL_DATA_DIR", Path(folder)), \
+             patch.object(self.page, "download_country_boundaries", return_value={
+                 "paths": {}, "errors": {"ADM0": "Provider unavailable"}}) as worker:
+            app = self.app().run()
+            app.selectbox(key="country").set_value("Ethiopia").run()
+            self.assertFalse(app.exception)
+            worker.assert_not_called()
+            app.button(key="benchmark_boundary_download_ETH").click().run()
+            task = app.session_state["benchmark_boundary_tasks"].get("Ethiopia")
+            if task is not None:
+                self.assertTrue(task.done.wait(5))
+                app.run()
+            self.assertFalse(app.exception)
+            worker.assert_called_once_with("Ethiopia", Path(folder) / "boundaries")
+            self.assertEqual(app.button(key="benchmark_boundary_download_ETH").label,
+                             "Retry boundary download")
+
+    def test_ethiopia_boundaries_and_subregions_never_use_preloaded_shapefile(self):
+        import numpy as np
+        import xarray as xr
+
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(self.page, "EXTERNAL_DATA_DIR", Path(folder)), \
+             patch.object(self.page, "_map_load_ethiopia_shapefile", create=True,
+                          side_effect=AssertionError("Preloaded shapefile used")), \
+             patch.object(self.page, "climatology_boundary_path",
+                          side_effect=AssertionError("Preloaded outline used")):
+            self.assertIsNone(self.page._country_boundary_path("Ethiopia"))
+            self.assertIsNone(self.page._map_load_admin_shapefile("Ethiopia", "Admin1"))
+            root = Path(folder) / "boundaries/ETH"
+            root.mkdir(parents=True)
+            for level, column, name in (("ADM0", "shapeName", "Ethiopia"),
+                                        ("ADM1", "Admin1", "Oromia"),
+                                        ("ADM2", "Admin2", "Arsi")):
+                gpd.GeoDataFrame({column: [name]}, geometry=[box(38, 7, 40, 9)],
+                                 crs="EPSG:4326").to_file(root / f"{level}.geojson", driver="GeoJSON")
+            self.page.map_admin_options.clear()
+            self.page.map_admin_bounds.clear()
+            self.assertEqual(self.page._country_boundary_path("Ethiopia"), root / "ADM0.geojson")
+            self.assertEqual(self.page.map_admin_options("Admin1", "Ethiopia"), ["Oromia"])
+            self.assertEqual(self.page.map_admin_options("Admin2", "Ethiopia"), ["Arsi"])
+            self.assertEqual(self.page.map_admin_bounds("Admin2", "Arsi", "Ethiopia"), (38, 7, 40, 9))
+            self.assertIsNotNone(self.page._get_admin_subset("Admin2", "Arsi", "Ethiopia"))
+            data = xr.DataArray(np.ones((4, 4)), dims=("lat", "lon"),
+                                coords={"lat": [6, 7.5, 8.5, 10], "lon": [37, 38.5, 39.5, 41]},
+                                attrs={"benchmark_country": "Ethiopia"})
+            forecast = Path(folder) / "ethiopia_metrics.nc"
+            data.to_dataset(name="mean_mae").to_netcdf(forecast)
+            with patch.object(self.page, "apply_jjas_mask", side_effect=lambda value, *_: value):
+                loaded = self.page.load_map_da_cached(str(forecast), "Mean Absolute Error",
+                                                      "Days 1–15", country="Ethiopia")
+            self.assertIsNotNone(loaded)
+            self.assertTrue(np.isnan(loaded.values[0, 0]))
+            self.assertEqual(loaded.values[1, 1], 1)
+            figure = self.page.plot_map(data, "Ethiopia", country="Ethiopia")
+            self.assertIsNotNone(figure)
+            try:
+                self.assertIsNotNone(figure.axes[0].images[0].get_clip_path())
+                mask = np.ma.getmaskarray(figure.axes[0].images[0].get_array())
+                self.assertTrue(mask[0, 0])
+                self.assertFalse(mask[1, 1])
+            finally:
+                self.page.plt.close(figure)
+
     def test_country_subregion_names_bounds_and_map_clipping(self):
         import numpy as np
         import xarray as xr
@@ -109,20 +175,22 @@ class CountryBoundaryUITests(unittest.TestCase):
             captured.update(env)
             return 0, False
 
-        with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
-            runner = root / "run_momp.py"
-            runner.touch()
-            boundary = root / "boundaries/PER/ADM0.geojson"
-            boundary.parent.mkdir(parents=True)
-            boundary.write_text('{}')
-            with patch.object(self.page, "EXTERNAL_DATA_DIR", root), \
-                 patch.object(self.page, "PROJECT_ROOT", root), \
-                 patch.object(self.page, "_locate_run_momp", return_value=runner), \
-                 patch.object(self.page, "select_runtime_python", return_value=sys.executable), \
-                 patch.object(self.page, "check_runtime_python", return_value="ready"), \
-                 patch.object(self.page, "_spawn_no_fork", side_effect=spawn):
-                result = self.page.run_momp_benchmark("det", "AIFS", {"benchmark_coverage": "Peru"})
-            self.assertTrue(result["ok"])
-            self.assertEqual(captured["ROMP_SHAPEFILE_URI"], str(boundary.resolve()))
-            self.assertEqual(captured["ROMP_CLIMATOLOGY_SHAPEFILE"], str(boundary.resolve()))
+        for country, iso in (("Peru", "PER"), ("Ethiopia", "ETH")):
+            with self.subTest(country=country), tempfile.TemporaryDirectory() as folder:
+                captured.clear()
+                root = Path(folder)
+                runner = root / "run_momp.py"
+                runner.touch()
+                boundary = root / "boundaries" / iso / "ADM0.geojson"
+                boundary.parent.mkdir(parents=True)
+                boundary.write_text('{}')
+                with patch.object(self.page, "EXTERNAL_DATA_DIR", root), \
+                     patch.object(self.page, "PROJECT_ROOT", root), \
+                     patch.object(self.page, "_locate_run_momp", return_value=runner), \
+                     patch.object(self.page, "select_runtime_python", return_value=sys.executable), \
+                     patch.object(self.page, "check_runtime_python", return_value="ready"), \
+                     patch.object(self.page, "_spawn_no_fork", side_effect=spawn):
+                    result = self.page.run_momp_benchmark("det", "AIFS", {"benchmark_coverage": country})
+                self.assertTrue(result["ok"])
+                self.assertEqual(captured["ROMP_SHAPEFILE_URI"], str(boundary.resolve()))
+                self.assertEqual(captured["ROMP_CLIMATOLOGY_SHAPEFILE"], str(boundary.resolve()))

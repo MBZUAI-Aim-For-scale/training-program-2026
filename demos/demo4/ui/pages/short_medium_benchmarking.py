@@ -532,16 +532,19 @@ def _render_variable_plot(ds: xr.Dataset, var_name: str, title: str):
             da = da.isel(time=0)
         
         is_map = {"lat", "lon"}.issubset(da.dims)
-        if is_map and str(ds.attrs.get("region", "Ethiopia")).casefold() == "ethiopia":
-            zones = load_boundary_frame(climatology_boundary_path(config))
+        country = str(ds.attrs.get("region", "Ethiopia")).replace("_", " ")
+        boundary = _country_boundary_path(country) if is_map else None
+        zones = load_boundary_frame(boundary) if boundary else None
+        if is_map and country == "Ethiopia":
             da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
-            da = clip_to_boundary(da, climatology_boundary_path(config))
+        if boundary:
+            da = clip_to_boundary(da, boundary)
         fig, ax = plt.subplots(figsize=(8, 4))
         image = da.plot(ax=ax, cmap="YlGnBu")
-        if is_map and str(ds.attrs.get("region", "Ethiopia")).casefold() == "ethiopia":
+        if zones is not None:
             west, south, east, north = zones.total_bounds
             extent = geographic_extent(da.lon, da.lat, region_bounds=(west, east, south, north))
-            clip_map_artist(image, ax, climatology_boundary_path(config))
+            clip_map_artist(image, ax, boundary)
             zones.boundary.plot(ax=ax, color="black", linewidth=1.0, zorder=10)
             ax.set_xlim(extent[:2])
             ax.set_ylim(extent[2:])
@@ -1011,59 +1014,13 @@ def _map_lon_lat_names(da: xr.DataArray):
 
 
 def _country_boundary_path(country):
-    if country == "Ethiopia":
-        return climatology_boundary_path(config)
     return cached_boundary_path(country, "ADM0", EXTERNAL_DATA_DIR / "boundaries")
 
 
 def _map_load_admin_shapefile(country="Ethiopia", al=""):
-    if country != "Ethiopia":
-        level = "ADM" + al[-1] if al in ("Admin1", "Admin2") else "ADM0"
-        path = cached_boundary_path(country, level, EXTERNAL_DATA_DIR / "boundaries")
-        return load_boundary_frame(str(path)) if path else None
-    return _map_load_ethiopia_shapefile()
-
-
-@st.cache_resource(show_spinner=False)
-def _map_load_ethiopia_shapefile():
-    try:
-        import geopandas as gpd
-    except Exception:
-        return None
-
-    candidates: List[Path] = []
-    for attr in [
-        "SHAPEFILE_PATH",
-        "ZONE_WOREDA_SHP",
-        "ETH_GEOJSON_PATH",
-        "STUDYAREA_SHAPEFILE",
-        "WOREDA_SHAPEFILE_PATH",
-        "SHAPEFILE_DIR",
-    ]:
-        val = getattr(config, attr, None)
-        if val:
-            p = Path(str(val))
-            if p.is_file():
-                candidates.append(p)
-            elif p.is_dir():
-                candidates.extend(
-                    sorted(p.glob("*.geojson")) + sorted(p.glob("*.shp"))
-                )
-
-    for path in list(dict.fromkeys(candidates)):
-        try:
-            gdf = gpd.read_file(path)
-            if gdf.empty or "geometry" not in gdf.columns:
-                continue
-            inv = ~gdf.geometry.is_valid
-            if inv.any():
-                gdf.loc[inv, "geometry"] = gdf.loc[inv, "geometry"].buffer(0)
-            gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty]
-            if not gdf.empty:
-                return gdf
-        except Exception:
-            continue
-    return None
+    level = "ADM" + al[-1] if al in ("Admin1", "Admin2") else "ADM0"
+    path = cached_boundary_path(country, level, EXTERNAL_DATA_DIR / "boundaries")
+    return load_boundary_frame(str(path)) if path else None
 
 
 def _map_admin_column(gdf, al: str) -> Optional[str]:
@@ -1181,21 +1138,11 @@ def load_map_da_cached(
             da = _map_select_window(ds[var], wl)
             if country == "Ethiopia":
                 da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
-                da = clip_to_boundary(da, climatology_boundary_path(config))
-            else:
-                boundary = _country_boundary_path(country)
-                if boundary:
-                    da = clip_to_boundary(da, boundary)
+            boundary = _country_boundary_path(country)
+            if boundary:
+                da = clip_to_boundary(da, boundary)
             while len(da.dims) > 2:
                 da = da.isel({da.dims[0]: 0})
-
-            if country == "Ethiopia" and {"lat", "lon"}.issubset(da.dims):
-                try:
-                    from momp.utils.land_mask import shp_mask
-
-                    da = shp_mask(da, region=country)
-                except Exception:
-                    pass
 
             if mm.get("fraction", False):
                 arr = np.asarray(da.values, dtype=float)
@@ -1232,9 +1179,7 @@ def plot_map(
         zones = None
         selected_country = country or da.attrs.get("benchmark_country", "Ethiopia")
         if lon and lat:
-            boundary_path = boundary_path or (climatology_boundary_path(config)
-                                             if selected_country == "Ethiopia"
-                                             else _country_boundary_path(selected_country))
+            boundary_path = boundary_path or _country_boundary_path(selected_country)
             if selected_country == "Ethiopia":
                 da = apply_jjas_mask(da, getattr(config, "nc_mask", None))
             if boundary_path:
@@ -2141,20 +2086,12 @@ def _snap_to_grid(lat, lon, data_dir_str):
 
 
 @st.cache_data(show_spinner=False, ttl=600)
-def _find_shapefile_path():
-    hint = (
-        getattr(config, "WOREDA_SHP", None)
-        or getattr(config, "SHAPEFILE_PATH", None)
-        or getattr(config, "ZONE_WOREDA_SHP", None)
-    )
-    if hint and Path(hint).is_file():
-        return str(Path(hint).resolve())
-    root = Path(getattr(config, "DATA_DIR", Path(config.PROJECT_ROOT) / "data"))
-    found = list(root.rglob("*.shp")) if root.is_dir() else []
-    preferred = [p for p in found if any(k in p.name.lower() for k in ("woreda", "wereda", "adm3"))]
-    best = (preferred or found or [None])[0]
-    return str(best.resolve()) if best else None
-
+def _find_shapefile_path(country="Ethiopia"):
+    for level in ("ADM2", "ADM1"):
+        path = cached_boundary_path(country, level, EXTERNAL_DATA_DIR / "boundaries")
+        if path:
+            return str(path.resolve())
+    return None
 
 @st.cache_resource(show_spinner=False)
 def _load_woredas_cached(shp_path_str):
@@ -2168,7 +2105,7 @@ def _load_woredas_cached(shp_path_str):
         gdf = gpd.read_file(shp_path_str)
         if gdf.crs is not None and gdf.crs.to_epsg() != 4326:
             gdf = gdf.to_crs(4326)
-        NAME_COLS = ("woreda", "w_name", "wname", "woreda_name", "wor_name", "adm3_en", "adm3_name", "admin3name", "name")
+        NAME_COLS = ("woreda", "w_name", "wname", "woreda_name", "wor_name", "adm3_en", "adm3_name", "admin3name", "shapename", "admin2", "admin1", "name")
         ZONE_COLS = ("zone", "z_name", "zone_name", "adm2_en", "admin2name")
         lower = {c.lower(): c for c in gdf.columns}
         name_col = next((lower[c] for c in NAME_COLS if c in lower), None)
@@ -2393,11 +2330,10 @@ def run_momp_benchmark(
         if run_config.get("benchmark_coverage"):
             env["ROMP_BENCHMARK_COVERAGE"] = str(run_config["benchmark_coverage"])
             env["ROMP_REGION"] = "_".join(str(run_config["benchmark_coverage"]).split())
-            if run_config["benchmark_coverage"] != "Ethiopia":
-                boundary = _country_boundary_path(run_config["benchmark_coverage"])
-                if boundary:
-                    env["ROMP_SHAPEFILE_URI"] = str(boundary.resolve())
-                    env["ROMP_CLIMATOLOGY_SHAPEFILE"] = str(boundary.resolve())
+            boundary = _country_boundary_path(run_config["benchmark_coverage"])
+            if boundary:
+                env["ROMP_SHAPEFILE_URI"] = str(boundary.resolve())
+                env["ROMP_CLIMATOLOGY_SHAPEFILE"] = str(boundary.resolve())
             output_dir, figure_dir = _benchmark_output_dirs(
                 run_config["benchmark_coverage"], env.get("ROMP_OUT_DIR"), env.get("ROMP_FIG_DIR"))
             env["ROMP_OUT_DIR"], env["ROMP_FIG_DIR"] = str(output_dir), str(figure_dir)
@@ -3357,7 +3293,7 @@ def render_onset_years():
 @st.fragment(run_every=1)
 def render_country_boundaries(country):
     """Poll downloads without blocking input controls or starting network work on reruns."""
-    if country == "Ethiopia" or country not in COUNTRY_ISO3:
+    if country not in COUNTRY_ISO3:
         return
     root = EXTERNAL_DATA_DIR / "boundaries"
     tasks = st.session_state.setdefault("benchmark_boundary_tasks", {})
@@ -3828,14 +3764,9 @@ def page() -> None:
                 m_opts = sorted({o["model_label"] for o in map_outputs if wl in o["windows"]})
                 model_label = c3.selectbox("Model", m_opts, key="m_mod")
                 admin_levels = ["All"]
-                if benchmark_coverage == "Ethiopia":
-                    frame = _map_load_admin_shapefile()
-                    admin_levels += [level for level in ("Admin1", "Admin2", "Admin3")
-                                     if _map_admin_column(frame, level)]
-                else:
-                    admin_levels += [f"Admin{number}" for number in (1, 2)
-                                     if cached_boundary_path(benchmark_coverage, f"ADM{number}",
-                                                             EXTERNAL_DATA_DIR / "boundaries")]
+                admin_levels += [f"Admin{number}" for number in (1, 2)
+                                 if cached_boundary_path(benchmark_coverage, f"ADM{number}",
+                                                         EXTERNAL_DATA_DIR / "boundaries")]
                 al = c4.selectbox("Subregion level", admin_levels, disabled=len(admin_levels) == 1,
                                   key=f"m_al_{benchmark_coverage}")
                 an = "All"
@@ -3895,8 +3826,7 @@ def page() -> None:
                                     vmax=1,
                                     cbar_kwargs=cbar_kw,
                                     admin_gdf=admin_sub,
-                                    boundary_path=climatology_boundary_path(config)
-                                    if benchmark_coverage == "Ethiopia" and "climatology" in model_label.casefold() else None,
+                                    boundary_path=_country_boundary_path(benchmark_coverage),
                                     country=benchmark_coverage,
                                 )
                                 if fig:
@@ -4382,7 +4312,7 @@ def page() -> None:
         if res_tabs[tab_labels.index("Onset Analysis")].open:
             with res_tabs[tab_labels.index("Onset Analysis")]:
                 section_header("Onset Time Series Analysis", "teal")
-                mode = st.radio("Location Selection Mode", ["Coordinates", "Woreda"], horizontal=True, key="ots_mode")
+                mode = st.radio("Location Selection Mode", ["Coordinates", "Subregion"], horizontal=True, key="ots_mode")
                 years = None
                 years_result = st.session_state.get("onset_years_result")
                 if years_result and time.time() - years_result["loaded_at"] > 600:
@@ -4409,16 +4339,16 @@ def page() -> None:
                         lon = c2.number_input("Longitude", value=39.2, step=0.25, format="%.4f", key="ots_lon")
                         label = f"Lat {lat:.4f}, Lon {lon:.4f}"
                     else:
-                        shp_path = _find_shapefile_path()
+                        shp_path = _find_shapefile_path(benchmark_coverage)
                         if shp_path:
                             woredas = _load_woredas_cached(shp_path)
                             if woredas:
-                                search_q = st.text_input("Filter Woreda", value=st.session_state.get("ots_search", ""), key="ots_search")
+                                search_q = st.text_input("Filter subregion", value=st.session_state.get("ots_search", ""), key="ots_search")
                                 woreda_list = list(woredas.keys())
                                 filtered_woredas = [w for w in woreda_list if search_q.lower() in w.lower()] if search_q.strip() else woreda_list
 
                                 if not filtered_woredas:
-                                    st.warning("No woredas match the filter query.")
+                                    st.warning("No subregions match the filter query.")
                                 else:
                                     prev_woreda = st.session_state.get("ots_selected_woreda_name")
                                     default_idx = (
@@ -4427,7 +4357,7 @@ def page() -> None:
                                         else 0
                                     )
                                     selected_woreda = st.selectbox(
-                                        "Select Woreda",
+                                        "Select subregion",
                                         filtered_woredas,
                                         index=default_idx,
                                         key="ots_woreda_selectbox"
@@ -4437,9 +4367,9 @@ def page() -> None:
                                         lat, lon = woredas[selected_woreda]
                                         label = selected_woreda
                             else:
-                                st.warning("No woredas found in shapefile.")
+                                st.warning("No named subregions found in the downloaded boundaries.")
                         else:
-                            st.warning("Shapefile not found.")
+                            st.warning("Download country boundaries to select a subregion.")
 
                     onset_busy = st.session_state.get("onset_active_task") is not None
                     if st.button("Run Onset Analysis", type="primary", key="btn_run_ots",

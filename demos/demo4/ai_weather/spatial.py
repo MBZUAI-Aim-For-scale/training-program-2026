@@ -9,12 +9,12 @@ import xarray as xr
 
 
 def climatology_boundary_path(config):
-    """Derive Ethiopia zones from canonical config.shpfile_dir, even in old sessions."""
+    """Use a configured boundary file, or derive Ethiopia zones from a legacy folder."""
     folder = getattr(config, "shpfile_dir", None)
     if folder:
         folder = str(folder).rstrip("/")
         if folder.lower().endswith((".shp", ".geojson", ".json")):
-            folder = folder.rsplit("/", 1)[0] if "/" in folder else "."
+            return folder
         return folder + "/ETH_Zones.geojson"
     explicit = getattr(config, "CLIMATOLOGY_SHAPEFILE", None)
     if explicit:

@@ -485,6 +485,10 @@ def _pick(label: str, local_candidates: List[tuple], remote_uri: str) -> str:
 
 def _pick_shapefile_dir(local_dir: Path, remote_uri: str) -> str:
     """Choose a local administrative boundary directory or its configured GCS location."""
+    explicit = os.getenv("ROMP_SHAPEFILE_URI", "").strip()
+    if explicit:
+        DATA_SOURCES["administrative boundary"] = "bucket" if is_uri(explicit) else "local"
+        return explicit
     local_dir = _match_case(Path(local_dir))
     if DATA_MODE != "bucket" and local_dir.is_dir() and any(
         path.is_file() and path.suffix.lower() in {".shp", ".geojson", ".json"}
@@ -727,8 +731,11 @@ ref_model_var = _obs["var"]
 ref_model_unit_cvt = None
 nc_mask = resolve_path(JJAS_MASK_FILE) if JJAS_MASK_FILE else None
 shpfile_dir = SHAPEFILE_MASK_FILE
-CLIMATOLOGY_SHAPEFILE = (join(shpfile_dir, "ETH_Zones_woreda.geojson") if region.casefold() == "ethiopia"
-                        else (os.getenv("ROMP_CLIMATOLOGY_SHAPEFILE") or None))
+CLIMATOLOGY_SHAPEFILE = os.getenv("ROMP_CLIMATOLOGY_SHAPEFILE") or (
+    (str(shpfile_dir) if str(shpfile_dir).lower().endswith((".shp", ".geojson", ".json"))
+     else join(shpfile_dir, "ETH_Zones_woreda.geojson"))
+    if region.casefold() == "ethiopia" else None
+)
 ETH_GEOJSON_PATH = join(shpfile_dir, "eth_admbnda_admin3_csa_bofedb_2021.geojson") if region.casefold() == "ethiopia" else None
 ZONE_WOREDA_SHP = join(shpfile_dir, "ETH_Zones_Woreda.geojson") if region.casefold() == "ethiopia" else None
 polygon = False

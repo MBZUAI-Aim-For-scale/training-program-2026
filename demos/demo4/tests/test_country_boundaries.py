@@ -84,6 +84,24 @@ class CountryBoundaryTests(unittest.TestCase):
         self.assertIsNone(boundaries.cached_boundary_path("../Peru", "ADM1", self.root))
         self.assertFalse(list(self.root.rglob("*.tmp")))
 
+    def test_every_listed_country_downloads_to_its_own_iso_cache(self):
+        for country, iso in boundaries.COUNTRY_ISO3.items():
+            with self.subTest(country=country), \
+                 patch.object(boundaries, "_read_url", side_effect=self.read) as network:
+                result = boundaries.download_country_boundaries(country, self.root)
+                self.assertEqual(result["errors"], {})
+                self.assertEqual(set(result["paths"]), set(boundaries.BOUNDARY_LEVELS))
+                self.assertEqual([call.args[0] for call in network.call_args_list if "/api/" in call.args[0]],
+                                 [f"https://www.geoboundaries.org/api/current/gbOpen/{iso}/{level}/"
+                                  for level in boundaries.BOUNDARY_LEVELS])
+                for level, path in result["paths"].items():
+                    self.assertEqual(Path(path), self.root / iso / f"{level}.geojson")
+                    self.assertEqual(boundaries.cached_boundary_path(country, level, self.root), Path(path))
+                network.reset_mock()
+                self.assertEqual(boundaries.download_country_boundaries(country, self.root), result)
+                network.assert_not_called()
+        self.assertEqual(len(list(self.root.glob("*/ADM0.geojson"))), len(boundaries.COUNTRY_ISO3))
+
     def test_failed_level_does_not_discard_successful_downloads(self):
         def read(url):
             if "/ADM2/" in url:
