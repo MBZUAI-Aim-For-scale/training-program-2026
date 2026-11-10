@@ -19,6 +19,7 @@ import time
 from urllib.parse import quote
 
 import country_data
+import data_browser as files
 import forecastcheck_data
 import spark_setup as setup
 import streamlit as st
@@ -168,6 +169,17 @@ div[class*="st-key-launch-"] button[kind="primary"]:not(:disabled):hover,
 div[class*="st-key-launch-"] a[data-testid="stBaseLinkButton-primary"]:hover {{ background: {NAVY_DARK};
   border-color: {NAVY_DARK}; }}
 div[class*="st-key-launch-"] button:disabled {{ background: {PAGE}; border-color: {LINE}; color: {MUTED}; }}
+/* Demo 2's Data folder: the launcher's navy for its main buttons, the current folder in teal */
+.st-key-d1launch-files button[kind="primary"]:not(:disabled),
+div[class*="st-key-files-"] button[kind="primary"]:not(:disabled) {{ background: {NAVY}; border-color: {NAVY}; color: #fff; }}
+.st-key-d1launch-files button[kind="primary"]:not(:disabled):hover,
+div[class*="st-key-files-"] button[kind="primary"]:not(:disabled):hover {{ background: {NAVY_DARK}; border-color: {NAVY_DARK}; }}
+/* (deleting stays red: it can't be undone) */
+.st-key-files-delete button[kind="primary"]:not(:disabled) {{ background: {RED}; border-color: {RED}; }}
+.st-key-files-delete button[kind="primary"]:not(:disabled):hover {{ background: #9a3412; border-color: #9a3412; }}
+.st-key-d1launch-files button, .st-key-d1launch-files a {{ border-radius: 8px; }}
+.st-key-d1launch-files div[class*="st-key-files-crumb-"] button[kind="primary"]:not(:disabled) {{ background: {TEAL};
+  border-color: {TEAL}; }}
 /* Status buttons on the Demo 1 cards: the Launch button's shape, coloured like the status tags */
 div[class*="st-key-status-"] button {{ border-radius: 8px !important; border: 1px solid var(--b) !important;
   background: var(--bg) !important; color: var(--fg) !important; box-shadow: none !important; }}
@@ -699,6 +711,275 @@ def demo_page(demo: dict):
             launch_card(tool)
         if demo.get("setup") == "demo5":
             forecastcheck_data_card()
+    if demo["n"] == 2:
+        data_folder_section()
+
+
+# --- Demo 2: browse, upload and edit the files in CDT's data folder (data_browser.py) ---------
+# One table of the current folder (pick rows to act on them), a viewer/editor for one file, and
+# an Add row (drag-and-drop upload, new folder, new file). Every change is done in a button's
+# on_click, then the page reruns with a note saying what happened.
+
+def files_go(rel: str):
+    st.session_state.update({"files-dir": rel, "files-open": None, "files-zip": None, "files-filter": ""})
+    st.session_state.pop("files-table", None)
+
+
+def files_note(kind: str, text: str):
+    st.session_state["files-msg"] = (kind, text)
+
+
+def files_done(kind: str, text: str):
+    """After a change: say so, clear the selection (the rows moved) and any prepared zip."""
+    files_note(kind, text)
+    st.session_state.pop("files-table", None)
+    st.session_state["files-zip"] = None
+
+
+def files_try(fn, *args, ok: str | None = None):
+    try:
+        out = fn(*args)
+        if ok:
+            files_done("success", ok.format(out=out))
+        return out
+    except (files.BadName, OSError, ValueError) as e:
+        files_note("error", str(e))
+
+
+def files_upload(rel_dir: str):
+    n = st.session_state.get("files-up-n", 0)
+    up, replace = st.session_state.get(f"files-up-{n}") or [], st.session_state.get("files-replace", False)
+    if not up:
+        return  # (a file taken out of the box again: nothing to do)
+    unzip = st.session_state.get("files-unzip", True)
+    counts = {"added": 0, "replaced": 0, "kept": []}
+    try:
+        for f in up:
+            if unzip and f.name.lower().endswith(".zip"):
+                w, k = files.unzip(rel_dir, f.getvalue(), replace)
+                counts["added"] += w
+                counts["kept"] += [f"{k} file(s) from {f.name}"] if k else []
+            else:
+                r = files.save_upload(rel_dir, f.name, f.getvalue(), replace)
+                counts[r] += 1 if r != "kept" else 0
+                counts["kept"] += [f.name] if r == "kept" else []
+    except (files.BadName, OSError, ValueError) as e:
+        return files_note("error", f"Upload stopped: {e}")
+    st.session_state["files-up-n"] = n + 1  # (a fresh, empty uploader)
+    text = ", ".join(x for x in (f"{counts['added']} added" if counts["added"] else "",
+                                 f"{counts['replaced']} replaced" if counts["replaced"] else "") if x) or "nothing new"
+    if counts["kept"]:
+        text += f". Already here, so left as they were: {', '.join(counts['kept'])} (tick Replace to overwrite)"
+    files_done("warning" if counts["kept"] else "success", f"Uploaded: {text}.")
+
+
+def files_make_zip(rels: list[str]):
+    z = files_try(files.zip_bytes, rels)
+    st.session_state["files-zip"] = (rels, z) if z is not None else None
+
+
+def files_delete(rels: list[str], what: str):
+    try:
+        for r in rels:
+            files.delete(r)
+    except (files.BadName, OSError) as e:
+        return files_done("error", f"Delete stopped: {e}")
+    if st.session_state.get("files-open") in rels:
+        st.session_state["files-open"] = None
+    files_done("success", f"Deleted {what}")
+
+
+def files_open(rel: str):
+    st.session_state.update({"files-open": rel, "files-mode": None})
+    for k in ("files-text", "files-grid"):
+        st.session_state.pop(k, None)
+
+
+def files_save_text(rel: str, encoding: str, crlf: bool):
+    files_try(files.write_text, rel, st.session_state.get("files-text", ""), encoding, crlf, ok=f"Saved {Path(rel).name}")
+
+
+def files_save_grid(rel: str, sep: str, encoding: str, crlf: bool, frame, lines: list[str] | None,
+                    lens: list[int], ends_nl: bool):
+    """Saves the table editor's changes (files.table_text: untouched rows keep their exact line)."""
+    edits = st.session_state.get("files-grid") or {}
+    rows = [["" if v is None else str(v) for v in r] for r in frame.values.tolist()]
+    text = files.table_text(rows, list(frame.columns), lines, lens, ends_nl, sep,
+                            {int(i): r for i, r in edits.get("edited_rows", {}).items()},
+                            set(edits.get("deleted_rows", [])), edits.get("added_rows", []))
+    files_try(files.write_text, rel, text, encoding, crlf, ok=f"Saved {Path(rel).name}")
+    st.session_state.pop("files-grid", None)
+
+
+def files_viewer(rel: str):
+    """One file: a table (CSV/TSV, editable), its text (editable), a picture, or just its details."""
+    try:
+        p = files.resolve(rel)
+        entry = next(e for e in files.listing(str(Path(rel).parent) if Path(rel).parent != Path(".") else "")
+                     if e["name"] == p.name)
+    except (StopIteration, files.BadName, OSError):
+        st.session_state["files-open"] = None
+        return
+    head, close = st.columns([0.85, 0.15], vertical_alignment="center")
+    head.markdown(f"**{escape(entry['name'])}** · {files.kind(entry)} · {files.size_text(entry['size'])} · "
+                  f"changed {files.when_text(entry['mtime'])}")
+    close.button("Close", key="files-close", width="stretch", on_click=lambda: st.session_state.update({"files-open": None}))
+    suffix = p.suffix.lower()
+    if suffix in files.IMAGE_SUFFIXES:
+        st.image(str(p))
+        return
+    why = files.editable(entry)
+    if why:
+        st.info(f"{why}. Use Download to open it on your computer, or open it in CDT.")
+        return
+    text, enc, crlf = files.read_text(rel)
+    modes = (["Table", "Text"] if suffix in files.TABLE_SUFFIXES else ["Text"])
+    mode = st.segmented_control("View", modes, default=modes[0], key="files-mode", label_visibility="collapsed") or modes[0]
+    if mode == "Table":
+        import csv
+        import io
+        import pandas as pd
+        sep = "\t" if suffix == ".tsv" else (csv.Sniffer().sniff(text[:20000], ",;\t|").delimiter
+                                             if text.strip() else ",")
+        rows = list(csv.reader(io.StringIO(text), delimiter=sep))
+        width = max((len(r) for r in rows), default=1)
+        lines = text[:-1].split("\n") if text.endswith("\n") else text.split("\n")
+        lines = lines if len(lines) == len(rows) else None   # (a cell with a line break inside: rewrite all)
+        frame = pd.DataFrame([r + [""] * (width - len(r)) for r in rows],
+                             columns=[f"{i + 1}" for i in range(width)], dtype=str)
+        st.caption(f"{len(rows):,} rows × {width} columns, separated by "
+                   f"{ {',': 'commas', ';': 'semicolons', chr(9): 'tabs', '|': 'bars'}.get(sep, repr(sep)) }. "
+                   "Every cell is kept as the text it is; edit cells, add rows at the bottom, or select rows and "
+                   "delete them, then Save.")
+        st.data_editor(frame, key="files-grid", num_rows="dynamic", hide_index=False, width="stretch", height=440)
+        st.button("Save", key="files-save-grid", type="primary", on_click=files_save_grid,
+                  args=(rel, sep, enc, crlf, frame, lines, [len(r) for r in rows], text.endswith("\n")))
+    else:
+        st.text_area("Contents", value=text, key="files-text", height=440, label_visibility="collapsed")
+        st.button("Save", key="files-save-text", type="primary", on_click=files_save_text, args=(rel, enc, crlf))
+
+
+def data_folder_section():
+    """Demo 2's page: the files in CDT's /data (demos/demo2/data), to browse, add, view, edit and manage."""
+    st.markdown('<div class="d1-section">Data folder</div><div class="d1-rule"></div>', unsafe_allow_html=True)
+    with st.container(key="d1launch-files"):
+        rel = st.session_state.get("files-dir", "")
+        try:
+            if not files.resolve(rel).is_dir():
+                raise files.BadName("gone")
+        except (files.BadName, OSError):
+            rel = st.session_state["files-dir"] = ""
+        st.markdown(f'<div class="d1-launch-note">What CDT sees as <code>/data</code>: anything added or changed '
+                    f'here is there at once. On this Spark: <code>{escape(str(files.root()))}</code></div>',
+                    unsafe_allow_html=True)
+
+        # Where you are (each part goes back up), and a filter
+        parts = Path(rel).parts
+        crumbs = [("📁 data", "")] + [(f"› {x}", str(Path(*parts[:i + 1]))) for i, x in enumerate(parts)]
+        nav = st.columns([*([1] * len(crumbs)), max(1, 7 - len(crumbs)), 3], gap="small", vertical_alignment="center")
+        for i, (name, to) in enumerate(crumbs):
+            nav[i].button(name, key=f"files-crumb-{i}", on_click=files_go, args=(to,), width="stretch",
+                          type="primary" if to == rel else "secondary")
+        flt = nav[-1].text_input("Filter", key="files-filter", placeholder="🔎 Filter by name",
+                                 label_visibility="collapsed").strip().lower()
+        if msg := st.session_state.pop("files-msg", None):
+            {"success": st.success, "warning": st.warning}.get(msg[0], st.error)(msg[1])
+
+        try:
+            entries = [e for e in files.listing(rel) if flt in e["name"].lower()]
+        except OSError as e:
+            st.error(f"Can't read this folder: {e}")
+            return
+        if entries:
+            icon = lambda e: "📁" if e["dir"] else "🖼️" if Path(e["name"]).suffix.lower() in files.IMAGE_SUFFIXES else "📄"
+            table = [{"Name": f"{icon(e)}  {e['name']}", "Type": files.kind(e),
+                      "Size": files.items_text(e["rel"]) if e["dir"] else files.size_text(e["size"]),
+                      "Changed": files.when_text(e["mtime"])} for e in entries]
+            picked = st.dataframe(
+                table, key="files-table", hide_index=True, width="stretch", on_select="rerun",
+                selection_mode="multi-row", height=min(38 + 35 * len(table), 455),
+                column_config={"Name": st.column_config.TextColumn(width="large")})
+            sel = [entries[i] for i in (picked.selection.rows if picked and picked.selection else [])
+                   if i < len(entries)]
+        else:
+            st.markdown('<div class="d1-launch-note">' + ("Nothing matches the filter." if flt else
+                        "This folder is empty: drop files below to add them.") + "</div>", unsafe_allow_html=True)
+            sel = []
+
+        # What you can do with the selected rows
+        if not sel:
+            st.caption("Select a row (or several) to open, download, rename, move or delete it. "
+                       "Click a column's name to sort by it.")
+        else:
+            one = sel[0] if len(sel) == 1 else None
+            rels = [e["rel"] for e in sel]
+            acts = (["open"] if one else []) + ["get"] + (["rename", "dup"] if one else []) + ["move", "delete"]
+            bar = dict(zip(acts, st.columns(len(acts), gap="small", vertical_alignment="bottom")))
+            if one and one["dir"]:
+                bar["open"].button("Open folder", key="files-cd", type="primary", width="stretch",
+                                   on_click=files_go, args=(one["rel"],))
+            elif one:
+                bar["open"].button("Open", key="files-view", type="primary", width="stretch",
+                                   on_click=files_open, args=(one["rel"],),
+                                   help="See it here: a table for CSV, the text for text files, the picture for images")
+            if one and not one["dir"] and one["size"] <= files.ZIP_MAX:
+                try:
+                    bar["get"].download_button("Download", data=files.resolve(one["rel"]).read_bytes(),
+                                               file_name=one["name"], key="files-dl", width="stretch", on_click="ignore")
+                except (files.BadName, OSError) as e:
+                    bar["get"].error(str(e))
+            else:
+                z = st.session_state.get("files-zip")
+                if z and z[0] == rels:
+                    bar["get"].download_button("Download zip", data=z[1], key="files-dlzip", width="stretch",
+                                               file_name=(one["name"] if one else Path(rel).name or "data") + ".zip",
+                                               on_click="ignore", type="primary")
+                else:
+                    bar["get"].button(f"Zip {'folder' if one else f'{len(sel)} items'} to download", key="files-mkzip",
+                                      width="stretch", on_click=files_make_zip, args=(rels,),
+                                      help="Zips them, then offers the zip to download")
+            if one:
+                with bar["rename"].popover("Rename", width="stretch"):
+                    nk = f"files-newname-{one['rel']}"
+                    st.text_input("New name", value=one["name"], key=nk)
+                    st.button("Rename", key="files-rename", type="primary",
+                              on_click=lambda r=one["rel"], k=nk: files_try(files.rename, r, st.session_state.get(k, ""),
+                                                                            ok="Renamed to {out}"))
+                bar["dup"].button("Duplicate", key="files-dup", width="stretch",
+                                  on_click=lambda r=one["rel"]: files_try(files.duplicate, r, ok="Made {out}"))
+            with bar["move"].popover("Move", width="stretch"):
+                here = files.folders()
+                st.selectbox("Into", here, format_func=lambda f: "data" + (f"/{f}" if f else ""),
+                             key="files-moveto", index=here.index(rel) if rel in here else 0)
+                st.button(f"Move {'it' if one else f'{len(sel)} items'} here", key="files-move", type="primary",
+                          on_click=lambda r=rels: files_try(files.move, r, st.session_state.get("files-moveto", ""),
+                                                           ok="Moved {out}"))
+            with bar["delete"].popover("Delete", width="stretch"):
+                what = one["name"] if one else f"{len(sel)} items"
+                st.markdown(f"Delete **{escape(what)}**" + (" and everything in it" if any(e["dir"] for e in sel) else "")
+                            + "? This can't be undone.")
+                st.button("Delete", key="files-delete", type="primary", on_click=files_delete, args=(rels, what))
+
+        if opened := st.session_state.get("files-open"):
+            with st.container(border=True):
+                files_viewer(opened)
+
+        # Add things to this folder
+        up, mk = st.columns([0.6, 0.4], gap="large")
+        with up:
+            st.file_uploader(f"Add files to data{'/' + rel if rel else ''} (drop them here, or browse): "
+                             "they're saved as soon as they arrive", accept_multiple_files=True,
+                             key=f"files-up-{st.session_state.get('files-up-n', 0)}", on_change=files_upload, args=(rel,))
+            o1, o2 = st.columns(2, vertical_alignment="center")
+            o1.checkbox("Unzip .zip files into this folder", key="files-unzip", value=True)
+            o2.checkbox("Replace files with the same name", key="files-replace")
+        with mk:
+            st.text_input("New folder or file", key="files-newname-add", placeholder="name, e.g. stations or notes.csv")
+            m1, m2 = st.columns(2)
+            m1.button("New folder", key="files-mkdir", width="stretch", on_click=lambda: files_try(
+                files.make_folder, rel, st.session_state.get("files-newname-add", ""), ok="Made folder {out}"))
+            m2.button("New file", key="files-mkfile", width="stretch", on_click=lambda: files_try(
+                files.new_file, rel, st.session_state.get("files-newname-add", ""), ok="Made {out}"))
 
 
 # --- Demo 4: download this Spark's country data for ForecastCheck ------------------------------
