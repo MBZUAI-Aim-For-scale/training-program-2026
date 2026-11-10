@@ -3,8 +3,11 @@
 from io import BytesIO
 import json
 from pathlib import Path
+import ssl
 from tempfile import NamedTemporaryFile
 from urllib.request import Request, urlopen
+
+import certifi
 
 COUNTRY_ISO3 = {
     "Senegal": "SEN", "Rwanda": "RWA", "Colombia": "COL", "Peru": "PER",
@@ -25,8 +28,15 @@ def cached_boundary_path(country, level, cache_root):
 
 
 def _read_url(url):
+    # Fetch geoBoundaries LFS data directly, avoiding GitHub's redirect endpoint.
+    github_prefix = "https://github.com/wmgeolab/geoBoundaries/raw/"
+    if url.startswith(github_prefix):
+        url = "https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/" + url[len(github_prefix):]
     request = Request(url, headers={"User-Agent": "AI-Weather-Benchmark/1.0"})
-    with urlopen(request, timeout=30) as response:
+    context = ssl.create_default_context()
+    # Supplement platform/custom roots for Python installs with incomplete CA stores.
+    context.load_verify_locations(cafile=certifi.where())
+    with urlopen(request, timeout=30, context=context) as response:
         return response.read()
 
 

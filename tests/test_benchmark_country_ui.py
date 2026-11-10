@@ -3,6 +3,7 @@
 from pathlib import Path
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -47,14 +48,21 @@ class BenchmarkCountryUITests(unittest.TestCase):
                 return
         self.fail("Country discovery did not finish")
 
-    def test_peru_selection_uses_its_catalog_without_rechecking_ethiopia(self):
+    def test_colombia_selection_uses_its_catalog_without_rechecking_ethiopia(self):
         from datetime import date
 
-        inspected = []
+        inspected, selected = [], []
+        original_table = self.page.st.dataframe
+
+        def table(*args, **kwargs):
+            result = original_table(*args, **kwargs)
+            if kwargs.get("key") == "model_table_selection":
+                return SimpleNamespace(selection=SimpleNamespace(rows=selected))
+            return result
 
         def metadata(model, first, last, model_meta=None):
             inspected.append((model, model_meta["dir"]))
-            return {"dates": [(year, 5, 1) for year in range(first, last + 1)],
+            return {"dates": [(year, 5, day) for year in range(first, last + 1) for day in range(1, 29)],
                     "horizons": {year: 60 for year in range(first, last + 1)}, "failures": []}
 
         with tempfile.TemporaryDirectory() as directory, \
@@ -64,34 +72,39 @@ class BenchmarkCountryUITests(unittest.TestCase):
              patch.object(self.page, "_detect_model_data_date_range", return_value=(date(2020, 5, 1), date(2024, 7, 31))), \
              patch.object(self.page, "available_observation_years", return_value=list(range(2020, 2025))), \
              patch.object(self.page, "inspect_model_temporal_coverage", side_effect=metadata), \
+             patch.object(self.page.st, "dataframe", side_effect=table), \
              patch.object(self.page, "ROMP_DEMO_OUT_DIR", Path(directory) / "output"), \
              patch.object(self.page, "ROMP_DEMO_FIG_DIR", Path(directory) / "figures"):
             app = AppTest.from_string(
                 "from ui.pages.short_medium_benchmarking import page\npage()", default_timeout=8)
             app.run()
             self.finish_background(app)
+            self.assertEqual(inspected, [])
+            selected[:] = [0, 1, 2]
+            app.run()
+            self.finish_background(app)
             self.assertEqual(len(inspected), 3)
             self.assertTrue(all(folder.endswith("/Ethiopia") for _, folder in inspected))
             ethiopia_inventory = app.session_state["benchmark_inventory_cache"]["CHIRPS"]
 
-            app.selectbox(key="benchmark_country").set_value("Peru").run()
+            app.selectbox(key="benchmark_country").set_value("Colombia").run()
             self.finish_background(app)
-            self.assertEqual(app.selectbox(key="shared_area_mask_from_config_Peru").value, "No mask")
+            self.assertEqual(app.selectbox(key="shared_area_mask_from_config_Colombia").value, "No mask")
             self.assertFalse(any("No data configured" in item.value for item in app.caption))
             self.assertFalse(any("Run Benchmark is disabled" in item.value for item in app.caption))
             self.assertFalse(app.button(key="btn_run").disabled)
-            peru_inventory = app.session_state["benchmark_inventory_cache"][("Peru", "CHIRPS")]
-            self.assertEqual(set(peru_inventory["catalog"]), {"AIFS", "AIFS_ENS", "GraphCast"})
-            self.assertEqual(len(peru_inventory["models"]), 3)
-            self.assertTrue(all(meta["dir"].endswith("/Peru") for meta in peru_inventory["catalog"].values()))
+            colombia_inventory = app.session_state["benchmark_inventory_cache"][("Colombia", "CHIRPS")]
+            self.assertEqual(set(colombia_inventory["catalog"]), {"AIFS", "AIFS_ENS", "GraphCast"})
+            self.assertEqual(len(colombia_inventory["models"]), 3)
+            self.assertTrue(all(meta["dir"].endswith("/Colombia") for meta in colombia_inventory["catalog"].values()))
             self.assertEqual(len(inspected), 6)
-            self.assertTrue(all(folder.endswith("/Peru") for _, folder in inspected[3:]))
+            self.assertTrue(all(folder.endswith("/Colombia") for _, folder in inspected[3:]))
 
             app.selectbox(key="benchmark_country").set_value("Ethiopia").run()
             self.finish_background(app)
             self.assertEqual(len(inspected), 6)
             self.assertEqual(app.session_state["benchmark_inventory_cache"]["CHIRPS"], ethiopia_inventory)
-            self.assertEqual(app.session_state["benchmark_inventory_cache"][("Peru", "CHIRPS")], peru_inventory)
+            self.assertEqual(app.session_state["benchmark_inventory_cache"][("Colombia", "CHIRPS")], colombia_inventory)
 
     def test_worker_receives_country_and_separate_output_paths(self):
         import os

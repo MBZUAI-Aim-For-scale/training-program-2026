@@ -1,6 +1,6 @@
 ---
-title: "AI Weather Model Validation"
-subtitle: "Dashboard-Based Rainy Season Onset Benchmarking"
+title: "Benchmarking AI weather models"
+subtitle: "Hands-on on  monsoon onset Benchmarking with ROMP/MOMP"
 author: "Mesfin D. Chaka (PhD)"
 institute: "EMI / University of Chicago"
 date: "2026-11-03"
@@ -75,7 +75,7 @@ By the end of this session, participants will be able to:
 
 ## Monsoon Onset Parameters
 
-Kiremt onset matters for planting decisions. It is **derived from daily rainfall**, not read directly from model output.
+Moonson onset matters for planting decisions. It is **derived from daily rainfall**, not read directly from model output.
 
 | Parameter | Reference setting | Meaning |
 |:---|:---|:---|

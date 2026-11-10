@@ -1,7 +1,7 @@
 ---
-title: "AI Weather Model Validation"
-subtitle: "Dashboard-Based Rainy Season Onset Benchmarking"
-author: "Mesfin D. Chaka (PhD)"
+title: "Benchmarking AI weather models"
+subtitle: "Hands-on on  monsoon onset Benchmarking with ROMP/MOMP"
+author: "TEAM"
 institute: "EMI / University of Chicago"
 date: "2026-11-03"
 format:
@@ -70,9 +70,24 @@ By the end of this session, participants will be able to:
 
 ---
 
-# Hands-On Benchmarking
+## Monsoon Onset Parameters
 
-## Dashboard Walkthrough: Start Here
+Moonson onset matters for planting decisions. It is **derived from daily rainfall**, not read directly from model output.
+
+| Parameter | Reference setting | Meaning |
+|:---|:---|:---|
+| `wet_init` | ≥1 mm/day | Minimum rainfall on **each** wet day |
+| `wet_spell` | 3 days | Consecutive wet days required |
+| `wet_threshold` | Total **>20 mm** | Strict accumulation threshold over the **whole wet spell** |
+| `dry_spell` | 7 days | Consecutive dry days that can reject a candidate |
+| `dry_extent` | 0 by default; 21 in the historical snapshot | Full confirmation interval including the candidate day; 0 disables it |
+
+::: {.callout-important}
+The dashboard's **Wet-day threshold** is a wet-spell **total**, not 20 mm on each day. `dry_threshold=1` is the independent dry-day cutoff. The reference default `dry_extent=0` disables dry confirmation; enabling it changes the onset definition.
+:::
+
+
+## Dashboard Walkthrough: Hands-On 
 
 Click **Benchmarking** in the top menu and follow the page from top to bottom:
 
@@ -100,11 +115,13 @@ These instructions follow the implemented [Benchmarking page](../../ui/pages/sho
 2. For a remote server, keep a separate laptop terminal open:
 
    ```bash
-   ssh -L 8501:localhost:8501 <you>@country-spark
+   ssh -L 8503:localhost:8503 <you>@country-spark
    ```
 
-3. Open **<http://localhost:8501>**, click **Benchmarking** in the top menu, and confirm the page title **Benchmarking**.
+3. Open **<http://localhost:8503>** and confirm the page title **Benchmarking**.
 4. Open **Parameter guide** for control explanations. The top tiles show **Models**, **Presets**, **Status** and **Output Dir**.
+
+
 
 ::: {.smaller}
 Benchmark scoring uses CPUs and saved forecasts. Confirm that the container's `/app` checkout and configured input data belong to this experiment.
@@ -112,7 +129,7 @@ Benchmark scoring uses CPUs and saved forecasts. Confirm that the container's `/
 
 ---
 
-## Dashboard Step 1: Inputs and Model Selection
+## Step 1: Inputs and Model Selection
 
 | Control | Classroom selection / action |
 |:---|:---|
@@ -128,7 +145,7 @@ Benchmark scoring uses CPUs and saved forecasts. Confirm that the container's `/
 
 ---
 
-## Dashboard Step 2: Shared Event Detection
+## Step 2: Shared Event Detection
 
 Under **Shared settings → EVENT DETECTION**, use the lesson baseline:
 
@@ -146,7 +163,7 @@ These settings apply to **every selected model** in the next run. This sensitivi
 
 ---
 
-## Dashboard Step 3: Masks, Thresholds and Reference
+## Step 3: Masks, Thresholds and Reference
 
 Under **MASKS AND BASELINE**:
 
@@ -161,7 +178,7 @@ Keep mask, reference and onset definition fixed during model comparisons. Save t
 
 ---
 
-## Dashboard Step 4: Model Run Windows
+## Step 4: Model Run Windows
 
 Expand each selected model under **Model run windows**.
 
@@ -182,7 +199,7 @@ Repeat these settings for each selected model. Short practice runs differ from t
 
 ---
 
-## Dashboard Step 5: Initialization and Verification
+## Step 5: Initialization and Verification
 
 Under **ADVANCED TEMPORAL & VERIFICATION SETTINGS**, expand the model:
 
@@ -201,7 +218,7 @@ Under **ADVANCED TEMPORAL & VERIFICATION SETTINGS**, expand the model:
 
 ---
 
-## Dashboard Step 6: Check Readiness Before Running
+## Step 6: Check Readiness Before Running
 
 1. If available, open **Data Readiness & Fair Comparison → Data Readiness Report**. Inspect **Ready**, **Warning**, **No data**, **Error**, and the input inventory.
 2. Read all messages below the configuration controls. A disabled run can mean unsupported coverage, missing observation years, no matching initialization dates or insufficient forecast lead coverage.
@@ -214,7 +231,7 @@ The readiness report is an optional module. The page also checks selected model/
 
 ---
 
-## Dashboard Step 7: Run, Monitor and Stop
+## Step 7: Run, Monitor and Stop
 
 1. Click **Run Benchmark**. Selected model workers run one after another.
 2. Read the live output panel. To cancel, click **Stop Benchmark** and wait for the cancellation status.
@@ -228,7 +245,7 @@ Cancelled runs may leave incomplete outputs; rerun to obtain a complete result. 
 
 ---
 
-## Dashboard Step 8: Read and Compare Metric Maps
+## Step 8: Read and Compare Metric Maps
 
 Open **Results → Metric Map**. Select **Metric**, **Lead Time**, **Model**, then **Subregion level / Subregion** if boundaries are configured.
 
@@ -245,7 +262,7 @@ The **Skill** sub-tab is a threshold-status map, **not** the relative skill form
 
 ---
 
-## Dashboard Step 9: All Metrics and Distributions
+## Step 9: All Metrics and Distributions
 
 1. Open **Results → All Metrics** and choose **Metric model category**.
 2. Untick **All models** to enable **Models to compare**. For the baseline, select **AIFS Single** and **Traditional Climatology**.
@@ -259,7 +276,7 @@ Record model, window, settings and before/after values. Lower error and higher s
 
 ---
 
-## Dashboard Step 10: Figures, Downloads and NetCDF
+## Step 10: Figures, Downloads and NetCDF
 
 Open **Results → Benchmark Outputs**:
 
@@ -290,7 +307,7 @@ Available dashboard diagnostics are not evidence that the saved benchmark result
 
 ---
 
-## Dashboard Step 11: Export a Benchmark Report
+## Step 11: Export a Benchmark Report
 
 If **Benchmark Report & Export** is available:
 
@@ -374,24 +391,8 @@ This changes the **wet-spell total** used for observations, model and reference.
 
 ---
 
-## Exercise 3: Allow More Timing Error (5 min)
 
-1. Restore the Exercise 1 baseline.
-2. Change only **Tolerance: days 1–15: 3 → 5**; retain **Verification windows → Days 1–15**.
-3. Rerun; compare MR, FAR and MAE with the baseline notes.
-4. Did either event-error rate fall or stay the same? Did MAE change? Restore tolerance to **3**.
-
-::: {.callout-question}
-Why can accepting a larger timing error improve event scores without changing rainfall forecasts?
-:::
-
-::: {.fragment}
-Scores can stay unchanged if no cases lie near the changed tolerance boundary. Interpret any changes using the timing-matched event counts.
-:::
-
----
-
-## Exercise 4: Switch Off the Dry Check (5 min)
+## Exercise 3: Switch Off the Dry Check (5 min)
 
 1. Restore the baseline; change only **Dry spell search extension: 21 → 0**. Keep **Dry spell limit = 7**.
 2. Predict whether an early wet spell followed by dry weather can qualify; rerun.
@@ -404,33 +405,8 @@ Scores can stay unchanged if no cases lie near the changed tolerance boundary. I
 
 ---
 
-## Exercise 5: Change an Ensemble's Reference (5 min)
 
-::: {.smaller}
-1. Restore shared wet/dry settings. Choose **Probabilistic** and select only **AIFS Ensemble**; use the same practice dates/baseline, weekly schedule and **Days 1–15**.
-2. Run. In **All Metrics**, choose **Metric model category → Probabilistic**, untick **All models**, select AIFS Ensemble and Days 1–15. Record **AUC**, **Fair Brier Skill Score (%)**, **Fair RPS Skill Score (%)**.
-3. Change only **Baseline Start Year: 2018 → 2010**, if available; otherwise use the facilitator's earlier available year. Keep baseline end **2021** and the evaluation year unchanged; the baseline must include it.
-4. Rerun and compare the same scores. In **Benchmark Outputs → Figure Type → Reliability Diagram**, read the low-probability curve relative to the diagonal. Restore the original baseline years.
-:::
 
-::: {.callout-question}
-The model rainfall forecasts are unchanged. How did the historical reference and number of usable comparisons affect your results?
-:::
-
----
-
-## Exercise 6: Compare Leads and Share a Finding (5 min)
-
-1. Select only **AIFS Single** and restore Exercise 1's evaluation dates and baseline years. Keep its wet thresholds, but set **Dry spell search extension = 0** for both lead windows in this new comparison.
-2. Choose **Both windows**; set **Tolerance: days 1–15 = 3** and **Tolerance: days 16–30 = 3**. Leave the automatically updated **Max Forecast Day = 30** unchanged.
-3. Run; in **All Metrics**, select AIFS Single and Traditional Climatology with both lead times. Compare MAE, MR and FAR from this completed run; keep map views consistent.
-4. Share one changed setting, the observed score changes and one limitation with another pair.
-
-::: {.callout-warning}
-This exercise uses the reference's disabled dry confirmation for both windows: a 3-day wet spell needs data through day 32, whereas a 21-day confirmation interval would need day 50. It also holds tolerance equal across leads. The **3/3-day** tolerance setup differs from the figures' **3/5-day** setup, and the onset definition differs from Exercise 1's sensitivity baseline. Compare the two windows within this fresh run using your displayed scores, not the printed numbers or the earlier baseline.
-:::
-
----
 
 ## Reflection: Read Metrics Together
 

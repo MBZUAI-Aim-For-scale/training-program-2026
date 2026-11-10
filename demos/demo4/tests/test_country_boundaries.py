@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import ssl
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -29,6 +30,40 @@ class CountryBoundaryTests(unittest.TestCase):
             return json.dumps({"gjDownloadURL": "https://example.org/geometry.geojson",
                                "boundaryLicense": "CC BY 4.0"}).encode()
         return boundary_json()
+
+    def test_url_download_supplements_default_trust_with_certifi(self):
+        with patch.object(boundaries.ssl, "create_default_context") as create_context, \
+                patch.object(boundaries, "urlopen") as network:
+            network.return_value.__enter__.return_value.read.return_value = b"boundary"
+            self.assertEqual(boundaries._read_url("https://example.org/boundary"), b"boundary")
+
+        create_context.assert_called_once_with()
+        context = create_context.return_value
+        context.load_verify_locations.assert_called_once_with(cafile=boundaries.certifi.where())
+        request = network.call_args.args[0]
+        self.assertEqual(request.full_url, "https://example.org/boundary")
+        self.assertEqual(request.get_header("User-agent"), "AI-Weather-Benchmark/1.0")
+        self.assertEqual(network.call_args.kwargs, {"timeout": 30, "context": context})
+
+    def test_url_download_keeps_certificate_verification_enabled(self):
+        with patch.object(boundaries, "urlopen") as network:
+            network.side_effect = ssl.SSLCertVerificationError("untrusted certificate")
+            with self.assertRaises(ssl.SSLCertVerificationError):
+                boundaries._read_url("https://example.org/boundary")
+
+        context = network.call_args.kwargs["context"]
+        self.assertTrue(context.check_hostname)
+        self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
+        self.assertGreater(context.cert_store_stats()["x509_ca"], 0)
+
+    def test_provider_geometry_uses_direct_large_file_endpoint(self):
+        path = "90a1d52/releaseData/gbOpen/PER/ADM0/boundary.geojson"
+        with patch.object(boundaries, "urlopen") as network:
+            boundaries._read_url("https://github.com/wmgeolab/geoBoundaries/raw/" + path)
+        self.assertEqual(
+            network.call_args.args[0].full_url,
+            "https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/" + path,
+        )
 
     def test_downloads_normalize_names_preserve_metadata_and_reuse_cache(self):
         from ai_weather.spatial import load_boundary_frame

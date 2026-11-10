@@ -25,7 +25,11 @@ def configuration(root, *, country="Ethiopia", mode="auto", remote=False, overri
                    "ROMP_OUT_DIR": str(root / "output"), "ROMP_FIG_DIR": str(root / "figures"),
                    "ROMP_MASK_URI": "", "ROMP_SHAPEFILE_URI": "", "ROMP_CLIMATOLOGY_SHAPEFILE": "",
                    "DEMO_COUNTRY_DATA": str(root / "country-copy"), **(overrides or {})}
-    with patch.dict(os.environ, environment), warnings.catch_warnings():
+    with patch.dict(os.environ, {key: value for key, value in environment.items() if value is not None}), \
+         patch("dotenv.load_dotenv"), warnings.catch_warnings():
+        for key, value in environment.items():
+            if value is None:
+                os.environ.pop(key, None)
         warnings.simplefilter("ignore")
         exec(compile(tree, str(CONFIG), "exec"), namespace)  # noqa: S102 -- Evaluate config with the cloud probe stubbed.
     return SimpleNamespace(**namespace), namespace
@@ -61,6 +65,40 @@ class BenchmarkCountryProfileTests(unittest.TestCase):
             self.assertEqual(cfg.DATA_SOURCES, before_sources)
             self.assertNotEqual(cfg.benchmark_country_sources("Peru")["models"]["AIFS"]["unit_cvt"], 123)
             self.assertEqual(cfg.region, "Ethiopia")
+
+    def test_shared_bucket_defaults_restore_all_country_catalogs(self):
+        countries = ("Senegal", "Rwanda", "Colombia", "Peru", "Bolivia", "Philippines",
+                     "Indonesia", "Pakistan", "Nigeria", "Ethiopia", "Kenya", "Sierra Leone",
+                     "Chile", "Bangladesh")
+        for configured_bucket in (None, ""):
+            with self.subTest(bucket=configured_bucket), tempfile.TemporaryDirectory() as directory:
+                cfg, namespace = configuration(Path(directory), remote=True,
+                                               overrides={"DEMO_BUCKET": configured_bucket})
+                self.assertEqual(cfg.DEMO_BUCKET, "aim4scale_training_2026")
+                namespace["gcs_fs"] = lambda: self.fail("Profile construction must not query storage")
+                for country in countries:
+                    with self.subTest(country=country):
+                        profile = cfg.benchmark_country_sources(country)
+                        token = country.replace(" ", "_")
+                        self.assertTrue(profile["available"], profile["reason"])
+                        self.assertEqual(profile["observations"]["dir"],
+                            f"gs://aim4scale_training_2026/CHIRPSv3_Country_0p25deg/{token}")
+                        for key in ("AIFS", "AIFS_ENS", "GraphCast"):
+                            self.assertTrue(profile["models"][key]["dir"].endswith(f"/tp/{token}"))
+                        if country != "Ethiopia":
+                            self.assertEqual(set(profile["models"]), {"AIFS", "AIFS_ENS", "GraphCast"})
+
+    def test_current_country_keeps_bucket_paths_after_failed_startup_probe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cfg, _ = configuration(Path(directory), country="Colombia", remote=False)
+            profile = cfg.benchmark_country_sources("Colombia")
+            self.assertTrue(profile["available"])
+            self.assertEqual(profile["observations"]["dir"],
+                             "gs://weather-test-data/CHIRPSv3_Country_0p25deg/Colombia")
+            for item in profile["models"].values():
+                self.assertTrue(item["dir"].startswith("gs://weather-test-data/"))
+                self.assertTrue(item["dir"].endswith("/Colombia"))
+                self.assertIn("Colombia", item["file_pattern"])
 
     def test_ethiopia_profile_preserves_configured_catalog(self):
         with tempfile.TemporaryDirectory() as directory:
