@@ -1,5 +1,6 @@
 ---
 title: "Demo 2"
+order: 2
 teaching: 1
 exercises: 0
 questions:

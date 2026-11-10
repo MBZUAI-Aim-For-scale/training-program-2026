@@ -1,5 +1,6 @@
 ---
 title: "Intro to DGX Spark"
+order: 0
 teaching: 15
 exercises: 120
 questions:

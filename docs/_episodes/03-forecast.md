@@ -1,5 +1,6 @@
 ---
 title: "Demo 3"
+order: 3
 teaching: 45
 exercises: 30
 questions:
@@ -233,7 +234,7 @@ Focus: when the rainy season starts, at every grid point.
 **Key parameters:**
 - Variable: `tp` (precipitation): observed CHIRPS v3 up to the day before the forecast, then the forecast
 - Definition: ICPAC (the default in most countries), Moron–Robertson, or Moron–Robertson with the MOK filter (the default for India, Bangladesh and Pakistan); every threshold can be changed on the page
-- Metric: wet-spell and dry-spell detection (see [Demo 4](/training-program-2026/04-weather-model) for full ROMP details). A wet spell whose dry-spell check runs past the end of the forecast shows as *possible* onset
+- Metric: wet-spell and dry-spell detection (see [Demo 5](/training-program-2026/04-weather-model) for full ROMP details). A wet spell whose dry-spell check runs past the end of the forecast shows as *possible* onset
 - Application: Rainy season onset timing
 
 > #### Use-Case Flags
@@ -485,4 +486,4 @@ DEMO3_IFS_SOURCE=azure bash docker/run.sh
 
 ## Next Steps
 
-After completing this demo, proceed to **Demo 4** to learn systematic benchmarking of AI weather models against local observations for rainy season onset detection.
+After completing this demo, proceed to **Demo 4** (AfriclimateAI ForecastCheck) to verify AI models over years of past forecasts, then **Demo 5** (Onset Benchmarking) to learn systematic benchmarking of AI weather models against local observations for rainy season onset detection.

@@ -68,7 +68,7 @@ class Demo4RepositoryLayoutTests(unittest.TestCase):
                  and node.target.id == "_d"]
         namespace = {"DEMOS": demos, "setup": SimpleNamespace(load_config=lambda: config)}
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)  # noqa: S102
-        self.assertEqual(next(demo for demo in demos if demo["n"] == 4)["container"], "ai_weather")
+        self.assertEqual(next(demo for demo in demos if demo.get("setup") == "demo4")["container"], "ai_weather")
 
     def test_related_documentation_has_no_merge_markers_or_stale_demo4_commands(self):
         for name in ("demos/demo4/README.md", "docs/_episodes/02-obs-dataReadiness.md",
