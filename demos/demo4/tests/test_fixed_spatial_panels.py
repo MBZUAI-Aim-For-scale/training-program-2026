@@ -23,6 +23,7 @@ from ai_weather.spatial import (
     clip_map_artist,
     clip_to_boundary,
     load_boundary_frame,
+    to_boundary_longitudes,
 )
 
 
@@ -51,7 +52,8 @@ class FixedSpatialPanelTests(unittest.TestCase):
               "weather_config": SimpleNamespace(shpfile_dir=str(root), nc_mask=str(self.mask_path)),
               "climatology_boundary_path": climatology_boundary_path, "apply_jjas_mask": apply_jjas_mask,
               "boundary_geometry": boundary_geometry, "clip_map_artist": clip_map_artist,
-              "clip_to_boundary": clip_to_boundary, "load_boundary_frame": load_boundary_frame}
+              "clip_to_boundary": clip_to_boundary, "load_boundary_frame": load_boundary_frame,
+              "to_boundary_longitudes": to_boundary_longitudes}
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), ns)  # noqa: S102
         self.plot = ns["plot_spatial_metrics"]
 
