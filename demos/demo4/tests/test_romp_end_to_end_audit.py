@@ -222,3 +222,14 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
             self.assertAlmostEqual(overall.Fair_RPS, 0., places=12)
             self.assertTrue(np.isnan(overall.Fair_Brier_Skill_Score))  # Perfect baseline: zero denominator.
             self.assertTrue(np.isnan(overall.Fair_RPS_Skill_Score))
+
+    def test_parallel_aifs_ensemble_country_boxes_complete_through_both_interfaces(self):
+        with tempfile.TemporaryDirectory(prefix='romp-e2e-parallel-country-') as folder:
+            cli, dashboard = self.run_interfaces(Path(folder), probabilistic=True,
+                                                 parallel=True, country='Peru')
+            self.assert_netcdf_parity(cli, dashboard)
+            for output in (cli, dashboard):
+                with xr.open_dataset(output / 'aifs_ens/probabilistic_metrics_aifs_ens_1-15.nc') as grid:
+                    self.assertEqual(grid.attrs['region'], 'Peru')
+                    self.assertTrue(grid.fair_brier_score.notnull().any())
+                    self.assertFalse(np.isinf(grid.to_array()).any())
