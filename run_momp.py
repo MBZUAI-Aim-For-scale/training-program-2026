@@ -10,6 +10,7 @@ import argparse
 import ast
 import contextlib
 from datetime import date
+import faulthandler
 import fnmatch
 import importlib.metadata
 import json
@@ -17,6 +18,11 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+
+# Native NetCDF/HDF5 crashes bypass Python exceptions. Include the active
+# Python stacks in execution logs, including those of spawned workers.
+faulthandler.enable()
+os.environ.setdefault("PYTHONFAULTHANDLER", "1")
 
 # ------------------------------------------------------------------------------
 # Paths

@@ -6,7 +6,7 @@ Uses 'spawn' multiprocessing context to ensure thread-safety with gRPC / GCS buc
 
 import os
 import multiprocessing as mp
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 import numpy as np
 import pandas as pd
@@ -195,7 +195,10 @@ def parallel_climatological_onset_dataset(**kwargs):
 
     tasks = [(chunk, kwargs) for chunk in year_chunks]
 
-    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+    # NetCDF/HDF5 access must not run concurrently in threads. Each spawned
+    # process owns its file handles and native-library state.
+    ctx = mp.get_context("spawn")
+    with ProcessPoolExecutor(max_workers=n_workers, mp_context=ctx) as executor:
         func_wrapper_forecast = partial(func_wrapper_climatology, dataset=True)
         list_of_results = list(executor.map(func_wrapper_forecast, tasks))
 

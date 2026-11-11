@@ -6,6 +6,12 @@ from ui.utils.benchmark_messages import cancellation_warning, execution_status
 
 
 class BenchmarkMessageTests(unittest.TestCase):
+    def test_native_segfault_is_identified_without_disguising_it_as_cancellation(self):
+        result = {"returncode": -11, "ok": False}
+        self.assertEqual(execution_status(result),
+                         'Failed — segmentation fault (SIGSEGV, exit code -11)')
+        self.assertEqual(execution_status(result, cancelled=True), 'Cancelled by you')
+
     def test_requested_cancellation_is_not_labelled_as_failure(self):
         result = {"cancelled": True, "returncode": 130, "ok": False}
         self.assertEqual(execution_status(result), "Cancelled by you")

@@ -104,14 +104,32 @@ def boundary_geometry(path):
     return _boundary_union(str(path), modified_ns)
 
 
+def to_boundary_longitudes(data, geometry):
+    """The data with its longitudes in the boundary's convention: a grid stored 0-360 (as the
+    country data west of Greenwich is: Senegal at 342-349) against a boundary in -180-180 is
+    shifted to -180-180 and sorted, so masks, clips and map extents line up. Unchanged otherwise."""
+    lon_name = next((name for name in ("lon", "longitude") if name in data.coords), None)
+    if not lon_name or data[lon_name].ndim != 1 or data[lon_name].size == 0:
+        return data
+    west, _, east, _ = geometry.bounds
+    lon = data[lon_name]
+    if float(lon.max()) > 180 and west >= -180 and east <= 180:
+        shifted = ((lon + 180) % 360) - 180
+        return data.assign_coords({lon_name: shifted}).sortby(lon_name)
+    return data
+
+
 def clip_to_boundary(data, path):
-    """Align longitudes with WGS84 polygons and mask outside their cell centers."""
+    """Mask outside polygon centers; preserve missing cells inside the region. Longitudes come
+    back in the boundary's convention (to_boundary_longitudes)."""
     from shapely import intersects_xy
 
     lon_name = next((name for name in ("lon", "longitude") if name in data.coords), None)
     lat_name = next((name for name in ("lat", "latitude") if name in data.coords), None)
     if not lon_name or not lat_name:
         return data
+    geometry = boundary_geometry(path)
+    data = to_boundary_longitudes(data, geometry)
     lon, lat = data[lon_name], data[lat_name]
     if lon.ndim != 1 or lat.ndim != 1:
         raise ValueError("Boundary masking requires rectilinear longitude/latitude coordinates")
@@ -124,7 +142,7 @@ def clip_to_boundary(data, path):
             data = data.sortby(lon_name)
         lon = data[lon_name]
     xx, yy = np.meshgrid(lon.values, lat.values)
-    inside = intersects_xy(boundary_geometry(path), xx, yy)
+    inside = intersects_xy(geometry, xx, yy)
     mask = xr.DataArray(inside, dims=(lat.dims[0], lon.dims[0]),
                         coords={dim: data.coords[dim] for dim in (lat.dims[0], lon.dims[0])
                                 if dim in data.coords})

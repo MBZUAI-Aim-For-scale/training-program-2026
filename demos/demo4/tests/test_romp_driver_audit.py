@@ -91,6 +91,12 @@ class DriverAuditTests(unittest.TestCase):
 
     def test_parallel_climatology_matches_year_weighted_mean_with_nan_and_uneven_chunks(self):
         values = {2000: [100., np.nan], 2001: [101., np.nan], 2002: [200., 250.]}
+        context = object()
+        multiprocessing = SimpleNamespace(get_context=MagicMock(return_value=context))
+        # These synthetic local functions only exercise aggregation; real
+        # spawned native I/O is covered by test_parallel_netcdf_safety.py.
+        process_pool = MagicMock(side_effect=lambda *, max_workers, mp_context:
+                                 ThreadPoolExecutor(max_workers=max_workers))
 
         def dataset(**kwargs):
             return xr.DataArray([values[year] for year in kwargs['years_clim']],
@@ -101,19 +107,23 @@ class DriverAuditTests(unittest.TestCase):
 
         ns = functions('stats/parallel.py', {'parallel_climatological_onset',
                        'parallel_climatological_onset_dataset', 'func_wrapper_climatology'},
-                       os=os, np=np, xr=xr, partial=partial, ThreadPoolExecutor=ThreadPoolExecutor,
+                       os=os, np=np, xr=xr, partial=partial, mp=multiprocessing,
+                       ProcessPoolExecutor=process_pool,
                        compute_climatological_onset=means,
                        compute_climatological_onset_dataset=dataset)
         with patch.object(os, 'cpu_count', return_value=2):
             result = ns['parallel_climatological_onset'](years_clim=[2000, 2001, 2002])
         np.testing.assert_equal(result.values, [134., 250.])
+        multiprocessing.get_context.assert_called_once_with('spawn')
+        process_pool.assert_called_once_with(max_workers=2, mp_context=context)
 
     def test_empty_parallel_requests_fail_before_creating_executors(self):
         ns = functions('stats/parallel.py', {'parallel_climatological_onset_dataset'},
-                       os=os, np=np, xr=xr, ThreadPoolExecutor=MagicMock())
+                       os=os, np=np, xr=xr, mp=MagicMock(), ProcessPoolExecutor=MagicMock())
         with self.assertRaisesRegex(ValueError, 'years_clim'):
             ns['parallel_climatological_onset_dataset'](years_clim=[])
-        ns['ThreadPoolExecutor'].assert_not_called()
+        ns['ProcessPoolExecutor'].assert_not_called()
+        ns['mp'].get_context.assert_not_called()
 
     def test_explicit_driver_cfg_derives_matching_setting_and_validates_before_stages(self):
         namespace = runpy.run_path(str(ROOT / 'lib/convention.py'))
@@ -144,6 +154,11 @@ class DriverAuditTests(unittest.TestCase):
         self.assertIsNone(ns['_setting'])
 
     def test_parallel_climatology_keeps_valid_years_when_one_chunk_has_no_data(self):
+        context = object()
+        multiprocessing = SimpleNamespace(get_context=MagicMock(return_value=context))
+        process_pool = MagicMock(side_effect=lambda *, max_workers, mp_context:
+                                 ThreadPoolExecutor(max_workers=max_workers))
+
         def dataset(**kwargs):
             years = list(kwargs['years_clim'])
             if years == [2000]:
@@ -152,8 +167,10 @@ class DriverAuditTests(unittest.TestCase):
                                 coords={'year': years})
         ns = functions('stats/parallel.py', {'parallel_climatological_onset_dataset',
                        'func_wrapper_climatology'}, os=os, np=np, xr=xr, partial=partial,
-                       ThreadPoolExecutor=ThreadPoolExecutor,
+                       mp=multiprocessing, ProcessPoolExecutor=process_pool,
                        compute_climatological_onset_dataset=dataset)
         with patch.object(os, 'cpu_count', return_value=3):
             actual = ns['parallel_climatological_onset_dataset'](years_clim=[2000, 2001, 2002])
         self.assertEqual(actual.year.values.tolist(), [2001, 2002])
+        multiprocessing.get_context.assert_called_once_with('spawn')
+        process_pool.assert_called_once_with(max_workers=3, mp_context=context)

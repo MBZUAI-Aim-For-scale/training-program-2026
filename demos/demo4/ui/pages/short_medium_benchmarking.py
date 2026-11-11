@@ -2198,6 +2198,7 @@ def _analyze_onset_streamlit(year, lat, lon):
 
     env["PYTHONPATH"] = str(PROJECT_ROOT.resolve())
     env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONFAULTHANDLER"] = "1"
     env["MPLBACKEND"] = "Agg"
     env["MPLCONFIGDIR"] = str((PROJECT_ROOT / ".mplcache").resolve())
     Path(env["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)

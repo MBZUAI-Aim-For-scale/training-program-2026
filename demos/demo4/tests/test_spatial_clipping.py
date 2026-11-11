@@ -18,6 +18,7 @@ from ai_weather.spatial import (
     clip_map_artist,
     clip_to_boundary,
     load_boundary_frame,
+    to_boundary_longitudes,
 )
 
 
@@ -73,3 +74,33 @@ class SpatialClippingTests(unittest.TestCase):
             self.assertIsNot(first, load_boundary_frame(self.path))
             self.assertIsNot(geometry, boundary_geometry(self.path))
             self.assertEqual(read.call_count, 2)
+
+
+class WestOfGreenwichTests(unittest.TestCase):
+    """Country data west of Greenwich is stored 0-360 (Senegal at 342-349); boundaries are -180-180."""
+
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / "senegal.geojson"
+        box = [[-17.5, 12.3], [-11.3, 12.3], [-11.3, 16.7], [-17.5, 16.7], [-17.5, 12.3]]
+        self.path.write_text(json.dumps({"type": "FeatureCollection", "features": [
+            {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [box]}}]}))
+        lon = np.arange(342.0, 349.01, 0.25)
+        lat = np.arange(11.75, 17.26, 0.25)
+        self.data = xr.DataArray(np.ones((lat.size, lon.size)), dims=("lat", "lon"), coords={"lat": lat, "lon": lon})
+
+    def test_clip_keeps_the_country_and_returns_minus_180_to_180(self):
+        masked = clip_to_boundary(self.data, self.path)
+        self.assertTrue(np.isfinite(masked.values).any())                   # (was all NaN: "No valid data")
+        self.assertAlmostEqual(float(masked.lon.min()), -18.0)
+        self.assertAlmostEqual(float(masked.lon.max()), -11.0)
+        self.assertTrue(bool((masked.lon.diff("lon") > 0).all()))           # (sorted)
+        self.assertEqual(float(masked.sel(lat=14.0, lon=-14.0)), 1.0)       # (inside)
+        self.assertTrue(np.isnan(float(masked.sel(lat=14.0, lon=-18.0))))   # (outside, west)
+        self.assertEqual(float(self.data.lon.min()), 342.0)                 # (input unchanged)
+
+    def test_east_of_greenwich_is_unchanged(self):
+        geometry = boundary_geometry(self.path)
+        nigeria = self.data.assign_coords(lon=np.linspace(2.25, 15.25, self.data.lon.size))
+        self.assertIs(to_boundary_longitudes(nigeria, geometry), nigeria)

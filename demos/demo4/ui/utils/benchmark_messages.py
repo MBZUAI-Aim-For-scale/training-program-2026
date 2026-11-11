@@ -17,4 +17,6 @@ def execution_status(result, cancelled=False):
         return "Completed"
     if result.get("cancelled") or cancelled:
         return "Stop requested — cleanup not confirmed" if cancellation_warning({"runs": [result]}) else "Cancelled by you"
+    if result.get('returncode') == -11:
+        return 'Failed — segmentation fault (SIGSEGV, exit code -11)'
     return f"Failed — exit code {result.get('returncode', 'unknown')}"
