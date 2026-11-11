@@ -435,9 +435,11 @@ def _remote_has_data(remote_uri: str) -> bool:
 
     threading.Thread(target=probe, daemon=True).start()
     try:
-        timeout = max(0.1, float(os.getenv("DEMO_GCS_PROBE_TIMEOUT", "3")))
+        # (15 s: the first check also signs in to Google Cloud, which takes 2-5 s from a Spark in
+        # Dubai; at 3 s it often timed out, and one timeout marks every source missing.)
+        timeout = max(0.1, float(os.getenv("DEMO_GCS_PROBE_TIMEOUT", "15")))
     except ValueError:
-        timeout = 3.0
+        timeout = 15.0
     if not finished.wait(timeout):
         _REMOTE_PROBE_UNAVAILABLE = True
         return False
