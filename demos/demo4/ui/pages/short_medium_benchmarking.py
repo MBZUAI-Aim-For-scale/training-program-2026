@@ -2376,6 +2376,10 @@ def run_momp_benchmark(
 
     try:
         import time
+        # Ensemble hindcasts can exceed the former fixed 30-minute limit.
+        timeout_seconds = int(env.get("ROMP_BENCHMARK_TIMEOUT_SECONDS", "21600"))
+        if timeout_seconds <= 0:
+            raise ValueError("ROMP_BENCHMARK_TIMEOUT_SECONDS must be a positive integer")
         cmd[0] = select_runtime_python(PROJECT_ROOT)
         from collections import deque
         def spawn(argv, child_env, cwd, timeout, on_line=None):
@@ -2400,15 +2404,20 @@ def run_momp_benchmark(
                 live.code(f"[{int(now - started)}s elapsed] {' '.join(cmd[-4:])}\n" + "\n".join(list(lines)[-15:]))
                 last_draw = now
 
-        returncode, timed_out = spawn(cmd, env, str(PROJECT_ROOT.resolve()), 1800, _on_line)
+        _on_line(f"Benchmark time limit: {timeout_seconds} seconds.")
+        returncode, timed_out = spawn(cmd, env, str(PROJECT_ROOT.resolve()), timeout_seconds, _on_line)
 
         text = "\n".join(lines)
         if timed_out:
-            text += "\nTimed out after 30 minutes."
+            text += (f"\nTimed out after {timeout_seconds} seconds. "
+                     "Increase ROMP_BENCHMARK_TIMEOUT_SECONDS and rerun the benchmark, "
+                     "or reduce the evaluation years or initialization dates.")
 
         return {
             "mode": mode,
             "returncode": returncode,
+            "timed_out": timed_out,
+            "timeout_seconds": timeout_seconds,
             "runtime_dir": env.get("ROMP_OUT_DIR", str(ROMP_DEMO_OUT_DIR)),
             "stdout": text,
             "stderr": "",

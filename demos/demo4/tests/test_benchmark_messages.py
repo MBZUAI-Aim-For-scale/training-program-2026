@@ -6,6 +6,13 @@ from ui.utils.benchmark_messages import cancellation_warning, execution_status
 
 
 class BenchmarkMessageTests(unittest.TestCase):
+    def test_timeout_explains_the_limit_and_recovery(self):
+        result = {"ok": False, "returncode": 124, "timed_out": True, "timeout_seconds": 21600}
+        self.assertEqual(execution_status(result),
+                         "Timed out after 21600 seconds — increase the benchmark time limit or reduce the evaluation period")
+        self.assertTrue(execution_status({"returncode": 124}).startswith("Timed out —"))
+        self.assertEqual(execution_status(result, cancelled=True), "Cancelled by you")
+
     def test_native_segfault_is_identified_without_disguising_it_as_cancellation(self):
         result = {"returncode": -11, "ok": False}
         self.assertEqual(execution_status(result),

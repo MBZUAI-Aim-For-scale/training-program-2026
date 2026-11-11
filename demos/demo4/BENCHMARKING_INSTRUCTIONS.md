@@ -93,3 +93,13 @@ Zero disables the follow-up dry-spell veto. Onset dates can change in forecasts,
 2. Set **Tolerance: days 1–15 = 3** and **Tolerance: days 16–30 = 3**. **Max Forecast Day (automatic)** becomes **30**; run only if the model supports this horizon.
 3. In **All Metrics → Lead times**, select both windows. Compare the same metrics and area, keeping all other settings fixed.
 4. Write one finding supported by your recorded values: which window performed better, on which metric, and under which settings? Note missing data or unequal sample coverage.
+
+## Benchmark time limit
+
+Dashboard benchmarks allow up to six hours per model. Exit code 124 means the
+worker exceeded its time limit. For longer ensemble evaluations, set
+`ROMP_BENCHMARK_TIMEOUT_SECONDS=43200` (12 hours) in the environment before
+starting the dashboard. The value must be a positive integer in seconds.
+Restart the dashboard after changing it, then rerun the failed model. You can
+also reduce the evaluation years or initialization dates. The Stop button
+remains available during long runs.
