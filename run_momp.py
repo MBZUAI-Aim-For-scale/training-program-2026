@@ -333,9 +333,6 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
         patterns = _meta_get(obs_meta, "file_pattern", "{}.nc")
         cfg.obs_file_pattern = tuple(patterns) if isinstance(patterns, (list, tuple)) else (str(patterns),)
         cfg.obs_var = _clean_str(_meta_get(obs_meta, "var", "precip"))
-        cfg.ref_model_dir = cfg.obs_dir
-        cfg.ref_model_file_pattern = cfg.obs_file_pattern
-        cfg.ref_model_var = cfg.obs_var
     coverage = _clean_str(spec.get("benchmark_coverage", ""))
     if coverage:
         cfg.region = coverage
@@ -380,6 +377,11 @@ def apply_spec_to_cfg(cfg, spec: dict, model_key: str):
     baseline_data_path = _clean_str(shared.get("baseline_data_path", ""))
     if baseline_data_path:
         cfg.ref_model_dir = resolve_path(baseline_data_path)
+    elif (ground_truth or baseline_forecast) and getattr(cfg, "ref_model", "climatology") == "climatology":
+        # Only climatology derives its reference source from observations.
+        cfg.ref_model_dir = cfg.obs_dir
+        cfg.ref_model_file_pattern = cfg.obs_file_pattern
+        cfg.ref_model_var = cfg.obs_var
     models = spec.get("models", [])
     if not isinstance(models, list) or any(not isinstance(model, dict) for model in models):
         raise ValueError("Spec models must be an array of model settings objects.")
@@ -559,9 +561,13 @@ def apply_env_vars_to_cfg(cfg):
             patterns = obs_settings.get("pattern", "{}.nc")
             cfg.obs_file_pattern = tuple(patterns) if isinstance(patterns, (list, tuple)) else (str(patterns),)
             cfg.obs_var = _clean_str(obs_settings.get("var", "precip"))
-            cfg.ref_model_dir = cfg.obs_dir
-            cfg.ref_model_file_pattern = cfg.obs_file_pattern
-            cfg.ref_model_var = cfg.obs_var
+
+    if os.getenv("ROMP_GROUND_TRUTH") and getattr(cfg, "ref_model", "climatology") == "climatology":
+        # Keep a custom forecast's directory, variable and filenames independent
+        # of the selected observations, including after a spec is applied.
+        cfg.ref_model_dir = cfg.obs_dir
+        cfg.ref_model_file_pattern = cfg.obs_file_pattern
+        cfg.ref_model_var = cfg.obs_var
 
     for key, env_name in [
         ("mok", "ROMP_MOK"),
@@ -581,6 +587,10 @@ def apply_env_vars_to_cfg(cfg):
 # ------------------------------------------------------------------------------
 def validate_runtime_config(cfg):
     """Check the final merged settings, after spec and dashboard overrides."""
+    start, end = getattr(cfg, "start_date", None), getattr(cfg, "end_date", None)
+    if start and end and tuple(start[1:]) > tuple(end[1:]):
+        raise ValueError(
+            "Cross-year evaluation seasons are not supported; choose a season within one calendar year.")
     mode = getattr(cfg, "init_type", "weekly")
     days = getattr(cfg, "init_days", (0, 3))
     if mode not in {"weekly", "daily", "monthly"}:

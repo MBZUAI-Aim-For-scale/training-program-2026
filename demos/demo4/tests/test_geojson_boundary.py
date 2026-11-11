@@ -58,6 +58,7 @@ class GeojsonBoundaryTests(unittest.TestCase):
                   "apply_jjas_mask": apply_jjas_mask, "climatology_boundary_path": climatology_boundary_path,
                   "load_boundary_frame": load_boundary_frame,
                   "config": SimpleNamespace(shpfile_dir=str(path.parent), nc_mask=None)}
+            ns["_country_boundary_path"] = lambda _: climatology_boundary_path(ns["config"])
             exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), ns)  # noqa: S102
             ds = xr.Dataset({"dayofyear": xr.DataArray(np.full((49, 61), 180.0), dims=("lat", "lon"),
                             coords={"lat": np.linspace(3, 15, 49), "lon": np.linspace(33, 48, 61)})})

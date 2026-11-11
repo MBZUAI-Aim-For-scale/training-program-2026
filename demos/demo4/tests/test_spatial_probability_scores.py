@@ -103,12 +103,17 @@ class SpatialProbabilityScoreTests(unittest.TestCase):
             pooled.write_text("AUC\n0.75\n")
             path = save_spatial_probability_scores(
                 self.pairs(), model="aifs_ens", verification_window=(1, 15), dir_out=directory,
-                years=(2024,), years_clim=(2010, 2020))
+                years=(2024,), years_clim=(2010, 2020), date_filter_year=2020,
+                init_type="weekly", init_days=(0, 3))
             self.assertEqual(path.name, "probabilistic_metrics_aifs_ens_1-15.nc")
             self.assertEqual(pooled.read_text(), "AUC\n0.75\n")
             with xr.open_dataset(path) as saved:
                 self.assertEqual(set(saved.dims), {"lat", "lon"})
                 self.assertEqual(saved.attrs["model"], "aifs_ens")
+                self.assertEqual(saved.attrs["date_filter_year"], "2020")
+                self.assertEqual(saved.attrs["init_type"], "weekly")
+                self.assertEqual(saved.attrs["init_days"], "(0, 3)")
+                self.assertEqual(saved.attrs["reference_years"], "(2010, 2020)")
                 self.assertEqual(saved.attrs["rps_category_order"], "chronological_complete_partition")
                 self.assertEqual(saved.fair_brier_skill_score.attrs["units"], "1")
                 self.assertFalse(np.isinf(saved.to_array()).any())

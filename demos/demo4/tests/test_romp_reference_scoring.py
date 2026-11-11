@@ -154,13 +154,18 @@ class ReferenceScoringTests(unittest.TestCase):
                   'forecast_obs_df': pd.DataFrame({'year': [2022], 'init_time': ['2022-06-01']})}
         with tempfile.TemporaryDirectory() as directory:
             _, overall = ns['save_score_results'](result, model='test', verification_window=(1, 15),
-                                                  dir_out=directory, years=(2021, 2022), years_clim=(2021, 2022))
+                                                  dir_out=directory, years=(2021, 2022), years_clim=(2021, 2022),
+                                                  date_filter_year=2020, init_type='weekly', init_days=(0, 3))
             self.assertEqual(overall['Reference_Membership'], 'includes_verification_year')
             self.assertEqual(overall['Reference_Probability_Conditioning'], 'finite_climatological_onsets')
             self.assertEqual(overall['Forecast_Probability_Conditioning'], 'all_usable_members_including_no_onset')
             self.assertEqual(overall['Evaluation_Years'], '(2021, 2022)')
             self.assertEqual(overall['Actual_Evaluation_Years'], '(2022,)')
             self.assertEqual(overall['Requested_Reference_Years'], '(2021, 2022)')
+            exported = pd.read_csv(Path(directory) / 'overall_skill_scores_test_1-15.csv').iloc[0]
+            self.assertEqual(exported['Reference_Calendar_Year'], 2020)
+            self.assertEqual(exported['Init_Type'], 'weekly')
+            self.assertEqual(exported['Init_Days'], '(0, 3)')
             result['forecast_obs_df'] = result['forecast_obs_df'].drop(columns='year')
             _, fallback = ns['save_score_results'](result, model='test', verification_window=(1, 15),
                                                    dir_out=directory, years=(2021, 2022), years_clim=(2021, 2022))

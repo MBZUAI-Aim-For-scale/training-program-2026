@@ -10,7 +10,10 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 
-from ui.utils.benchmark_report import collect_evaluated_models
+from ui.utils.benchmark_report import (
+    collect_benchmark_settings,
+    collect_evaluated_models,
+)
 
 
 class BenchmarkReportModelTests(unittest.TestCase):
@@ -111,11 +114,13 @@ class BenchmarkReportModelTests(unittest.TestCase):
         namespace = {
             'st': st, 'datetime': datetime, 'ROMP_DEMO_OUT_DIR': self.root,
             'collect_evaluated_models': collect_evaluated_models,
+            'collect_benchmark_settings': collect_benchmark_settings,
             'CONFIG_BENCHMARK_MODEL_CATALOG': {}, 'model_registry': [], 'active_rows': [],
             'ground_truth': 'CHIRPS', 'benchmark_coverage': 'Ethiopia',
             'forecast_window': '1-15 days', 'shared_settings': {'baseline_forecast': 'climatology'},
             'map_outputs': [], 'scores_df': pd.DataFrame(), 'distribution_stats': pd.DataFrame(),
             'report_figures': {},
+            'reference_warnings': [],
         }
         exec(compile(ast.Module(body=summary_body[start:end + 1], type_ignores=[]),
                      str(source), 'exec'), namespace)

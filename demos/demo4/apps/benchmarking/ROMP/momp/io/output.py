@@ -51,6 +51,12 @@ def save_score_results(score_results, *, model, verification_window, dir_out, sa
         'Score_Definition': 'paired_fair_rps_v2',
         'Evaluation_Years': str(kwargs.get('years', '')),
         'Reference_Years': str(kwargs.get('years_clim', '')),
+        'Reference_Calendar_Year': str(kwargs.get('date_filter_year', '')),
+        'Init_Type': str(kwargs.get('init_type', '')),
+        'Init_Days': str(kwargs.get('init_days', '')),
+        'Evaluation_Start': str(kwargs.get('start_date', '')),
+        'Evaluation_End': str(kwargs.get('end_date', '')),
+        'Baseline_Forecast': str(kwargs.get('ref_model', '')),
         'Actual_Evaluation_Years': actual_evaluation_years,
         'Requested_Reference_Years': str(kwargs.get('years_clim', '')),
         'Reference_Fair_RPS': reference_rps.get('fair_rps', np.nan),
@@ -150,7 +156,7 @@ def save_metrics_to_netcdf(spatial_metrics, attrs_dict, desc_dict=None, fname='s
                                           'date_filter_year', 'init_days', 'init_type', 'start_date',
                                           'end_date', 'probabilistic', 'obs_dir', 'obs_var',
                                           'obs_file_pattern', 'obs_unit_cvt', 'thresh_file',
-                                          'thresh_var', 'nc_mask')):
+                                          'thresh_var', 'nc_mask', 'ref_model')):
     """
     Create an xarray Dataset from spatial_metrics, attach global attributes,
     and save to a NetCDF file.

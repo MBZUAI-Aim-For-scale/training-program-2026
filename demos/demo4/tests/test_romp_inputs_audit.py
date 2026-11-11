@@ -98,6 +98,23 @@ class OnsetInputAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'daily'):
             detect.detect_observed_onset(rain, 10., 2024, dry_extent=0)
 
+    def test_cross_year_observation_season_is_rejected_instead_of_scoring_no_onset(self):
+        rain = self.rain(np.full(366, 10.), pd.date_range('2024-01-01', periods=366))
+        with self.assertRaisesRegex(ValueError, 'Cross-year evaluation seasons'):
+            detect.detect_observed_onset(rain, 20., 2024, start_date=(2024, 11, 1),
+                                         end_date=(2025, 3, 31), dry_extent=0)
+
+    def test_dashboard_preflight_rejects_unsupported_cross_year_season(self):
+        from datetime import date
+
+        from ui.utils.verification_settings import temporal_settings_errors
+
+        settings = {'eval_start': date(2024, 11, 1), 'eval_end': date(2025, 3, 31),
+                    'baseline_start_year': 2021, 'baseline_end_year': 2023,
+                    'init_type': 'daily', 'initialization_days': []}
+        errors = temporal_settings_errors(settings, range(2021, 2026))
+        self.assertTrue(any('Cross-year evaluation seasons' in error for error in errors))
+
     def test_partial_spatial_aliases_normalize_independently(self):
         for names in (('lat', 'longitude'), ('latitude', 'lon')):
             ds = xr.Dataset({'rain': (names, [[1.]])}, coords={names[0]: [8.], names[1]: [39.]})

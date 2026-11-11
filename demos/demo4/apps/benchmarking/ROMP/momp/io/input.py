@@ -505,7 +505,8 @@ def get_forecast_probabilistic_twice_weekly(year=None, *, model_dir=None, model_
     filtered_dates_yr = get_initialization_dates(year, **kwargs_clean)
 
     with storage.open_dataset(file_path) as ds:
-        ds.load()
+        # Annual ensembles can exceed memory. Keep the file lazy until dates,
+        # members and region are selected; load the returned rainfall before closing.
         admin_dim = next(
             (name for name in ("adm3_name", "adm2_name", "adm1_name", "woreda", "district") if name in ds.dims),
             None,

@@ -11,10 +11,9 @@ from ai_weather.benchmark_job import BenchmarkJob
 from ai_weather.background_task import BackgroundTask
 from ai_weather.country_boundaries import COUNTRY_ISO3, cached_boundary_path, download_country_boundaries
 from ui.utils.benchmark_session import reconnect_benchmark, remember_benchmark
-from ui.utils.benchmark_report import collect_evaluated_models
+from ui.utils.benchmark_report import collect_benchmark_settings, collect_evaluated_models, compatible_reference_outputs
 from ui.utils.parameter_help import PARAMETER_HELP
 from ui.utils.benchmark_messages import cancellation_warning, execution_status
-from ai_weather.spatial import climatology_boundary_path
 from ai_weather.spatial import apply_jjas_mask
 
 import os
@@ -939,6 +938,7 @@ def discover_map_outputs(force_refresh: bool = False, output_root=None) -> List[
         try:
             mtime = nc_path.stat().st_mtime
             with xr.open_dataset(nc_path, decode_cf=False, decode_times=False) as ds:
+                metadata = dict(ds.attrs)
                 contingency_definition = ds.attrs.get("contingency_definition")
                 for mm in MAP_METRICS.values():
                     var = _find_var(ds, mm["keywords"])
@@ -974,6 +974,7 @@ def discover_map_outputs(force_refresh: bool = False, output_root=None) -> List[
                 "windows": windows,
                 "mtime": mtime,
                 "contingency_definition": contingency_definition,
+                "metadata": metadata,
             }
         )
     latest_by_model_window = {}
@@ -991,7 +992,7 @@ def discover_map_outputs(force_refresh: bool = False, output_root=None) -> List[
             deduplicated[key] = {**output, "windows": []}
         deduplicated[key]["windows"].append(window)
 
-    return sorted(deduplicated.values(), key=lambda item: item["model_label"])
+    return compatible_reference_outputs(sorted(deduplicated.values(), key=lambda item: item["model_label"]))
 
 
 def _map_select_window(da: xr.DataArray, wl: str) -> xr.DataArray:
@@ -2282,6 +2283,14 @@ def run_momp_benchmark(
             "runtime_dir": str(ROMP_DEMO_OUT_DIR),
         }
 
+    country = (run_config or {}).get("benchmark_coverage")
+    if country in COUNTRY_ISO3 and _country_boundary_path(country) is None:
+        return {
+            "mode": mode, "returncode": 1, "ok": False,
+            "stdout": "", "stderr": f"Download country boundaries for {country} before running the benchmark.",
+            "runtime_dir": str(ROMP_DEMO_OUT_DIR),
+        }
+
     rmp = _locate_run_momp()
     if rmp is None:
         return {
@@ -2817,18 +2826,33 @@ def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
     det_count = sum(1 for r in active_rows if r.get("Category") == "Deterministic")
     prob_count = sum(1 for r in active_rows if r.get("Category") == "Probabilistic")
     pdf.key_value_lines([
-        ("Ground Truth", context.get("ground_truth", "")),
-        ("Benchmark Coverage", context.get("benchmark_coverage", "")),
-        ("Forecast Window", context.get("forecast_window", "")),
-        ("Baseline Forecast", shared_settings.get("baseline_forecast", "climatology")),
+        ("Selected Ground Truth", context.get("ground_truth", "")),
+        ("Selected Benchmark Coverage", context.get("benchmark_coverage", "")),
+        ("Selected Forecast Window", context.get("forecast_window", "")),
         ("Models Evaluated", len(active_rows)),
         ("Deterministic Models", det_count),
         ("Probabilistic Models", prob_count),
     ])
     if context.get('model_count_basis') == 'stored_outputs':
         pdf.paragraph(
-            'Models are counted from stored benchmark outputs. Input settings shown are the current '
-            'dashboard controls; confirm the output metadata matches the experiment being reported.')
+            'Models are counted from stored benchmark outputs. Recorded benchmark settings below '
+            'come from each output file. Current dashboard selections may describe a different run.')
+
+    recorded_settings = context.get('recorded_settings', [])
+    pdf.section_title("Recorded Benchmark Settings")
+    pdf.paragraph(
+        'Baseline years are the configured observation years used to construct the reference. '
+        'The reference calendar year anchors weekly initialization weekdays; it is not a baseline '
+        'or evaluation year. It does not apply to daily or monthly schedules. '
+        'Missing metadata in older output files is shown as Not recorded.')
+    if not recorded_settings:
+        pdf.paragraph('No recorded settings are available for these outputs.')
+    for warning in context.get('reference_warnings', []):
+        pdf.paragraph(warning)
+    for record in recorded_settings:
+        pdf.sub_title(f"{record['Model']} - {record['Window']}")
+        pdf.key_value_lines([(key, value) for key, value in record.items()
+                             if key not in {'Model', 'Window'}])
 
     if active_rows:
         models_df = pd.DataFrame([
@@ -2846,7 +2870,7 @@ def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
             pdf.dataframe_table(models_df)
 
     if shared_settings:
-        pdf.section_title("Shared Settings")
+        pdf.section_title("Current Dashboard Settings (not recorded output settings)")
         pdf.key_value_lines([(str(k).replace("_", " ").title(), v) for k, v in shared_settings.items()])
 
     map_outputs = context.get("map_outputs", [])
@@ -2874,6 +2898,10 @@ def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
         pdf.dataframe_table(distribution_stats)
 
     figures = context.get("figures", {})
+    if context.get('reference_warnings'):
+        figures = {category: [path for path in paths
+                              if 'climatology' not in {part.casefold() for part in Path(path).parts}]
+                   for category, paths in figures.items()}
     has_figures = any(paths for paths in figures.values())
     if has_figures:
         pdf.section_title("Benchmark Output Figures")
@@ -3137,6 +3165,8 @@ def _record_finished_benchmark(job):
         "command": "\n".join(r.get("command", "") for r in runs), "runs": runs,
     }
     st.session_state.pop("benchmark_active_job", None)
+    st.session_state.pop("benchmark_pdf_bytes", None)
+    st.session_state.pop("benchmark_pdf_file", None)
     st.cache_data.clear()
 
 
@@ -3317,7 +3347,7 @@ def render_country_boundaries(country):
     if available:
         st.caption(f"{country} boundaries available: {', '.join(available)}. Source: geoBoundaries gbOpen (CC BY 4.0).")
     else:
-        st.caption("Download country and subregion boundaries to enable map outlines and subregion selection.")
+        st.caption("Download country and subregion boundaries before running a benchmark to enable map outlines and subregion selection.")
     errors = results.get(country, {}).get("errors", {})
     if errors:
         st.warning("Some boundaries could not be downloaded. Existing boundaries remain available.")
@@ -3746,8 +3776,12 @@ def page() -> None:
     distribution_args = {} if benchmark_coverage == "Ethiopia" else {
         "output_root": ROMP_DEMO_OUT_DIR, "country": benchmark_coverage}
     map_outputs = discover_map_outputs(**result_args) if any(
-        tab.open and label in {"Metric Map", "All Metrics", "Benchmark Report & Export"}
+        tab.open and label in {"Metric Map", "All Metrics", "Skill vs Baseline", "Uncertainty", "Benchmark Report & Export"}
         for tab, label in zip(res_tabs, tab_labels)) else []
+    reference_warnings = sorted({output['reference_warning'] for output in map_outputs
+                                 if output.get('reference_warning')})
+    for warning in reference_warnings:
+        st.warning(warning)
 
     # Tab 1: Metric Map
     if res_tabs[0].open:
@@ -4399,7 +4433,7 @@ def page() -> None:
                             st.image(img_bytes, width='stretch')
 
     # Tab 5: Skill vs Baseline
-    if PHASE_4_AVAILABLE and "Skill vs Baseline" in tab_labels:
+    if PHASE_4_AVAILABLE and "Skill vs Baseline" in tab_labels and not reference_warnings:
         if res_tabs[tab_labels.index("Skill vs Baseline")].open:
             with res_tabs[tab_labels.index("Skill vs Baseline")]:
                 section_header("Skill versus Climatology", "green")
@@ -4417,7 +4451,7 @@ def page() -> None:
                     info_box(f"Verification engine error: {e}", "rose")
 
     # Tab 6: Uncertainty
-    if PHASE_5_AVAILABLE and "Uncertainty" in tab_labels:
+    if PHASE_5_AVAILABLE and "Uncertainty" in tab_labels and not reference_warnings:
         if res_tabs[tab_labels.index("Uncertainty")].open:
             with res_tabs[tab_labels.index("Uncertainty")]:
                 section_header("Uncertainty & Statistical Significance", "amber")
@@ -4472,7 +4506,8 @@ def page() -> None:
                         reference_models=(shared_settings.get('baseline_forecast'),))
                     st.caption(
                         'Models are counted from stored benchmark outputs, independently of current selection. '
-                        'Check output metadata before combining results with the current input settings.')
+                        'The PDF lists recorded years and initialization settings for each output; '
+                        'current dashboard selections are shown separately.')
                     c1, c2, c3, c4 = st.columns(4)
                     c1.metric("Models Evaluated", len(report_rows))
                     c2.metric("Ground Truth", ground_truth)
@@ -4507,7 +4542,7 @@ def page() -> None:
                             try:
                                 # Collect verification scores
                                 scores_df = pd.DataFrame()
-                                if PHASE_4_AVAILABLE:
+                                if PHASE_4_AVAILABLE and not reference_warnings:
                                     try:
                                         scores_df = collect_scores_from_momp_outputs(ROMP_DEMO_OUT_DIR)
                                     except Exception:
@@ -4533,6 +4568,8 @@ def page() -> None:
                                     "forecast_window": forecast_window,
                                     "shared_settings": shared_settings,
                                     "active_rows": report_rows,
+                                    "recorded_settings": collect_benchmark_settings(report_rows),
+                                    "reference_warnings": reference_warnings,
                                     "model_count_basis": "stored_outputs",
                                     "fair_plan": st.session_state.get("fair_comparison_plan"),
                                     "map_outputs": map_outputs,
@@ -4548,6 +4585,8 @@ def page() -> None:
 
                                 # Store in session state
                                 st.session_state["benchmark_pdf_bytes"] = pdf_bytes
+                                st.session_state["benchmark_pdf_signature"] = settings_signature
+                                st.session_state["benchmark_pdf_output_dir"] = str(ROMP_DEMO_OUT_DIR)
                                 st.session_state["benchmark_pdf_file"] = (
                                     f"benchmark_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
                                 )
@@ -4561,7 +4600,9 @@ def page() -> None:
                     # Download Button (appears after generation)
                     pdf_bytes = st.session_state.get("benchmark_pdf_bytes")
                     pdf_file = st.session_state.get("benchmark_pdf_file")
-                    if pdf_bytes and pdf_file:
+                    if (pdf_bytes and pdf_file
+                            and st.session_state.get("benchmark_pdf_signature") == settings_signature
+                            and st.session_state.get("benchmark_pdf_output_dir") == str(ROMP_DEMO_OUT_DIR)):
                         st.download_button(
                             "Download Complete PDF Report",
                             data=pdf_bytes,

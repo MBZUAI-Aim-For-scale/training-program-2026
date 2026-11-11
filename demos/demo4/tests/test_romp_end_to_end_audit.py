@@ -206,6 +206,18 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
                 with self.subTest(file=relative):
                     pd.testing.assert_frame_equal(pd.read_csv(cli / relative), pd.read_csv(dashboard / relative))
             overall = pd.read_csv(cli / 'aifs_ens/overall_skill_scores_aifs_ens_1-15.csv').iloc[0]
+            self.assertEqual(overall.Reference_Calendar_Year, 2023)
+            self.assertEqual(overall.Requested_Reference_Years, '(2021, 2022)')
+            from ui.utils.benchmark_report import (
+                collect_benchmark_settings,
+                collect_evaluated_models,
+            )
+
+            settings = collect_benchmark_settings(collect_evaluated_models(dashboard))
+            self.assertTrue(settings)
+            for recorded in settings:
+                self.assertEqual(recorded['Baseline years'], '2021-2022')
+                self.assertEqual(recorded['Reference calendar year'], 'Not applicable')
             self.assertAlmostEqual(overall.Fair_Brier_Score, 0., places=12)
             self.assertAlmostEqual(overall.Fair_RPS, 0., places=12)
             self.assertTrue(np.isnan(overall.Fair_Brier_Skill_Score))  # Perfect baseline: zero denominator.

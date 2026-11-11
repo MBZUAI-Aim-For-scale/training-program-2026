@@ -1,5 +1,6 @@
 """Country selection isolates source discovery, worker settings and saved maps."""
 
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -119,7 +120,11 @@ class BenchmarkCountryUITests(unittest.TestCase):
             root = Path(directory)
             runner = root / "run_momp.py"
             runner.touch()
-            with patch.object(self.page, "PROJECT_ROOT", root), \
+            boundary = root / "boundaries/PER/ADM0.geojson"
+            boundary.parent.mkdir(parents=True)
+            boundary.write_text('{}')
+            with patch.object(self.page, "EXTERNAL_DATA_DIR", root), \
+                 patch.object(self.page, "PROJECT_ROOT", root), \
                  patch.object(self.page, "_locate_run_momp", return_value=runner), \
                  patch.object(self.page, "select_runtime_python", return_value=sys.executable), \
                  patch.object(self.page, "check_runtime_python", return_value="runtime ready"), \
@@ -152,9 +157,14 @@ class BenchmarkCountryUITests(unittest.TestCase):
             self.assertEqual([item["path"] for item in ethiopia_outputs], [str(ethiopia.resolve())])
             self.assertEqual([item["path"] for item in peru_outputs], [str(peru.resolve())])
 
-            with patch.object(self.page, "apply_jjas_mask", side_effect=AssertionError("Ethiopia mask used")), \
-                 patch.object(self.page, "clip_to_boundary", side_effect=AssertionError("Ethiopia clipping used")), \
-                 patch.object(self.page, "load_boundary_frame", side_effect=AssertionError("Ethiopia zones loaded")), \
+            boundary = root / "boundaries/PER/ADM0.geojson"
+            boundary.parent.mkdir(parents=True)
+            boundary.write_text(json.dumps({"type": "FeatureCollection", "features": [{
+                "type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [
+                    [[-78, -13], [-75, -13], [-75, -10], [-78, -10], [-78, -13]]
+                ]}}]}))
+            with patch.object(self.page, "EXTERNAL_DATA_DIR", root), \
+                 patch.object(self.page, "apply_jjas_mask", side_effect=AssertionError("Ethiopia mask used")), \
                  patch("momp.utils.land_mask.shp_mask", side_effect=lambda value, **kwargs: value):
                 array = self.page.load_map_da_cached(str(peru), "Mean Absolute Error", "Days 1–15", country="Peru")
                 self.assertIsNotNone(array)

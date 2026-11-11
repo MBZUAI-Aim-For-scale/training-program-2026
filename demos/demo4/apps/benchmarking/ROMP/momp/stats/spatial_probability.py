@@ -106,6 +106,8 @@ def save_spatial_probability_scores(results, *, model, verification_window, dir_
                          verification_window=f"{start}-{end}",
                          evaluation_years=str(kwargs.get("years", "")),
                          reference_years=str(kwargs.get("years_clim", "")))
+    for key in ("date_filter_year", "init_type", "init_days", "start_date", "end_date", "ref_model"):
+        dataset.attrs[key] = str(kwargs.get(key, ""))
     destination = Path(dir_out) / f"probabilistic_metrics_{model}_{start}-{end}.nc"
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Write a complete file before replacing a prior run's grid.

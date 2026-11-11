@@ -105,7 +105,7 @@ def boundary_geometry(path):
 
 
 def clip_to_boundary(data, path):
-    """Mask outside polygon centers; preserve missing cells inside the region."""
+    """Align longitudes with WGS84 polygons and mask outside their cell centers."""
     from shapely import intersects_xy
 
     lon_name = next((name for name in ("lon", "longitude") if name in data.coords), None)
@@ -115,6 +115,14 @@ def clip_to_boundary(data, path):
     lon, lat = data[lon_name], data[lat_name]
     if lon.ndim != 1 or lat.ndim != 1:
         raise ValueError("Boundary masking requires rectilinear longitude/latitude coordinates")
+    if np.any(lon.values > 180):
+        # Country-box forecasts may use 0..360; downloaded boundaries use -180..180.
+        wrapped = np.where(lon.values > 180, lon.values - 360, lon.values)
+        data = data.assign_coords({lon_name: (lon.dims, wrapped, lon.attrs)})
+        spacing = np.diff(wrapped)
+        if np.any(spacing > 0) and np.any(spacing < 0):
+            data = data.sortby(lon_name)
+        lon = data[lon_name]
     xx, yy = np.meshgrid(lon.values, lat.values)
     inside = intersects_xy(boundary_geometry(path), xx, yy)
     mask = xr.DataArray(inside, dims=(lat.dims[0], lon.dims[0]),

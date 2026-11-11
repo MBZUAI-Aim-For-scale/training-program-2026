@@ -1,4 +1,7 @@
 # Demo 4 · Weather model scorecard
+
+Participants: follow the [benchmarking run instructions](BENCHMARKING_INSTRUCTIONS.md) to run the dashboard benchmark.
+
 ## Environment Setup
 
 Use the Docker setup below for the full benchmark. It includes the Python environment needed by the CLI and dashboard.

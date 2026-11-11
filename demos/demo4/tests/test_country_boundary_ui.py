@@ -96,7 +96,7 @@ class CountryBoundaryUITests(unittest.TestCase):
              patch.object(self.page, "EXTERNAL_DATA_DIR", Path(folder)), \
              patch.object(self.page, "_map_load_ethiopia_shapefile", create=True,
                           side_effect=AssertionError("Preloaded shapefile used")), \
-             patch.object(self.page, "climatology_boundary_path",
+             patch.object(self.page, "climatology_boundary_path", create=True,
                           side_effect=AssertionError("Preloaded outline used")):
             self.assertIsNone(self.page._country_boundary_path("Ethiopia"))
             self.assertIsNone(self.page._map_load_admin_shapefile("Ethiopia", "Admin1"))
@@ -167,6 +167,15 @@ class CountryBoundaryUITests(unittest.TestCase):
                 self.assertTrue(any(c.get_zorder() >= 10 for c in figure.axes[0].collections))
             finally:
                 self.page.plt.close(figure)
+
+    def test_worker_does_not_fall_back_to_preloaded_boundary_before_download(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(self.page, "EXTERNAL_DATA_DIR", Path(folder)), \
+             patch.object(self.page, "_spawn_no_fork") as spawn:
+            result = self.page.run_momp_benchmark("det", "AIFS", {"benchmark_coverage": "Ethiopia"})
+            self.assertFalse(result["ok"])
+            self.assertIn("Download country boundaries for Ethiopia", result["stderr"])
+            spawn.assert_not_called()
 
     def test_benchmark_worker_uses_cached_country_outline(self):
         captured = {}

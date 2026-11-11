@@ -11,6 +11,8 @@ def temporal_settings_errors(settings, observation_years):
     start, end = settings["eval_start"], settings["eval_end"]
     if start >= end:
         errors.append("Evaluation End must be after Evaluation Start.")
+    if (start.month, start.day) > (end.month, end.day):
+        errors.append("Cross-year evaluation seasons are not supported; choose a season within one calendar year.")
     available = set(observation_years)
     missing = sorted(set(range(start.year, end.year + 1)) - available)
     if missing:

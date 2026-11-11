@@ -198,6 +198,8 @@ def detect_observed_onset(
     thresh_slice = align_spatial_grid(thresh_slice, rain_slice, label='onset threshold')
     start_MMDD = start_date[1:] if isinstance(start_date, (list, tuple)) and len(start_date) == 3 else start_date
     end_MMDD = end_date[1:] if isinstance(end_date, (list, tuple)) and len(end_date) == 3 else end_date
+    if tuple(start_MMDD) > tuple(end_MMDD):
+        raise ValueError("Cross-year evaluation seasons are not supported; choose a season within one calendar year.")
     fallback_MMDD = fallback_date
 
     end_dt = datetime(year, *end_MMDD)

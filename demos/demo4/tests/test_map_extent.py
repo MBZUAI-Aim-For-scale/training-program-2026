@@ -84,6 +84,7 @@ class MapExtentTests(unittest.TestCase):
               "config": SimpleNamespace(shpfile_dir=folder.name, nc_mask=None), "st": MagicMock(),
               "climatology_boundary_path": climatology_boundary_path, "clip_to_boundary": clip_to_boundary,
               "apply_jjas_mask": apply_jjas_mask, "clip_map_artist": clip_map_artist, "load_boundary_frame": load_boundary_frame}
+        ns["_country_boundary_path"] = lambda _: climatology_boundary_path(ns["config"])
         exec(compile(ast.Module(body=functions, type_ignores=[]), str(path), "exec"), ns)  # noqa: S102
         values = np.full((5, 6), np.nan)
         values[1:4, 2:4] = 1

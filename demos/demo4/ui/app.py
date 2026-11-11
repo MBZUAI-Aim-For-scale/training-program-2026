@@ -77,17 +77,17 @@ PAGE_MODULE_MAPPING = {
     "AI Forecast": "ui.pages.ai_forecasting", 
     "SM_Benchmarking": "ui.pages.short_medium_benchmarking",
     #"Onset Blending": "ui.pages.ai_onset_blending",
-    #"Onset Message": "ui.pages.onset_message",
+    "Onset Message": "ui.pages.onset_message",
 
 }
 
 PRIMARY_MENU_CONFIG = {
     "Home": {"target": "Home", "label": "Home"},
-    # "AI Lab Setup": {"target": "AI_Setup", "label": "Demo1"},
-    #"AI Forecast": {"target": "AI Forecast", "label": "Forecasting"},
+    "AI Lab Setup": {"target": "AI_Setup", "label": "Setup"},
+    "AI Forecast": {"target": "AI Forecast", "label": "Forecasting"},
     "AI Benchmarking": {"target": "SM_Benchmarking", "label": "Benchmarking"},
     #"Onset Blending": {"target": "Onset Blending", "label": "Blending"},
-    #"Onset Message": {"target": "Onset Message", "label": "Message"},
+    "Onset Message": {"target": "Onset Message", "label": "Message"},
 }
 
 COMING_SOON = {

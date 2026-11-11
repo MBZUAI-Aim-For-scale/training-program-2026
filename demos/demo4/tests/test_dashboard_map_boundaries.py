@@ -48,6 +48,7 @@ class DashboardMapBoundaryTests(unittest.TestCase):
               "geographic_extent": geographic_extent, "climatology_boundary_path": climatology_boundary_path,
               "apply_jjas_mask": apply_jjas_mask, "clip_to_boundary": clip_to_boundary,
               "clip_map_artist": clip_map_artist, "load_boundary_frame": load_boundary_frame}
+        ns["_country_boundary_path"] = lambda _: climatology_boundary_path(ns["config"])
         exec(compile(ast.Module(body=functions, type_ignores=[]), str(source), "exec"), ns)  # noqa: S102
         self.plot = ns["plot_map"]
         self.addCleanup(plt.close, "all")

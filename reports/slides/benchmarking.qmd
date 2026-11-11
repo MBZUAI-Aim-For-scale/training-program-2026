@@ -341,7 +341,7 @@ Which setting will you change in the next experiment, which controls will stay f
 
 # Worksheet for AI Weather Model Benchmarking
 
-## Six Dashboard Exercises: 15 Minutes
+## Exercises: 15 Minutes
 
 Work in pairs; change **one setting at a time** and restore the baseline between experiments. Computation time is additional; use a facilitator's completed run while waiting.
 
