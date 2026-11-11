@@ -11,7 +11,8 @@ from matplotlib.patches import Polygon
 import numpy as np
 import xarray as xr
 from ai_weather import config as weather_config
-from ai_weather.spatial import boundary_geometry, clip_map_artist, clip_to_boundary, load_boundary_frame
+from ai_weather.spatial import (boundary_geometry, clip_map_artist, clip_to_boundary, load_boundary_frame,
+                                to_boundary_longitudes)
 
 from momp.params.region_def import domain, polygon_boundary
 from momp.utils.land_mask import get_region_outline, shp_outline
@@ -181,9 +182,12 @@ def plot_spatial_metrics(
     far = spatial_metrics["false_alarm_rate"] * 100
     miss_rate = spatial_metrics["miss_rate"] * 100
 
+    region_geometry = boundary_geometry(shpfile_dir) if is_ethiopia else _region_geometry(shpfile_dir, region)
+    if region_geometry is not None:
+        # (A grid stored 0-360, as the country data west of Greenwich is, onto the boundary's -180-180.)
+        mean_mae, far, miss_rate = (to_boundary_longitudes(v, region_geometry) for v in (mean_mae, far, miss_rate))
     lats = mean_mae.lat.values
     lons = mean_mae.lon.values
-    region_geometry = boundary_geometry(shpfile_dir) if is_ethiopia else _region_geometry(shpfile_dir, region)
     if not is_ethiopia:
         region_mask, _ = _region_grid_mask(lats, lons, region, region_geometry)
         mean_mae = mean_mae.where(region_mask)
