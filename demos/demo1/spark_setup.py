@@ -837,15 +837,20 @@ def main(argv=None):
     r.add_argument("--no-pull", action="store_true",
                    help="don't update demos whose code is in another repository (the dashboard's Launch)")
     sub.add_parser("status", help="print the last run's steps")
+    import ai_almanac_data  # (in this folder: spark_setup.py runs from it)
+    ai_almanac_data.add_arguments(sub.add_parser(
+        "register-ai-almanac", help="make this Spark's country data into AI Almanac datasets and register them, "
+                                    "with the country's region (ai_almanac_data.py; safe to run again)"))
     dash = sub.add_parser("dashboard", help="start just the progress dashboard")
     how_dash = dash.add_mutually_exclusive_group()
     how_dash.add_argument("--stop", action="store_true", help="stop it instead")
     how_dash.add_argument("--open", action="store_true", help="and open it in the browser")
-    if not argv or argv[0] not in ("run", "status", "dashboard", "-h", "--help"):
+    if not argv or argv[0] not in ("run", "status", "dashboard", "register-ai-almanac", "-h", "--help"):
         argv = ["run", *argv]
     args = p.parse_args(argv)
     install_setup_command()
-    return {"run": cmd_run, "status": cmd_status, "dashboard": cmd_dashboard}[args.cmd](args, argv)
+    return {"run": cmd_run, "status": cmd_status, "dashboard": cmd_dashboard,
+            "register-ai-almanac": lambda a, _argv: ai_almanac_data.main_args(a)}[args.cmd](args, argv)
 
 
 if __name__ == "__main__":
