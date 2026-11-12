@@ -171,7 +171,7 @@ class ProbabilisticConfigTests(unittest.TestCase):
     def test_csv_disabled_keeps_summaries_for_panel_plots(self):
         ns = {"np": np, "pd": pd, "os": os, "get_target_bins": lambda *_: ["Days 1-5"],
               "tuple_to_str": lambda window: "-".join(map(str, window))}
-        functions("apps/benchmarking/ROMP/momp/io/output.py", {"save_score_results"}, ns)
+        functions("apps/benchmarking/ROMP/momp/io/output.py", {"save_score_results", "climatology_reference_metadata"}, ns)
         bs = {"fair_brier_score": .2, "bin_fair_brier_scores": {"Days 1-5": .2}}
         auc = {"auc": .7, "bin_auc_scores": {"Days 1-5": .7}}
         score_results = {"BS": bs, "BS_ref": bs, "AUC": auc, "AUC_ref": auc,

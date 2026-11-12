@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+from momp.io.output import climatology_reference_metadata
 from momp.stats.score import (
     calculate_auc,
     calculate_paired_brier,
@@ -108,6 +109,8 @@ def save_spatial_probability_scores(results, *, model, verification_window, dir_
                          reference_years=str(kwargs.get("years_clim", "")))
     for key in ("date_filter_year", "init_type", "init_days", "start_date", "end_date", "ref_model"):
         dataset.attrs[key] = str(kwargs.get(key, ""))
+    dataset.attrs.update({key.lower(): value for key, value in
+                          climatology_reference_metadata(results.get('climatology_obs_df')).items()})
     destination = Path(dir_out) / f"probabilistic_metrics_{model}_{start}-{end}.nc"
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Write a complete file before replacing a prior run's grid.

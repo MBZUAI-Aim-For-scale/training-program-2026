@@ -293,24 +293,26 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
     obs_onset_da = observed_onset.reindex(
         lat=clim_onset.lat, lon=clim_onset.lon, method='nearest', tolerance=0.01)
 
-    # Only selected baseline years are ensemble members; do not add evaluation truth.
-    ensemble_years = list(clim_onset.year.values)
+    # Extract truth above, then hold it out of every reference probability.
+    # Disjoint baseline years retain exactly their original membership.
+    baseline_years = [int(year) for year in clim_onset.year.values]
+    ensemble_years = [year for year in baseline_years if year != target_year]
+    if not ensemble_years:
+        raise ValueError(
+            f"No climatology reference years remain after excluding verification year {target_year}. "
+            "Choose additional baseline observation years.")
     ensemble_onset_da = clim_onset.sel(year=ensemble_years)
-    reference_membership = ('includes_verification_year' if target_year in ensemble_years
+    reference_membership = ('leave_one_year_out' if target_year in baseline_years
                             else 'held_out_verification_year')
-    if target_year in ensemble_years:
-        import warnings
-        warnings.warn(
-            f"Climatology reference includes verification year {target_year}; "
-            "this is an in-sample baseline, not leave-one-year-out verification.",
-            RuntimeWarning, stacklevel=2,
-        )
+    reference_years = ','.join(map(str, ensemble_years))
 
     # Create extended bins including "before initialization" and "after max_forecast_day" bins
     #extended_bins = ((-float('inf'), 0),) + day_bins + ((max_forecast_day + 1, float('inf')),)
     extended_bins = ((-float('inf'), min_forecast_day - 1),) + day_bins + ((max_forecast_day + 1, float('inf')),)
 
     print(f"Creating climatological forecasts for target year {target_year}")
+    if reference_membership == 'leave_one_year_out':
+        print(f"Leave-one-year-out reference: excluded verification year {target_year}")
     print(f"Using {len(ensemble_years)} years as ensemble members: {ensemble_years}")
     print(f"Processing {len(init_dates)} initialization dates")
     print(f"Day bins: {day_bins}")
@@ -497,6 +499,7 @@ def create_climatological_forecast_obs_pairs(clim_onset, target_year, init_dates
                     'bin_index': bin_idx,
                     'forecast_type': 'climatological_doy',
                     'reference_membership': reference_membership,
+                    'reference_years': reference_years,
                 }
                 results_list.append(result)
 

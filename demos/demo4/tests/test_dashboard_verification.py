@@ -105,3 +105,15 @@ class DashboardVerificationTests(unittest.TestCase):
         settings.update(init_type="monthly", initialization_days=[1, 15])
         self.assertTrue(initialization_matches_schedule((2003, 5, 15), settings))
         self.assertFalse(initialization_matches_schedule((2003, 5, 2), settings))
+
+    def test_fair_scores_need_two_reference_members_after_holding_out_target(self):
+        base = {'eval_start': date(2019, 5, 1), 'eval_end': date(2019, 7, 31),
+                'baseline_start_year': 2018, 'baseline_end_year': 2019,
+                'init_type': 'daily', 'initialization_days': [], 'probabilistic': True}
+        years = range(2000, 2025)
+        self.assertTrue(any('three baseline years' in message
+                            for message in temporal_settings_errors(base, years)))
+        self.assertEqual(temporal_settings_errors({**base, 'baseline_start_year': 2017}, years), [])
+        self.assertEqual(temporal_settings_errors({**base, 'baseline_end_year': 2017,
+                                                   'baseline_start_year': 2016}, years), [])
+        self.assertEqual(temporal_settings_errors({**base, 'probabilistic': False}, years), [])

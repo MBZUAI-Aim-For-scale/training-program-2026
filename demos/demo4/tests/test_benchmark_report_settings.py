@@ -1,6 +1,7 @@
 """Downloaded reports describe the saved experiment, independent of controls."""
 
 import ast
+import csv
 from pathlib import Path
 import tempfile
 import unittest
@@ -14,7 +15,23 @@ from ui.utils import benchmark_report
 
 
 class BenchmarkReportSettingsTests(unittest.TestCase):
-    def test_mixed_baselines_omit_shared_reference_only_for_conflicting_window(self):
+    def test_long_reference_membership_csv_is_read_as_a_complete_record(self):
+        years = list(range(2000, 2071))
+        membership = {target: ','.join(str(year) for year in years if year != target) for target in years}
+        encoded = str(membership)
+        self.assertGreater(len(encoded), 16384)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'overall_skill_scores_aifs_ens_1-15.csv'
+            with path.open('w', newline='') as stream:
+                writer = csv.writer(stream)
+                writer.writerow(['Fair_RPS', 'Reference_Policy', 'Reference_Years_By_Verification_Year'])
+                writer.writerow([.2, 'leave_one_year_out', encoded])
+            records = benchmark_report.collect_benchmark_settings(benchmark_report.collect_evaluated_models(root))
+        self.assertEqual(records[0]['Reference policy'], 'leave_one_year_out')
+        self.assertEqual(ast.literal_eval(records[0]['Reference years by verification year']), membership)
+
+    def test_one_conflicting_model_does_not_remove_another_models_matching_reference(self):
         outputs = [
             {'model_label': 'AIFS Single', 'windows': ['Days 1-15'],
              'metadata': {'years_clim': '2007,2008', 'init_type': 'weekly'}},
@@ -24,10 +41,71 @@ class BenchmarkReportSettingsTests(unittest.TestCase):
              'metadata': {'years_clim': '(2000, 2001)', 'init_type': 'weekly'}},
         ]
         filtered = benchmark_report.compatible_reference_outputs(outputs)
-        self.assertEqual(filtered[-1]['windows'], ['Days 16-30'])
+        self.assertEqual(filtered[-1]['windows'], ['Days 1-15', 'Days 16-30'])
         self.assertEqual(filtered[0]['windows'], ['Days 1-15'])
         self.assertIn('different benchmark settings', filtered[0]['reference_warning'])
+        self.assertIn('Baseline years: model=2007-2008; climatology=2000-2001',
+                      filtered[0]['reference_warning'])
+        self.assertEqual(filtered[0]['reference_incompatible_windows'], ['Days 1-15'])
+        self.assertNotIn('reference_warning', filtered[1])
+        self.assertTrue(benchmark_report.reference_comparison_allowed(
+            filtered[1], 'Days 1-15', filtered[-1], 'Days 1-15'))
+        self.assertFalse(benchmark_report.reference_comparison_allowed(
+            filtered[0], 'Days 1-15', filtered[-1], 'Days 1-15'))
+        self.assertFalse(benchmark_report.reference_comparison_allowed(
+            filtered[-1], 'Days 1-15', filtered[0], 'Days 1-15'))
+        self.assertTrue(benchmark_report.reference_comparison_allowed(
+            filtered[0], 'Days 1-15', filtered[1], 'Days 1-15'))
         self.assertEqual(outputs[-1]['windows'], ['Days 1-15', 'Days 16-30'])
+
+    def test_metadata_aliases_preserve_matching_reference_for_probability_outputs(self):
+        outputs = [
+            {'model_label': 'AIFS Ensemble', 'windows': ['Days 1-15'],
+             'metadata': {'evaluation_years': '(2000, 2001)', 'reference_years': '(2007, 2008)',
+                          'reference_policy': 'leave_one_year_out'}},
+            {'model_label': 'Traditional Climatology', 'windows': ['Days 1-15'],
+             'metadata': {'years': '2000,2001', 'years_clim': '2007,2008',
+                          'reference_policy': 'leave_one_year_out'}},
+        ]
+        self.assertIs(benchmark_report.compatible_reference_outputs(outputs), outputs)
+
+    def test_reference_pair_guard_normalizes_lead_window_dash(self):
+        forecast = {'model_label': 'AIFS Single', 'reference_incompatible_windows': ['Days 1-15']}
+        reference = {'model_label': 'Traditional Climatology'}
+        self.assertFalse(benchmark_report.reference_comparison_allowed(
+            forecast, 'Days 1–15', reference, 'Days 1–15'))
+
+    def test_daily_schedule_ignores_unused_initialization_weekdays(self):
+        outputs = [
+            {'model_label': 'AIFS Single', 'windows': ['Days 1-15'],
+             'metadata': {'init_type': 'daily', 'init_days': '0,3'}},
+            {'model_label': 'Traditional Climatology', 'windows': ['Days 1-15'],
+             'metadata': {'init_type': 'daily', 'init_days': '1,4'}},
+        ]
+        self.assertIs(benchmark_report.compatible_reference_outputs(outputs), outputs)
+
+    def test_matching_new_aifs_reference_survives_other_models_legacy_results(self):
+        from ui.pages.short_medium_benchmarking import discover_map_outputs
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            shared = {'years': '2000,2001', 'years_clim': '2007,2008',
+                      'start_date': '2000,5,1', 'end_date': '2001,12,31',
+                      'reference_policy': 'leave_one_year_out'}
+            legacy = {key: value for key, value in shared.items() if key != 'reference_policy'}
+            for model, metadata in [('aifs_ens', shared), ('climatology', shared),
+                                    ('aifs_single', legacy), ('graphcast', {**legacy, 'years': '2001'})]:
+                xr.Dataset({'mean_mae': (('lat', 'lon'), [[1.]])},
+                           coords={'lat': [8.], 'lon': [39.]}, attrs=metadata).to_netcdf(
+                               root / f'spatial_metrics_{model}_1-15.nc')
+            outputs = {output['model_label']: output for output in discover_map_outputs(output_root=root)}
+        self.assertEqual(set(outputs), {'AIFS Ensemble', 'AIFS Single', 'GraphCast', 'Traditional Climatology'})
+        self.assertNotIn('reference_warning', outputs['AIFS Ensemble'])
+        self.assertIn('Days 1–15', outputs['Traditional Climatology']['windows'])
+        self.assertIn('Reference Policy: model=Not recorded; climatology=leave_one_year_out',
+                      outputs['AIFS Single']['reference_warning'])
+        self.assertIn('Evaluation years: model=2001; climatology=2000-2001',
+                      outputs['GraphCast']['reference_warning'])
 
     def test_equivalent_metadata_encodings_keep_shared_reference(self):
         outputs = [
@@ -48,6 +126,15 @@ class BenchmarkReportSettingsTests(unittest.TestCase):
         ]
         filtered = benchmark_report.compatible_reference_outputs(outputs)
         self.assertEqual([row['model_label'] for row in filtered], ['AIFS Single'])
+
+    def test_new_held_out_scores_are_not_compared_to_an_unrecorded_legacy_policy(self):
+        outputs = [
+            {'model_label': 'AIFS Single', 'windows': ['Days 1-15'],
+             'metadata': {'reference_policy': 'leave_one_year_out'}},
+            {'model_label': 'Traditional Climatology', 'windows': ['Days 1-15'], 'metadata': {}},
+        ]
+        self.assertEqual([row['model_label'] for row in benchmark_report.compatible_reference_outputs(outputs)],
+                         ['AIFS Single'])
 
     def test_disabled_mask_is_a_recorded_setting_and_conflicts_with_active_mask(self):
         outputs = [
@@ -108,22 +195,26 @@ class BenchmarkReportSettingsTests(unittest.TestCase):
         exec(compile(ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[])),  # noqa: S102
                      str(source), 'exec'), namespace)
         settings = [{'Model': 'AIFS Ensemble', 'Window': 'Days 1-15',
-                     'Reference calendar year': '2020', 'Baseline years': '2007-2024'}]
+                     'Reference calendar year': '2020', 'Baseline years': '2007-2024',
+                     'Reference policy': 'leave_one_year_out'}]
         pdf_class = namespace['BenchmarkReportPDF']
-        original = pdf_class.key_value_lines
-        items = []
+        original = pdf_class.dataframe_table
+        tables = []
 
         def capture(instance, values):
-            items.extend(values)
+            tables.append(values.copy())
             return original(instance, values)
 
-        with patch.object(pdf_class, 'key_value_lines', capture):
+        with patch.object(pdf_class, 'dataframe_table', capture):
             report = namespace['generate_benchmark_pdf_report']({
                 'recorded_settings': settings,
                 'shared_settings': {'date_filter_year': 1990, 'baseline_start_year': 1981}})
         self.assertTrue(report.startswith(b'%PDF-'))
-        self.assertIn(('Reference calendar year', '2020'), items)
-        self.assertIn(('Baseline years', '2007-2024'), items)
+        setup = next(table for table in tables if 'Evaluation period' in table)
+        self.assertIn('2020', setup.iloc[0]['Initialization'])
+        self.assertEqual(setup.iloc[0]['Baseline years'], '2007-2024')
+        self.assertIn('Leave-one-year-out', setup.iloc[0]['Reference'])
+        self.assertNotIn('1990', setup.to_string())
 
     def test_spatial_output_preserves_per_model_calendar_and_baseline(self):
         with tempfile.TemporaryDirectory() as directory:

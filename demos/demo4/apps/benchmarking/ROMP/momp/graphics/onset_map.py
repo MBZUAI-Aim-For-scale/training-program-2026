@@ -60,8 +60,16 @@ def plot_spatial_climatology_onset(
         outlines = get_region_outline(shpfile_dir, region=region) if shpfile_dir else []
     if is_ethiopia and not outlines:
         raise ValueError(f"Could not load Ethiopia zones for climatology overlay and margins: {shpfile_dir}")
-    # Extract DataArray
-    climatological_onset_doy = next(iter(onset_da_dict.values()))
+    import xarray as xr
+
+    if not onset_da_dict:
+        raise ValueError("No climatology reference fields are available to plot.")
+    # A held-out reference varies with the verification year. This map is a
+    # descriptive average; scientific scores retain each year's own field.
+    fields = list(onset_da_dict.values())
+    held_out = any(field.attrs.get('reference_policy') == 'leave_one_year_out' for field in fields)
+    climatological_onset_doy = xr.concat(fields, dim='verification_year', join='exact').mean(
+        'verification_year', skipna=True)
     climatological_onset_doy = apply_jjas_mask(climatological_onset_doy, kwargs.get("nc_mask", getattr(weather_config, "nc_mask", None)))
     if is_ethiopia:
         climatological_onset_doy = clip_to_boundary(climatological_onset_doy, shpfile_dir)
@@ -149,7 +157,12 @@ def plot_spatial_climatology_onset(
         cbar.set_ticks(tick_levels)
 
     cbar.set_ticklabels(tick_labels)
-    cbar.set_label("Mean onset date", fontsize=12, fontweight="normal")
+    cbar.set_label("Average held-out reference onset" if held_out else "Mean onset date",
+                   fontsize=12, fontweight="normal")
+    if held_out:
+        targets = sorted(onset_da_dict)
+        ax.set_title('Descriptive average of held-out reference fields\n'
+                     f'Verification years {targets[0]}-{targets[-1]}', fontsize=11)
     cbar.ax.tick_params(labelsize=10)
 
     # Values overlay

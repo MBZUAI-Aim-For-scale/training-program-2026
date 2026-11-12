@@ -100,3 +100,9 @@ class ReferenceSourceOverrideTests(unittest.TestCase):
             day_bins=((1, 5), (6, 10), (11, 15)), probabilistic=False)
         self.namespace["validate_runtime_config"](cfg)
         self.assertEqual(cfg.day_bins, ((1, 5), (6, 10), (11, 15)))
+
+    def test_runtime_rejects_insufficient_remaining_reference_members(self):
+        cfg = SimpleNamespace(start_date=(2019, 5, 1), end_date=(2019, 7, 31),
+                              years_clim=(2018, 2019), probabilistic=True, ref_model='climatology')
+        with self.assertRaisesRegex(ValueError, 'at least 2 baseline years remaining'):
+            self.namespace['validate_runtime_config'](cfg)

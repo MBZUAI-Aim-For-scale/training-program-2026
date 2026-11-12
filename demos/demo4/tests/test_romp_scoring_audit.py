@@ -177,9 +177,9 @@ class ClimatologyBinAuditTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             result = scope['create_climatological_forecast_obs_pairs'](
                 climate, 2021, ['2021-06-01'], day_bins=((1, 5), (6, 10), (11, 15), (1, 15)), max_forecast_day=15)
-        self.assertTrue((result.total_members_with_onset == 3).all())
+        self.assertTrue((result.total_members_with_onset == 2).all())
         self.assertEqual(result.loc[result.bin_label == 'Days 1-15', 'predicted_prob'].item(), 1.)
-        self.assertEqual(result.loc[result.bin_label == 'Days 1-5', 'predicted_prob'].item(), 1/3)
+        self.assertEqual(result.loc[result.bin_label == 'Days 1-5', 'predicted_prob'].item(), 0.)
 
 
     def test_climatology_diagnostics_are_local_to_each_initialization(self):

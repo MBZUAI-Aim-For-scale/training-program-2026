@@ -277,7 +277,9 @@ def ens_spatial_far_mr_mae_map(cfg=cfg, setting=setting):
     if case.model == 'climatology' and case_cfg['save_nc_climatology']:
         fout = os.path.join(case_cfg_ref['dir_out'], "climatology_onset_doy_{}.nc")
         fout = fout.format(tuple_to_str_range(case_cfg_ref['years_clim']))
-        climatological_onset_doy = next(iter(onset_da_dict.values()))
+        from momp.stats.climatology import climatology_reference_dataset
+
+        climatological_onset_doy = climatology_reference_dataset(onset_da_dict)
         climatological_onset_doy = clip_to_boundary(climatological_onset_doy, climatology_boundary_path(weather_config))
         climatological_onset_doy.attrs["years"] = case.years_clim
         climatological_onset_doy.to_netcdf(fout)

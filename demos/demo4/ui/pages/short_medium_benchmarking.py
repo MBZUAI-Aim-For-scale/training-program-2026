@@ -11,7 +11,7 @@ from ai_weather.benchmark_job import BenchmarkJob
 from ai_weather.background_task import BackgroundTask
 from ai_weather.country_boundaries import COUNTRY_ISO3, cached_boundary_path, download_country_boundaries
 from ui.utils.benchmark_session import reconnect_benchmark, remember_benchmark
-from ui.utils.benchmark_report import collect_benchmark_settings, collect_evaluated_models, compatible_reference_outputs
+from ui.utils.benchmark_report import collect_benchmark_settings, collect_evaluated_models, collect_pdf_probability_tables, compatible_reference_outputs, reference_comparison_allowed
 from ui.utils.parameter_help import PARAMETER_HELP
 from ui.utils.benchmark_messages import cancellation_warning, execution_status
 from ai_weather.spatial import apply_jjas_mask
@@ -926,6 +926,7 @@ def _map_infer_model_label(nc_path: Path) -> Optional[str]:
 
 @st.cache_data(show_spinner=False, ttl=300)
 def discover_map_outputs(force_refresh: bool = False, output_root=None) -> List[Dict[str, Any]]:
+    """Keep raw model grids and scope shared-reference compatibility per model/window."""
     outputs: List[Dict[str, Any]] = []
     output_root = Path(output_root) if output_root is not None else ROMP_DEMO_OUT_DIR
     if not output_root.exists():
@@ -1467,12 +1468,23 @@ def load_metric_values_by_window_cached(nc_path_str: str):
 
 def build_metrics_table_html(table, models, windows, baselines=None):
     baselines = baselines or {}
+    present = {metric for metric, window, model in table if window in windows and model in models}
+    columns = {}
+    for window in windows:
+        available = [model for model in models if any(
+            table.get((metric, window, model)) is not None
+            and np.isfinite(table[(metric, window, model)]) for metric in present)]
+        if available:
+            columns[window] = available
+    if not columns:
+        return ''
+    present = {metric for metric, window, model in table
+               if model in columns.get(window, ())}
     metric_order = [
         "Mean Absolute Error days",
         "Miss Rate fraction",
         "False Alarm Rate fraction",
     ]
-    present = {k[0] for k in table.keys()}
     ordered = [m for m in metric_order if m in present] + sorted(
         present - set(metric_order)
     )
@@ -1480,7 +1492,7 @@ def build_metrics_table_html(table, models, windows, baselines=None):
     css = (
         "<style>"
         ".all-metrics-table{width:100%;border-collapse:collapse;"
-        f"font-size:0.9rem;min-width:{180 + 100 * len(models) * len(windows)}px}}"
+        f"font-size:0.9rem;min-width:{180 + 100 * sum(map(len, columns.values()))}px}}"
         ".all-metrics-table th,.all-metrics-table td{border:1px solid #e5e7eb;"
         "padding:6px 8px;text-align:right;min-width:100px}"
         ".all-metrics-table th{background:#f8fafc;color:#0f1b2a;font-weight:600}"
@@ -1497,34 +1509,34 @@ def build_metrics_table_html(table, models, windows, baselines=None):
         '<table class="all-metrics-table">'
         "<thead><tr><th rowspan='2'>METRIC</th>",
     ]
-    for w in windows:
-        parts.append(f"<th colspan='{len(models)}'>{w}</th>")
+    for w, window_models in columns.items():
+        parts.append(f"<th colspan='{len(window_models)}'>{w}</th>")
     parts.append("</tr><tr>")
-    for _ in windows:
-        for m in models:
+    for window_models in columns.values():
+        for m in window_models:
             parts.append(f"<th>{m}</th>")
     parts.append("</tr></thead><tbody>")
 
     for metric in ordered:
         parts.append(f"<tr><td>{metric}</td>")
         higher_better = is_metric_higher_better(metric)
-        for w in windows:
+        for w, window_models in columns.items():
             cv = table.get((metric, w, clim))
-            references = {m: baselines.get((metric, w, m), cv) for m in models}
-            values = [table.get((metric, w, m)) for m in models]
+            references = {m: baselines.get((metric, w, m), cv) for m in window_models}
+            values = [table.get((metric, w, m)) for m in window_models]
             finite = [value for value in values if value is not None and np.isfinite(value)]
             best = ((max(finite) if higher_better else min(finite))
                     if finite and metric != "Reference AUC" else None)
             diffs = [
                 abs(table.get((metric, w, m)) - references[m])
-                for m in models
+                for m in window_models
                 if m != clim
                 and table.get((metric, w, m)) is not None
                 and np.isfinite(table[(metric, w, m)])
                 and references[m] is not None and np.isfinite(references[m])
             ]
             scale = max(diffs) if diffs else None
-            for m in models:
+            for m in window_models:
                 val = table.get((metric, w, m))
                 if val is None or not np.isfinite(val):
                     parts.append("<td>-</td>")
@@ -2603,6 +2615,7 @@ def _pdf_safe_text(value: Any) -> str:
     replacements = {
         "\u2013": "-", "\u2014": "-", "\u00b7": "-", "\u2713": "Yes",
         "\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"',
+        "\u2264": "<=", "\u2265": ">=", "\u2212": "-", "\u2011": "-",
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
@@ -2613,9 +2626,18 @@ def _normalize_dataframe_for_pdf(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
     out = pd.DataFrame(index=df.index)
+    sources = []
+    default_index = (isinstance(df.index, pd.RangeIndex) and df.index.start == 0
+                     and df.index.step == 1 and all(name is None for name in df.index.names))
+    if not default_index:
+        for level, name in enumerate(df.index.names):
+            sources.append((name or ('Index' if df.index.nlevels == 1 else f'Index {level + 1}'),
+                            pd.Series(df.index.get_level_values(level), index=df.index)))
+    sources.extend((col, df.iloc[:, position]) for position, col in enumerate(df.columns))
     seen = set()
-    for col in df.columns:
-        base = str(col).strip() or "column"
+    for col, values in sources:
+        base = (' / '.join(str(part).strip() for part in col if str(part).strip())
+                if isinstance(col, tuple) else str(col).strip()) or 'column'
         name = base
         suffix = 1
         while name in seen:
@@ -2632,15 +2654,16 @@ def _normalize_dataframe_for_pdf(df: pd.DataFrame) -> pd.DataFrame:
             if isinstance(x, (int, np.integer)):
                 return str(int(x))
             if isinstance(x, (float, np.floating)):
-                return f"{x:.3f}"
+                return f"{x:.3g}" if 0 < abs(x) < .001 else f"{x:.3f}"
             return str(x)
 
-        out[name] = df[col].map(_fmt)
+        out[name] = values.map(_fmt)
     return out
 
 
 class BenchmarkReportPDF(FPDF):
-    MIN_COL_WIDTH = 18
+    MIN_COL_WIDTH = 24
+    TABLE_LAYOUT_VERSION = 3
 
     def _usable_width(self) -> float:
         return getattr(self, "epw", self.w - self.l_margin - self.r_margin)
@@ -2651,7 +2674,7 @@ class BenchmarkReportPDF(FPDF):
             self.set_text_color(15, 23, 42)
             self.set_x(self.l_margin)
             self.cell(0, 8, _pdf_safe_text("Benchmarking Report"))
-            self.ln(4)
+            self.ln(8)
             self.set_draw_color(226, 232, 240)
             self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
             self.ln(4)
@@ -2669,7 +2692,7 @@ class BenchmarkReportPDF(FPDF):
             self.set_x(self.l_margin)
 
     def section_title(self, title: str):
-        self.ensure_space(18)
+        self.ensure_space(28)
         self.set_x(self.l_margin)
         self.set_font("Helvetica", "B", 12)
         self.set_text_color(15, 23, 42)
@@ -2703,79 +2726,75 @@ class BenchmarkReportPDF(FPDF):
             self.set_text_color(51, 65, 85)
             self.multi_cell(0, 6, _pdf_safe_text(f"{key}: {value}"))
 
-    def _fit_text(self, text: str, width: float) -> str:
-        try:
-            text = _pdf_safe_text(text)
-        except Exception:
-            text = ""
-        if width <= 6 or not text:
-            return ""
-        max_width = max(1.0, width - 2)
-        try:
-            if self.get_string_width(text) <= max_width:
-                return text
-            while text and self.get_string_width(text + "..") > max_width:
-                text = text[:-1]
-            return text + ".." if text else ""
-        except Exception:
-            return ""
-
     def dataframe_table(self, df: pd.DataFrame):
         if df is None or df.empty:
             return
+        from fpdf.fonts import FontFace
+
         table_df = _normalize_dataframe_for_pdf(df)
         all_cols = [str(c) for c in table_df.columns]
         if not all_cols:
             return
         usable_width = self._usable_width()
-        max_cols_per_table = max(1, int(usable_width // self.MIN_COL_WIDTH))
-        col_chunks = [all_cols[i:i + max_cols_per_table] for i in range(0, len(all_cols), max_cols_per_table)]
-        
+        self.set_font('Helvetica', '', 8)
+        identifiers = {'model', 'metric', 'lead window', 'lead time', 'window', 'windows',
+                       'verification window', 'year', 'region'}
+        anchors = [col for col in all_cols if col.lower().replace('_', ' ') in identifiers][:3]
+        if not anchors:
+            anchors = all_cols[:1]
+        desired = {}
+        for col in all_cols:
+            content = [_pdf_safe_text(col).replace('_', ' ')] + table_df[col].map(_pdf_safe_text).tolist()
+            longest = max(self.get_string_width(line) for text in content for line in (text.splitlines() or ['']))
+            cap = 45 if col.lower() == 'model' else (28 if col.lower() in {'lead window', 'window', 'windows'} else 70)
+            desired[col] = max(self.MIN_COL_WIDTH, min(cap, longest + 4))
+        col_chunks = []
+        chunk = list(anchors)
+        for col in (name for name in all_cols if name not in anchors):
+            if len(chunk) > len(anchors) and sum(desired[name] for name in chunk) + desired[col] > usable_width:
+                col_chunks.append(chunk)
+                chunk = list(anchors)
+            chunk.append(col)
+        col_chunks.append(chunk)
+        line_height = 4.2
+        padding = (1.2, 1.5)
+
         for chunk_idx, cols in enumerate(col_chunks):
-            if not cols:
-                continue
             if chunk_idx > 0:
-                self.ln(2)
-                self.set_x(self.l_margin)
-                self.set_font("Helvetica", "I", 7)
-                self.set_text_color(100, 116, 139)
-                start_col = chunk_idx * max_cols_per_table + 1
-                end_col = chunk_idx * max_cols_per_table + len(cols)
-                self.cell(0, 5, _pdf_safe_text(f"Table continued - columns {start_col} to {end_col}"))
-                self.ln(6)
-            n_cols = len(cols)
-            widths = [usable_width / n_cols] * n_cols
-            row_height = 6
-            header_font = 8 if n_cols <= 3 else (7 if n_cols <= 5 else 6)
-            body_font = 7 if n_cols <= 3 else (6 if n_cols <= 5 else 5)
-
-            def draw_header():
-                self.set_x(self.l_margin)
-                self.set_font("Helvetica", "B", header_font)
-                self.set_fill_color(241, 245, 249)
-                self.set_text_color(15, 23, 42)
-                for i, col_name in enumerate(cols):
-                    cell_width = widths[i]
-                    label = self._fit_text(col_name, cell_width) if cell_width > 6 else ""
-                    self.cell(cell_width, row_height + 1, label, border=1, align="C", fill=True)
-                self.ln(row_height + 1)
-
-            self.ensure_space(25)
-            draw_header()
-            self.set_font("Helvetica", "", body_font)
+                self.paragraph(f'Table continued - part {chunk_idx + 1} of {len(col_chunks)}; row identifiers repeated.')
+            self.set_font('Helvetica', '', 8)
             self.set_text_color(30, 41, 59)
-            for _, row in table_df.iterrows():
-                if self.get_y() + row_height > self.h - self.b_margin - 2:
-                    self.add_page()
-                    draw_header()
-                    self.set_font("Helvetica", "", body_font)
-                    self.set_text_color(30, 41, 59)
-                self.set_x(self.l_margin)
-                for i, col_name in enumerate(cols):
-                    cell_width = widths[i]
-                    txt = self._fit_text(row.get(col_name, ""), cell_width) if cell_width > 6 else ""
-                    self.cell(cell_width, row_height, txt, border=1)
-                self.ln(row_height)
+            self.set_draw_color(203, 213, 225)
+            widths = [usable_width * desired[col] / sum(desired[name] for name in cols) for col in cols]
+            headings = [_pdf_safe_text(col).replace('_', ' ') for col in cols]
+            self.set_font('Helvetica', 'B', 8)
+            heading_height = max(self.multi_cell(
+                width, line_height, label, dry_run=True, output='HEIGHT', padding=padding)
+                for width, label in zip(widths, headings))
+            self.ensure_space(heading_height + 12)
+            self.set_font('Helvetica', '', 8)
+            # Bound physical row height so even a long multiline cell can
+            # continue across pages without discarding text or breaking the table.
+            max_lines = max(1, int((self.h - self.t_margin - self.b_margin - 18 - heading_height) / line_height) - 1)
+            rows = []
+            for values in table_df[cols].itertuples(index=False, name=None):
+                wrapped = [self.multi_cell(width, line_height, _pdf_safe_text(value),
+                                           dry_run=True, output='LINES', padding=padding)
+                           for width, value in zip(widths, values)]
+                for start in range(0, max(1, max(map(len, wrapped))), max_lines):
+                    rows.append(['\n'.join(lines if col in anchors and len(lines) <= max_lines
+                                            else lines[start:start + max_lines])
+                                 for col, lines in zip(cols, wrapped)])
+            numeric = [pd.to_numeric(table_df[col].replace('', np.nan), errors='coerce').notna().all()
+                       for col in cols]
+            with self.table(width=usable_width, col_widths=widths, line_height=line_height,
+                            padding=padding, text_align=tuple('RIGHT' if flag else 'LEFT' for flag in numeric),
+                            v_align='TOP', repeat_headings=1,
+                            headings_style=FontFace(emphasis='B', color=(15, 23, 42),
+                                                    fill_color=(241, 245, 249))) as table:
+                table.row(headings)
+                for row in rows:
+                    table.row(row)
             self.ln(3)
 
     def add_image_path(self, image_path: str, caption: str = ""):
@@ -2816,6 +2835,9 @@ class BenchmarkReportPDF(FPDF):
 
 
 def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
+    from ui.utils.benchmark_report import summarize_benchmark_settings
+    from ui.utils.metric_filters import metric_model_label
+
     pdf = BenchmarkReportPDF(orientation="L", unit="mm", format="A4")
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
@@ -2827,88 +2849,108 @@ def generate_benchmark_pdf_report(context: Dict[str, Any]) -> bytes:
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(71, 85, 105)
     pdf.set_x(pdf.l_margin)
-    pdf.multi_cell(0, 7, _pdf_safe_text(context.get("generated_at", "")), align="C")
+    if context.get('generated_at'):
+        pdf.multi_cell(0, 7, _pdf_safe_text(context['generated_at']), align='C')
     pdf.ln(6)
 
     pdf.section_title("Executive Summary")
     active_rows = context.get("active_rows", [])
-    shared_settings = context.get("shared_settings", {})
+    recorded_settings = context.get('recorded_settings', [])
+    setup_rows, setup_issues = summarize_benchmark_settings(recorded_settings)
+    missing = {'', 'None', 'Not recorded', 'not_recorded', 'Unknown'}
+    countries = sorted({record.get('Country') for record in recorded_settings
+                        if record.get('Country') is not None and record.get('Country') not in missing})
+    observations = sorted({record.get('Ground truth') for record in recorded_settings
+                           if record.get('Ground truth') is not None and record.get('Ground truth') not in missing})
+    lead_times = sorted({row['Lead time'] for row in setup_rows})
     det_count = sum(1 for r in active_rows if r.get("Category") == "Deterministic")
     prob_count = sum(1 for r in active_rows if r.get("Category") == "Probabilistic")
     pdf.key_value_lines([
-        ("Selected Ground Truth", context.get("ground_truth", "")),
-        ("Selected Benchmark Coverage", context.get("benchmark_coverage", "")),
-        ("Selected Forecast Window", context.get("forecast_window", "")),
+        ('Ground truth' if observations else 'Ground truth selection',
+         ', '.join(observations) if observations else context.get('ground_truth', 'Unknown')),
+        ('Country' if countries else 'Country selection',
+         ', '.join(countries) if countries else context.get('benchmark_coverage', 'Unknown')),
+        ('Lead time', ', '.join(lead_times) if lead_times else context.get('forecast_window', 'Unknown')),
         ("Models Evaluated", len(active_rows)),
         ("Deterministic Models", det_count),
         ("Probabilistic Models", prob_count),
     ])
-    if context.get('model_count_basis') == 'stored_outputs':
+    if setup_issues:
+        pdf.sub_title('Result consistency')
+        for issue in setup_issues:
+            pdf.paragraph(issue)
+
+    pdf.section_title('Evaluation Setup')
+    if setup_rows:
+        pdf.dataframe_table(pd.DataFrame(setup_rows))
         pdf.paragraph(
-            'Models are counted from stored benchmark outputs. Recorded benchmark settings below '
-            'come from each output file. Current dashboard selections may describe a different run.')
+            'Periods use actual evaluated years where recorded, otherwise saved configured years. '
+            'The reference calendar fixes the weekly initialization dates.')
+    else:
+        pdf.paragraph('Evaluation settings were not recorded in the saved results.')
+    if any('Leave-one-year-out' in row['Reference'] for row in setup_rows):
+        pdf.paragraph(
+            'Climatology excludes each verification year from its own baseline when present. '
+            'Verification years outside the baseline use all eligible baseline years.')
+    if not observations and context.get('ground_truth'):
+        pdf.paragraph('The observation dataset name comes from the dashboard selection; older outputs do not record it.')
 
-    recorded_settings = context.get('recorded_settings', [])
-    pdf.section_title("Recorded Benchmark Settings")
-    pdf.paragraph(
-        'Baseline years are the configured observation years used to construct the reference. '
-        'The reference calendar year anchors weekly initialization weekdays; it is not a baseline '
-        'or evaluation year. It does not apply to daily or monthly schedules. '
-        'Missing metadata in older output files is shown as Not recorded.')
-    if not recorded_settings:
-        pdf.paragraph('No recorded settings are available for these outputs.')
-    for warning in context.get('reference_warnings', []):
-        pdf.paragraph(warning)
+    criteria = {}
+    def criterion_value(record, key):
+        try:
+            return f'{float(record[key]):g}'
+        except (TypeError, ValueError):
+            return str(record[key])
+
     for record in recorded_settings:
-        pdf.sub_title(f"{record['Model']} - {record['Window']}")
-        pdf.key_value_lines([(key, value) for key, value in record.items()
-                             if key not in {'Model', 'Window'}])
-
-    if active_rows:
-        models_df = pd.DataFrame([
-            {
-                "Model": r.get("Model", ""),
-                "Category": r.get("Category", ""),
-                "Type": r.get("Type", ""),
-                "Coverage": r.get("Coverage", ""),
-                "Date Range": r.get("Date Range", ""),
-            }
-            for r in active_rows
-        ])
-        if not models_df.empty:
-            pdf.section_title("Models Evaluated")
-            pdf.dataframe_table(models_df)
-
-    if shared_settings:
-        pdf.section_title("Current Dashboard Settings (not recorded output settings)")
-        pdf.key_value_lines([(str(k).replace("_", " ").title(), v) for k, v in shared_settings.items()])
-
-    map_outputs = context.get("map_outputs", [])
-    if map_outputs:
-        outputs_df = pd.DataFrame([
-            {
-                "Model": o.get("model_label", ""),
-                "Windows": ", ".join(o.get("windows", [])),
-                "File": Path(o.get("path", "")).name,
-            }
-            for o in map_outputs
-        ])
-        if not outputs_df.empty:
-            pdf.section_title("Available Model Outputs")
-            pdf.dataframe_table(outputs_df)
+        required = ('Wet-day minimum', 'Wet spell total', 'Wet spell length')
+        if not all(record.get(key) is not None and record[key] not in missing for key in required):
+            continue
+        threshold_source = record.get('Threshold source', 'Unknown')
+        if threshold_source not in missing | {'Scalar'}:
+            description = (f"At least {criterion_value(record, 'Wet-day minimum')} mm per wet day over "
+                           f"{criterion_value(record, 'Wet spell length')} days; spatial rainfall thresholds "
+                           f"from {Path(threshold_source).name}.")
+        else:
+            description = (f"At least {criterion_value(record, 'Wet-day minimum')} mm per wet day and "
+                           f"{criterion_value(record, 'Wet spell total')} mm over "
+                           f"{criterion_value(record, 'Wet spell length')} days.")
+        if str(record.get('Dry confirmation length')) in {'0', '0.0'}:
+            description += ' Dry-spell confirmation disabled.'
+        elif all(record.get(key) is not None and record[key] not in missing
+                 for key in ('Dry threshold', 'Dry spell length', 'Dry confirmation length')):
+            description += (f" Dry-spell check: {criterion_value(record, 'Dry spell length')} days, threshold "
+                            f"{criterion_value(record, 'Dry threshold')} mm/day, confirmation window "
+                            f"{criterion_value(record, 'Dry confirmation length')} days.")
+        criteria.setdefault(description, set()).add(metric_model_label(record['Model']))
+    if criteria:
+        pdf.section_title('Recorded Onset Criteria')
+        pdf.dataframe_table(pd.DataFrame([
+            {'Models': ', '.join(sorted(models)), 'Onset definition': definition}
+            for definition, models in criteria.items()]))
 
     scores_df = context.get("scores_df")
     if scores_df is not None and not scores_df.empty:
         pdf.section_title("Verification Scores")
         pdf.dataframe_table(scores_df)
 
+    probability_scores = context.get('probabilistic_scores_df')
+    if probability_scores is not None and not probability_scores.empty:
+        pdf.section_title('Probabilistic Skill Metrics')
+        pdf.dataframe_table(probability_scores)
+
     distribution_stats = context.get("distribution_stats")
     if distribution_stats is not None and not distribution_stats.empty:
         pdf.section_title("Detailed Metric Distributions")
-        pdf.dataframe_table(distribution_stats)
+        pdf.dataframe_table(distribution_stats.drop(columns=['fraction'], errors='ignore'))
+    for message in context.get('table_errors', []):
+        pdf.paragraph(f'Some saved score tables could not be loaded: {message}')
+
+    if context.get('reference_warnings'):
+        pdf.paragraph('Shared climatology comparisons are omitted where saved model and reference settings differ.')
 
     figures = context.get("figures", {})
-    if context.get('reference_warnings'):
+    if context.get('reference_warnings') and not context.get('shared_reference_available', False):
         figures = {category: [path for path in paths
                               if 'climatology' not in {part.casefold() for part in Path(path).parts}]
                    for category, paths in figures.items()}
@@ -3577,7 +3619,7 @@ def page() -> None:
                 if des > dee:
                     des, dee = avs, ave
                 with st.expander(f"{row['Model']} - available {row['Date Range']}"):
-                    st.caption("The month/day range defines the season repeated in each evaluation year. Dates use shared model/observation coverage; baseline years use observation coverage.")
+                    st.caption("The month/day range defines the season repeated in each evaluation year. Dates use shared model/observation coverage; baseline years use observation coverage. Climatology automatically excludes each verification year from its own reference (leave-one-year-out).")
                     c1, c2 = st.columns(2)
                     if st.session_state.get(f"es_{rk}") is not None and not avs <= st.session_state[f"es_{rk}"] <= ave:
                         st.session_state[f"es_{rk}"] = min(max(st.session_state[f"es_{rk}"], avs), ave)
@@ -3664,7 +3706,8 @@ def page() -> None:
     missing_coverage = []
     for row in active_rows:
         window = model_run_windows[row["_row_key"]]
-        errors = temporal_settings_errors({**window, "probabilistic": row.get("_probabilistic", False)}, observation_years)
+        errors = temporal_settings_errors({**window, "probabilistic": row.get("_probabilistic", False),
+                                          "baseline_forecast": shared_settings.get("baseline_forecast", "climatology")}, observation_years)
         observation_problems.extend(f"{row['Model']}: {error}" for error in errors)
         if not errors:
             coverage_key = _benchmark_coverage_key(row, CONFIG_BENCHMARK_MODEL_CATALOG)
@@ -3902,7 +3945,9 @@ def page() -> None:
                                     info_box("Cannot compare a map with itself.", "amber")
                                 else:
                                     cout = next((o for o in map_outputs if o["model_label"] == cm and cw in o["windows"]), None)
-                                    if cout:
+                                    if cout and not reference_comparison_allowed(sel_out, wl, cout, cw):
+                                        info_box("This model and shared climatology use different recorded settings. Rerun the affected model before comparing them.", "amber")
+                                    elif cout:
                                         cda = load_map_da_cached(cout["path"], ml, cw, ual, uan,
                                                                  file_mtime=cout.get("mtime", 0.0), country=benchmark_coverage)
                                         if cda is not None:
@@ -3945,7 +3990,9 @@ def page() -> None:
                                     info_box("Cannot compare a map with itself.", "amber")
                                 else:
                                     rout = next((o for o in map_outputs if o["model_label"] == rm and rw in o["windows"]), None)
-                                    if rout:
+                                    if rout and not reference_comparison_allowed(sel_out, wl, rout, rw):
+                                        info_box("This model and shared climatology use different recorded settings. Rerun the affected model before comparing them.", "amber")
+                                    elif rout:
                                         rda = load_map_da_cached(rout["path"], ml, rw, ual, uan,
                                                                  file_mtime=rout.get("mtime", 0.0), country=benchmark_coverage)
                                         if rda is not None:
@@ -4003,11 +4050,22 @@ def page() -> None:
                         tbl[(metric, window, metric_model_label(output["model_label"]))] = value
             probability_table, probability_baselines, summary_errors = load_probabilistic_metric_table(ROMP_DEMO_OUT_DIR)
             tbl.update(probability_table)
+            incompatible_spatial_comparisons = {
+                (metric_model_label(output["model_label"]), str(window).replace("–", "-"))
+                for output in map_outputs for window in output.get("reference_incompatible_windows", [])
+            }
+            comparison_baselines = {
+                key: None for key in tbl
+                if (key[2], str(key[1]).replace("–", "-")) in incompatible_spatial_comparisons
+            }
+            # Paired probability references belong to their model's saved score
+            # calculation and remain valid even if the shared spatial reference differs.
+            comparison_baselines.update(probability_baselines)
             models, categories = metric_model_options(
                 CONFIG_BENCHMARK_MODEL_CATALOG, {key[2] for key in tbl} |
                 {output["model_label"] for output in map_outputs} |
                 {getattr(config, "ref_model", "climatology")})
-            lead_options = sorted({key[1] for key in tbl} | {"Days 1–15", "Days 16–30"}, key=lead_window_sort_key)
+            lead_options = sorted({key[1] for key in tbl}, key=lead_window_sort_key)
             category_options = ["All"] + [category for category in ("Deterministic", "Probabilistic", "Climatology", "Other")
                                           if category in categories.values()]
             category = st.radio("Metric model category", category_options, horizontal=True, key="metrics_model_category")
@@ -4024,23 +4082,18 @@ def page() -> None:
                 st.warning("Some probabilistic summaries could not be read: " + "; ".join(summary_errors))
             if om and ow:
                 for heading, group_models in metric_comparison_groups(om, categories):
-                    st.markdown(f"#### {heading}")
                     selected = {key: value for key, value in tbl.items() if key[2] in group_models and key[1] in ow}
                     present_metrics = {key[0] for key in selected}
-                    if not present_metrics:
-                        present_metrics = ({"Fair Brier Score", "Fair Brier Skill Score (%)", "Fair RPS", "Fair RPS Skill Score (%)", "AUC", "Reference AUC"}
-                                           if categories[group_models[0]] == "Probabilistic"
-                                           else {"Mean Absolute Error days", "Miss Rate fraction", "False Alarm Rate fraction"})
-                    # Keep configured models visible before they have generated outputs.
                     for metric in present_metrics:
                         for window in ow:
                             # Filtering columns must not remove their comparison baseline.
                             baseline_key = (metric, window, "Traditional Climatology")
                             if baseline_key in tbl:
                                 selected[baseline_key] = tbl[baseline_key]
-                            for model in group_models:
-                                selected.setdefault((metric, window, model), None)
-                    st.markdown(build_metrics_table_html(selected, group_models, ow, baselines=probability_baselines).replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
+                    rendered = build_metrics_table_html(selected, group_models, ow, baselines=comparison_baselines)
+                    if rendered:
+                        st.markdown(f"#### {heading}")
+                        st.markdown(rendered.replace("<td>-</td>", "<td>N/A</td>"), unsafe_allow_html=True)
                 legacy_outputs = [output for output in map_outputs if
                                   metric_model_label(output["model_label"]) in om and
                                   set(output["windows"]) & set(ow) and
@@ -4051,7 +4104,7 @@ def page() -> None:
                     key[2] == model and key[1] in ow and value is not None and np.isfinite(value)
                     for key, value in tbl.items())]
                 if missing:
-                    st.info("No saved results for the selected lead times: " + ", ".join(missing))
+                    st.info("No finite metrics for the selected lead times: " + ", ".join(missing))
             else:
                 st.info("Select at least one model and one lead time to compare results.")
 
@@ -4126,7 +4179,10 @@ def page() -> None:
                                 baseline_vals[(win_k, met_k, stat_k)] = baseline_value
 
                                 # Calculate scale for intensity
-                                model_vals = pd.to_numeric(g.loc[~clim_mask, stat], errors="coerce").dropna()
+                                comparable = g["Model"].map(
+                                    lambda candidate, current_window=window: (candidate, str(current_window).replace("–", "-"))
+                                    not in incompatible_spatial_comparisons)
+                                model_vals = pd.to_numeric(g.loc[~clim_mask & comparable, stat], errors="coerce").dropna()
                                 differences = (model_vals - baseline_value).abs()
                                 if not differences.empty:
                                     comparison_scales[(win_k, met_k, stat_k)] = float(differences.max())
@@ -4198,7 +4254,9 @@ def page() -> None:
                             # Color coding vs baseline using _distribution_cell_style
                             base_v = row.get(f"Reference {stat}")
                             if base_v is None or not np.isfinite(base_v):
-                                base_v = baseline_vals.get((win_k, met_k, stat_k))
+                                base_v = (baseline_vals.get((win_k, met_k, stat_k))
+                                          if (model_label, str(window_label).replace("–", "-"))
+                                          not in incompatible_spatial_comparisons else None)
                             scale = comparison_scales.get((win_k, met_k, stat_k))
                             comparison_style = _distribution_cell_style(
                                 val_float,
@@ -4564,6 +4622,12 @@ def page() -> None:
                                 except Exception:
                                     distribution_stats = pd.DataFrame()
 
+                                probability_scores, probability_distributions, table_errors = collect_pdf_probability_tables(
+                                    ROMP_DEMO_OUT_DIR)
+                                if not probability_distributions.empty:
+                                    distribution_stats = pd.concat(
+                                        [distribution_stats, probability_distributions], ignore_index=True)
+
                                 # Collect benchmark figures
                                 try:
                                     report_figures = collect_reference_figures() if benchmark_coverage == "Ethiopia" else collect_reference_figures(ROMP_DEMO_FIG_DIR)
@@ -4580,11 +4644,16 @@ def page() -> None:
                                     "active_rows": report_rows,
                                     "recorded_settings": collect_benchmark_settings(report_rows),
                                     "reference_warnings": reference_warnings,
+                                    "shared_reference_available": any(
+                                        output['model_label'].casefold() in {'climatology', 'traditional climatology'}
+                                        for output in map_outputs),
                                     "model_count_basis": "stored_outputs",
                                     "fair_plan": st.session_state.get("fair_comparison_plan"),
                                     "map_outputs": map_outputs,
                                     "scores_df": scores_df,
+                                    "probabilistic_scores_df": probability_scores,
                                     "distribution_stats": distribution_stats,
+                                    "table_errors": table_errors,
                                     "uncertainty_df": st.session_state.get("unc_df"),
                                     "significance_df": st.session_state.get("sig_df"),
                                     "figures": report_figures,
@@ -4595,6 +4664,7 @@ def page() -> None:
 
                                 # Store in session state
                                 st.session_state["benchmark_pdf_bytes"] = pdf_bytes
+                                st.session_state["benchmark_pdf_layout_version"] = BenchmarkReportPDF.TABLE_LAYOUT_VERSION
                                 st.session_state["benchmark_pdf_signature"] = settings_signature
                                 st.session_state["benchmark_pdf_output_dir"] = str(ROMP_DEMO_OUT_DIR)
                                 st.session_state["benchmark_pdf_file"] = (
@@ -4611,6 +4681,7 @@ def page() -> None:
                     pdf_bytes = st.session_state.get("benchmark_pdf_bytes")
                     pdf_file = st.session_state.get("benchmark_pdf_file")
                     if (pdf_bytes and pdf_file
+                            and st.session_state.get("benchmark_pdf_layout_version") == BenchmarkReportPDF.TABLE_LAYOUT_VERSION
                             and st.session_state.get("benchmark_pdf_signature") == settings_signature
                             and st.session_state.get("benchmark_pdf_output_dir") == str(ROMP_DEMO_OUT_DIR)):
                         st.download_button(

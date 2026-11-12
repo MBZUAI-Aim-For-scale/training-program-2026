@@ -46,7 +46,8 @@ from momp.stats.detect import (
     aggregate_ensemble_onset,
 )
 from momp.stats.climatology import (
-    compute_climatological_onset,
+    climatological_onset_for_verification,
+    compute_climatological_onset_dataset,
     compute_climatology_as_forecast,
 )
 from momp.utils.practical import restore_args
@@ -296,9 +297,8 @@ def compute_metrics_multiple_years(
         kwargs["years"] = years
 
     if ref_clim:
-        print("Generating climatology onset doy for each year as onset_da_dict")
-        climatological_onset_doy = compute_climatological_onset(**kwargs)
-        onset_da_dict = {year: climatological_onset_doy for year in years}
+        print("Generating historical onset dates for leave-one-year-out climatology")
+        climatological_onset_dates = compute_climatological_onset_dataset(**kwargs)
 
     for year in years:
         print(f"\n{'-'*50}\nProcessing year {year}")
@@ -329,6 +329,8 @@ def compute_metrics_multiple_years(
 
         else:
             print("Computing onset for climatology as forecast ...")
+            climatological_onset_doy = climatological_onset_for_verification(climatological_onset_dates, year)
+            onset_da_dict[year] = climatological_onset_doy
             init_dates = get_initialization_dates(year, **kwargs)
             onset_df = compute_climatology_as_forecast(
                 climatological_onset_doy, year, init_dates, onset_da, **kwargs
@@ -422,8 +424,7 @@ def ens_compute_metrics_multiple_years(
         kwargs["years"] = years
 
     if ref_clim:
-        climatological_onset_doy = compute_climatological_onset(**kwargs)
-        onset_da_dict = {year: climatological_onset_doy for year in years}
+        climatological_onset_dates = compute_climatological_onset_dataset(**kwargs)
 
     for year in years:
         print(f"\n{'-'*50}\nProcessing year {year}")
@@ -448,6 +449,8 @@ def ens_compute_metrics_multiple_years(
 
         elif ref_clim:
             print("-------Computing onset for climatology as forecast ...")
+            climatological_onset_doy = climatological_onset_for_verification(climatological_onset_dates, year)
+            onset_da_dict[year] = climatological_onset_doy
             init_dates = get_initialization_dates(year, **kwargs)
             onset_df = compute_climatology_as_forecast(
                 climatological_onset_doy, year, init_dates, onset_da, **kwargs

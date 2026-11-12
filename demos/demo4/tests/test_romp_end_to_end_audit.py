@@ -24,7 +24,8 @@ PYTHON = str(ROOT / '.venv' / 'bin' / 'python')
 
 
 class ROMPEndToEndAuditTests(unittest.TestCase):
-    def fixture(self, root, probabilistic, *, daily_rates=False, parallel=False, country='Ethiopia'):
+    def fixture(self, root, probabilistic, *, daily_rates=False, parallel=False, country='Ethiopia',
+                overlapping_baseline=False):
         external = root / 'external'
         model_folder = 'AIFS_ENS_v2' if probabilistic else 'AIFS_v2'
         observations = (external / 'CHIRPS_regridded_025' / country if country == 'Ethiopia' else
@@ -83,7 +84,7 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
                   'dry_spell_search_extension': 5, 'area_mask_file': str(mask) if country == 'Ethiopia' else '',
                   'onset_threshold_file': '', 'baseline_forecast': 'climatology'}
         schedule = {'eval_start': '2023-05-15', 'eval_end': '2023-05-18',
-                    'baseline_start_year': 2021, 'baseline_end_year': 2022,
+                    'baseline_start_year': 2021, 'baseline_end_year': 2023 if overlapping_baseline else 2022,
                     'initialization_days': list(range(7)), 'init_type': 'daily',
                     'date_filter_year': 2023, 'run_years_concurrently': parallel,
                     'ensemble_forecast': probabilistic, 'max_forecast_day': 15,
@@ -94,8 +95,10 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
                                     'models': [{'exec_key': key, **schedule}]}))
         return key, spec, {**shared, **schedule, 'forecast_window': '1-15', 'benchmark_coverage': country}
 
-    def run_interfaces(self, root, probabilistic, *, daily_rates=False, parallel=False, country='Ethiopia'):
-        key, spec, settings = self.fixture(root, probabilistic, daily_rates=daily_rates, parallel=parallel, country=country)
+    def run_interfaces(self, root, probabilistic, *, daily_rates=False, parallel=False, country='Ethiopia',
+                       overlapping_baseline=False):
+        key, spec, settings = self.fixture(root, probabilistic, daily_rates=daily_rates, parallel=parallel,
+                                           country=country, overlapping_baseline=overlapping_baseline)
         env = dict(os.environ)
         # A developer's shell overrides must not change this controlled experiment.
         for name in list(env):
@@ -233,3 +236,32 @@ class ROMPEndToEndAuditTests(unittest.TestCase):
                     self.assertEqual(grid.attrs['region'], 'Peru')
                     self.assertTrue(grid.fair_brier_score.notnull().any())
                     self.assertFalse(np.isinf(grid.to_array()).any())
+
+    def test_overlapping_baseline_excludes_target_in_serial_and_parallel_exports(self):
+        import ast
+
+        from ui.utils.benchmark_report import (
+            collect_benchmark_settings,
+            collect_evaluated_models,
+        )
+
+        for parallel in (False, True):
+            with self.subTest(parallel=parallel), tempfile.TemporaryDirectory(prefix='romp-e2e-held-out-') as folder:
+                cli, dashboard = self.run_interfaces(Path(folder), probabilistic=True,
+                                                     parallel=parallel, overlapping_baseline=True)
+                self.assert_netcdf_parity(cli, dashboard)
+                for output in (cli, dashboard):
+                    scores = pd.read_csv(output / 'aifs_ens/overall_skill_scores_aifs_ens_1-15.csv').iloc[0]
+                    self.assertEqual(scores.Reference_Policy, 'leave_one_year_out')
+                    self.assertEqual(scores.Reference_Membership, 'leave_one_year_out')
+                    self.assertEqual(ast.literal_eval(scores.Reference_Years_By_Verification_Year),
+                                     {2023: '2021,2022'})
+                    self.assertEqual(scores.Requested_Reference_Years, '(2021, 2022, 2023)')
+                    with xr.open_dataset(output / 'climatology/spatial_metrics_climatology_1-15.nc') as reference:
+                        self.assertEqual(reference.attrs['reference_policy'], 'leave_one_year_out')
+                    with xr.open_dataset(output / 'aifs_ens/probabilistic_metrics_aifs_ens_1-15.nc') as grid:
+                        self.assertEqual(grid.attrs['reference_policy'], 'leave_one_year_out')
+                        self.assertEqual(ast.literal_eval(grid.attrs['reference_years_by_verification_year']),
+                                         {2023: '2021,2022'})
+                    recorded = collect_benchmark_settings(collect_evaluated_models(output))
+                    self.assertTrue(all(row['Reference policy'] == 'leave_one_year_out' for row in recorded))

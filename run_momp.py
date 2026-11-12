@@ -597,6 +597,21 @@ def validate_runtime_config(cfg):
     if start and end and tuple(start[1:]) > tuple(end[1:]):
         raise ValueError(
             "Cross-year evaluation seasons are not supported; choose a season within one calendar year.")
+    if start and end and getattr(cfg, 'ref_model', 'climatology') == 'climatology':
+        baseline = getattr(cfg, 'years_clim', None)
+        if not baseline or baseline == 'All':
+            first, last = getattr(cfg, 'start_year_clim', None), getattr(cfg, 'end_year_clim', None)
+            baseline = tuple(range(first, last + 1)) if first is not None and last is not None else None
+        evaluation = getattr(cfg, 'years', None)
+        if not evaluation or evaluation == 'All':
+            evaluation = range(start[0], end[0] + 1)
+        if baseline is not None:
+            remaining = len(set(baseline)) - int(bool(set(baseline) & set(evaluation)))
+            minimum = 2 if cfg.probabilistic else 1
+            if remaining < minimum:
+                raise ValueError(
+                    f'Climatology needs at least {minimum} baseline years remaining after '
+                    'leave-one-year-out exclusion; choose additional baseline years.')
     mode = getattr(cfg, "init_type", "weekly")
     days = getattr(cfg, "init_days", (0, 3))
     if mode not in {"weekly", "daily", "monthly"}:

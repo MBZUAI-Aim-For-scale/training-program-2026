@@ -13,6 +13,33 @@ from momp.utils.printing import tuple_to_str
 #    return Path(directory) / filename
 
 
+def climatology_reference_metadata(reference_pairs):
+    """Describe actual held-out membership without substituting requested years."""
+    membership = 'not_applicable' if reference_pairs is None else 'not_recorded'
+    policy = membership
+    years_by_target = {}
+    if reference_pairs is not None:
+        if 'reference_membership' in reference_pairs:
+            memberships = set(reference_pairs['reference_membership'].dropna())
+            membership = ';'.join(sorted(memberships)) or 'not_recorded'
+            if memberships and memberships <= {'leave_one_year_out', 'held_out_verification_year'}:
+                policy = 'leave_one_year_out'
+            elif 'includes_verification_year' in memberships:
+                policy = 'in_sample'
+        if {'year', 'reference_years'} <= set(reference_pairs.columns):
+            selections = reference_pairs[['year', 'reference_years']].drop_duplicates()
+            for target, years in selections.itertuples(index=False, name=None):
+                target = int(target)
+                if target in years_by_target and years_by_target[target] != str(years):
+                    raise ValueError(f'Conflicting climatology reference years for verification year {target}')
+                years_by_target[target] = str(years)
+    return {
+        'Reference_Policy': policy,
+        'Reference_Membership': membership,
+        'Reference_Years_By_Verification_Year': str(dict(sorted(years_by_target.items()))) if years_by_target else 'not_recorded',
+    }
+
+
 #def save_score_results(score_results, *, model, max_forecast_day, dir_out, **kwargs):
 def save_score_results(score_results, *, model, verification_window, dir_out, save_csv_score=True, **kwargs):
     """Save overall and binned skill scores to CSV files"""
@@ -34,10 +61,6 @@ def save_score_results(score_results, *, model, verification_window, dir_out, sa
     # Retain the RPSS denominator and sample coverage so undefined scores can be diagnosed.
     reference_rps = score_results.get('RPS_ref') or {}
     reference_pairs = score_results.get('climatology_obs_df')
-    reference_membership = 'not_applicable'
-    if reference_pairs is not None:
-        reference_membership = (';'.join(sorted(reference_pairs['reference_membership'].unique()))
-                                if 'reference_membership' in reference_pairs else 'not_recorded')
     forecast_pairs = score_results.get('forecast_obs_df')
     actual_evaluation_years = None
     if forecast_pairs is not None:
@@ -63,13 +86,13 @@ def save_score_results(score_results, *, model, verification_window, dir_out, sa
         'RPS_N_Forecasts': score_results['RPS'].get('n_forecasts', np.nan),
         'RPS_N_Excluded_Forecasts': score_results['RPS'].get('n_excluded_forecasts', 0),
         'Reference_RPS_N_Excluded_Forecasts': reference_rps.get('n_excluded_forecasts', 0),
-        'Reference_Membership': reference_membership,
         'Reference_Probability_Conditioning': ('finite_climatological_onsets'
                                              if reference_pairs is not None else
                                              'all_usable_members_including_no_onset'),
         'Forecast_Probability_Conditioning': 'all_usable_members_including_no_onset',
         'RPS_Category_Order': 'chronological_complete_partition',
     })
+    overall_scores_nested.update(climatology_reference_metadata(reference_pairs))
 
     #overall_df = pd.DataFrame(overall_scores)
     # pd.DataFrame expects lists/arrays as values, or a list of dicts for rows, not a dict of scalars
@@ -199,6 +222,8 @@ def save_metrics_to_netcdf(spatial_metrics, attrs_dict, desc_dict=None, fname='s
             clean_attrs[key] = val
 
     ds.attrs.update(clean_attrs)
+    if attrs_dict.get('model') == 'climatology' or attrs_dict.get('ref_model') == 'climatology':
+        ds.attrs['reference_policy'] = 'leave_one_year_out'
     ds.attrs['contingency_definition'] = 'romp_reference_exclusive_window_v1'
     ds.attrs['ensemble_aggregation'] = ('reference_mean_if_consensus'
                                       if attrs_dict.get('probabilistic', False)

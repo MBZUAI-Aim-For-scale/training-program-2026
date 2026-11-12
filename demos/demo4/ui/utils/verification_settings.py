@@ -22,8 +22,16 @@ def temporal_settings_errors(settings, observation_years):
         errors.append("Baseline End Year must be at least Baseline Start Year.")
     elif not set(range(first, last + 1)).issubset(available):
         errors.append("Baseline years must all have observation files available.")
-    elif settings.get("probabilistic") and last - first < 1:
-        errors.append("Probabilistic fair scores need at least two baseline observation years.")
+    elif settings.get('baseline_forecast', 'climatology') == 'climatology':
+        overlap = first <= end.year and last >= start.year
+        remaining = last - first + 1 - int(overlap)
+        minimum = 2 if settings.get('probabilistic') else 1
+        if remaining < minimum:
+            errors.append(
+                f"Climatology needs at least {minimum} baseline observation years remaining per target "
+                "after leave-one-year-out exclusion. "
+                + ("Choose at least three baseline years when probabilistic evaluation overlaps the baseline."
+                   if settings.get('probabilistic') and overlap else "Choose additional baseline years."))
     mode, days = settings["init_type"], settings["initialization_days"]
     reference_year = settings.get("date_filter_year")
     if mode == "weekly" and (type(reference_year) is not int or not 1 <= reference_year <= 9999):

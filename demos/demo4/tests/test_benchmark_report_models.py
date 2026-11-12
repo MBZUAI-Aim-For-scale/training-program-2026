@@ -119,6 +119,7 @@ class BenchmarkReportModelTests(unittest.TestCase):
             'ground_truth': 'CHIRPS', 'benchmark_coverage': 'Ethiopia',
             'forecast_window': '1-15 days', 'shared_settings': {'baseline_forecast': 'climatology'},
             'map_outputs': [], 'scores_df': pd.DataFrame(), 'distribution_stats': pd.DataFrame(),
+            'probability_scores': pd.DataFrame(), 'table_errors': [],
             'report_figures': {},
             'reference_warnings': [],
         }

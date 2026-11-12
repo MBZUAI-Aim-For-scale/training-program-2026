@@ -15,6 +15,46 @@ from momp.utils.practical import restore_args
 import momp.params as params
 
 
+def climatological_onset_for_verification(onset_dates, target_year):
+    """Return the historical mean onset after holding out the verification year."""
+    reference = onset_dates.sel(year=onset_dates.year != target_year)
+    if reference.sizes['year'] == 0:
+        raise ValueError(f"No baseline years remain after excluding verification year {target_year}.")
+    if np.issubdtype(reference.dtype, np.datetime64):
+        onset_days = reference.dt.dayofyear.astype(float).where(reference.notnull())
+    else:
+        onset_days = reference.astype(float)
+    prediction = np.round(onset_days.mean(dim='year', skipna=True))
+    prediction.attrs.update(
+        reference_policy='leave_one_year_out',
+        reference_membership=('leave_one_year_out' if target_year in onset_dates.year.values
+                              else 'held_out_verification_year'),
+        reference_years=tuple(int(year) for year in reference.year.values),
+    )
+    return prediction
+
+
+def climatology_reference_dataset(onset_da_dict):
+    """Preserve each verification year's held-out field and its actual membership."""
+    if not onset_da_dict:
+        raise ValueError("No climatology reference fields are available to export.")
+    target_years = sorted(onset_da_dict)
+    fields = [onset_da_dict[year] for year in target_years]
+    reference = xr.concat(fields, dim=pd.Index(target_years, name='verification_year'), join='exact')
+    reference = reference.assign_coords(
+        reference_years=('verification_year', [
+            ','.join(str(year) for year in field.attrs.get('reference_years', ())) for field in fields]),
+        reference_membership=('verification_year', [
+            field.attrs.get('reference_membership', 'not_recorded') for field in fields]),
+    ).rename('climatological_onset_dayofyear')
+    reference.attrs = {
+        'reference_policy': 'leave_one_year_out',
+        'description': 'Held-out climatological mean onset day of year for each verification year',
+        'units': 'day of year',
+    }
+    return reference
+
+
 def compute_climatological_onset(
     *,
     obs_dir=None,

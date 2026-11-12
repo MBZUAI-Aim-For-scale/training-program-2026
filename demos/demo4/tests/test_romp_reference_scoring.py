@@ -95,18 +95,61 @@ class ReferenceScoringTests(unittest.TestCase):
             else:
                 pd.testing.assert_frame_equal(frame, expected)
 
-    def test_overlapping_baseline_year_is_retained_but_explicitly_identified(self):
-        climate = xr.DataArray(np.array(['2021-06-04', '2022-06-14'], dtype='datetime64[ns]')[:, None, None],
+    def test_overlapping_baseline_year_is_excluded_while_preserving_observed_truth(self):
+        climate = xr.DataArray(np.array(['2021-06-04', '2022-06-14', '2023-06-14'], dtype='datetime64[ns]')[:, None, None],
                                dims=('year', 'lat', 'lon'),
-                               coords={'year': [2021, 2022], 'lat': [8.], 'lon': [39.]})
+                               coords={'year': [2021, 2022, 2023], 'lat': [8.], 'lon': [39.]})
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always')
             frame = self.scope['create_climatological_forecast_obs_pairs'](
                 climate, 2021, ['2021-06-01'], day_bins=((1, 5), (6, 10), (11, 15)),
                 max_forecast_day=15)
-        self.assertTrue(any('includes verification year 2021' in str(item.message) for item in caught))
-        self.assertEqual(frame.loc[frame.bin_label == 'Days 1-5', 'predicted_prob'].item(), .5)
-        self.assertEqual(set(frame.reference_membership), {'includes_verification_year'})
+        self.assertFalse(caught)
+        early = frame.loc[frame.bin_label == 'Days 1-5'].iloc[0]
+        self.assertEqual(early.predicted_prob, 0.)
+        self.assertEqual(early.observed_onset, 1)
+        self.assertEqual(early.total_members, 2)
+        self.assertEqual(set(frame.reference_membership), {'leave_one_year_out'})
+        self.assertEqual(set(frame.reference_years), {'2022,2023'})
+        self.assertTrue(all('2021' not in years for years in frame.contributing_years))
+
+    def test_no_baseline_years_after_exclusion_fail_instead_of_reusing_truth(self):
+        climate = xr.DataArray(np.array(['2021-06-04'], dtype='datetime64[ns]')[:, None, None],
+                               dims=('year', 'lat', 'lon'),
+                               coords={'year': [2021], 'lat': [8.], 'lon': [39.]})
+        with self.assertRaisesRegex(ValueError, 'No climatology reference years remain'):
+            self.scope['create_climatological_forecast_obs_pairs'](
+                climate, 2021, ['2021-06-01'], day_bins=((1, 5),), max_forecast_day=5)
+
+    def test_2019_verification_uses_seventeen_other_years_from_2007_to_2024(self):
+        years = list(range(2007, 2025))
+        onsets = [f'{year}-06-04' if year == 2019 else f'{year}-06-14' for year in years]
+        climate = xr.DataArray(np.array(onsets, dtype='datetime64[ns]')[:, None, None],
+                               dims=('year', 'lat', 'lon'),
+                               coords={'year': years, 'lat': [8.], 'lon': [39.]})
+        truth = climate.sel(year=2019).copy(deep=True)
+        first = self.scope['create_climatological_forecast_obs_pairs'](
+            climate, 2019, ['2019-06-01'], observed_onset=truth,
+            day_bins=((1, 5), (6, 10), (11, 15)), max_forecast_day=15)
+        self.assertEqual(set(first.total_members), {17})
+        self.assertEqual(set(first.reference_membership), {'leave_one_year_out'})
+        self.assertEqual(set(first.reference_years.iloc[0].split(',')),
+                         {str(year) for year in years if year != 2019})
+        climate.loc[{'year': 2019}] = np.datetime64('2019-07-20', 'ns')
+        changed = self.scope['create_climatological_forecast_obs_pairs'](
+            climate, 2019, ['2019-06-01'], observed_onset=truth,
+            day_bins=((1, 5), (6, 10), (11, 15)), max_forecast_day=15)
+        pd.testing.assert_frame_equal(first, changed)
+
+    def test_reference_metadata_records_actual_membership_per_verification_year(self):
+        ns = functions(LOCAL / 'io/output.py', np=np, pd=pd, os=os)
+        pairs = pd.DataFrame({'year': [2019, 2019, 2024],
+                              'reference_membership': ['leave_one_year_out'] * 3,
+                              'reference_years': ['2020,2024', '2020,2024', '2019,2020']})
+        metadata = ns['climatology_reference_metadata'](pairs)
+        self.assertEqual(metadata['Reference_Policy'], 'leave_one_year_out')
+        self.assertEqual(ast.literal_eval(metadata['Reference_Years_By_Verification_Year']),
+                         {2019: '2020,2024', 2024: '2019,2020'})
 
     def test_reference_missing_onset_conditioning_is_preserved_and_distinguished(self):
         climate = xr.DataArray(np.array(['2021-06-04', 'NaT'], dtype='datetime64[ns]')[:, None, None],

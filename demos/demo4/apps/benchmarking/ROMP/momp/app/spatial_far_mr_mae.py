@@ -242,7 +242,9 @@ def spatial_far_mr_mae_map(cfg=cfg, setting=setting):
         fout = os.path.join(case_cfg_ref["dir_out"], "climatology_onset_doy_{}.nc")
         fout = fout.format(tuple_to_str_range(case_cfg_ref.get("years_clim", list(range(2003, 2024)))))
         if onset_da_dict:
-            climatological_onset_doy = next(iter(onset_da_dict.values()))
+            from momp.stats.climatology import climatology_reference_dataset
+
+            climatological_onset_doy = climatology_reference_dataset(onset_da_dict)
             if str(case_cfg_ref.get("region") or getattr(cfg, "region", "Ethiopia")).casefold() == "ethiopia":
                 from ai_weather import config as weather_config
                 from ai_weather.spatial import clip_to_boundary

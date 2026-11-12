@@ -24,12 +24,67 @@ An explicitly disabled mask is distinct from absent metadata. Model metrics rema
 shared-reference comparisons are suppressed. Per-model probabilistic scores retain their paired
 reference calculations.
 
+Compatibility is scoped to each model and verification window. A stale model no longer removes
+a shared climatology window that matches another model. Warnings name the affected model, exact
+fields and both recorded values. Raw maps/metrics remain visible; incompatible shared-reference
+table colors, distribution fallback and Difference/Swipe pairs are disabled only for that model.
+Matching models and saved paired probability references remain usable. Optional aggregate
+skill/significance engines still use the conservative all-results guard when their inputs cannot
+be scoped to matching models. Reports retain shared climatology figures when a compatible
+model/reference pair remains available.
+
+All Metrics lead-time choices now come from saved scores rather than a forced Days 1–15/Days 16–30
+pair. Tables omit model/window columns with no finite values and do not synthesize missing result
+rows for configured models. Missing or undefined scores within a populated column remain visible
+as `N/A`; their presence does not imply that an uncomputed lead window should be displayed.
+
 ## Verification
 
 Regression tests exercise the real PDF generator, real NetCDF/CSV metadata, model/window-specific
 year reporting, country isolation, custom source overrides and incompatible reference suppression.
 Synthetic end-to-end runs exercise deterministic and ensemble forecasts through both CLI and
 dashboard subprocesses, including analytic scores and exported report metadata.
+
+PDF tables now wrap complete headers and values at readable sizes, allocate widths from content,
+repeat Model/Metric/Lead identifiers across wide continuations, and repeat headers after page breaks.
+Oversized multiline rows can continue across pages. Named or hierarchical row indexes become visible
+columns, duplicate column labels are preserved with unique names, and hierarchical column headers
+are flattened. Small nonzero values use scientific notation rather than rounding to zero; comparison
+symbols are transliterated without losing their meaning. The old clipping helper was removed.
+Saved probabilistic CSV scores and grid distributions are included without the optional verification
+engine. Read errors are recorded in the report. Cached PDFs using the old table layout must be regenerated.
+
+PDF regressions cover duplicate/hierarchical labels, long text, wide and tall tables, repeated identities,
+numeric precision, and full text extraction. Rendered sample pages are inspected and checked against
+page margins; the preview artifact uses explicitly labelled synthetic data.
+
+The main PDF now summarizes saved setup in a compact table rather than printing raw per-file
+metadata. Equivalent CSV/spatial settings are combined; conflicting periods or onset criteria remain
+separate and are flagged. Dates, weekdays and reference policies use readable labels. Detailed
+reference-year mappings remain in the saved scientific outputs and are reduced to eligible-year
+counts in the report. Current dashboard controls and source-file listings are no longer repeated
+through the scientific narrative. Recorded onset criteria are shown separately from current controls.
+
+## Leave-one-year-out verification
+
+Climatology verification now uses **leave-one-year-out** membership in probabilistic and spatial
+metrics. For example, verifying 2019 with requested baseline 2007–2024 excludes 2019 and retains
+the other 17 eligible years. Observed 2019 onset remains the truth. If the target year is outside
+the baseline, membership is unchanged. Baseline onset dates are computed once and reused to
+derive target-specific held-out reference means.
+
+New CSV/probability-grid exports record `Reference_Policy`, membership and eligible reference years
+per verification year. Spatial metrics record the exclusion policy, and climatology onset exports
+retain a `verification_year` dimension with per-target membership. A displayed average of those
+fields is labelled as descriptive; it is not used in place of the per-target forecasts for scoring.
+Finite-onset conditioning and fair-score sample exclusions still apply after holding out the target.
+
+An overlapping probabilistic baseline needs at least three eligible years so at least two remain
+after exclusion; a deterministic mean needs at least one remaining year. Empty references raise
+an error rather than falling back to the excluded year. Existing saved results must be recomputed;
+regenerating only the PDF cannot remove leakage from old scores. Historical cross-validation may
+still use years later than the target; a past-only operational comparison needs a baseline entirely
+before the evaluation period.
 
 ## Remaining limits
 
