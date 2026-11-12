@@ -11,17 +11,21 @@ country data's rainfall: CHIRPS v3 observations and the AI models' total precipi
 lays them out the way AI Almanac's discovery reads a dataset folder, in AI Almanac's dataset folder
 ~/ai-almanac-data ($ALMANAC_DATASETS_DIR; /datasets in its container):
 
-  ~/ai-almanac-data/<country>/obs/CHIRPSv3_<Country>_<YYYY>_box025.nc
-  ~/ai-almanac-data/<country>/models/<Model>/<Model>_tp_<Country>_<YYYY>_box025.nc
+  ~/ai-almanac-data/<country>/obs/<YYYY>.nc
+  ~/ai-almanac-data/<country>/models/<Model>/<YYYY>.nc
 
 as hard links to the files in ~/<country>_data (no extra space; a copy where a hard link can't be
-made). The fleet mirrors ~/ai-almanac-data from the program's bucket and deletes what the bucket
+made), named by their year as the bucket's datasets are: AI Almanac's blends stage a model's
+<path>/<year>.nc, whatever file pattern the source was registered with. Links an earlier run made
+under the country data's own names (CHIRPSv3_<Country>_<YYYY>_box025.nc, ...) are removed, and the
+country's registered sources are switched to the {}.nc pattern (AI Almanac re-checks each). The fleet mirrors ~/ai-almanac-data from the program's bucket and deletes what the bucket
 doesn't have, except in a folder holding .fleet-demos-keep: each country folder gets one.
 
 Then, in AI Almanac's own container (the running one, or a one-off one if it isn't running, so AI
 Almanac needn't be open), with AI Almanac's own code:
   - the country's region, its bounds the data's lat/lon box, read as AI Almanac reads a source's
     (nothing changes if a region with that name is there);
+  - the country's sources already registered under another file pattern: switched to {}.nc;
   - ai-almanac sources discover /datasets --register --names <country>/ai-almanac-names.yaml:
     the sources, named as the shared datasets' are (AIFSv2, AIFS-ENSv2, GraphCast, CHIRPS v3) and
     linked to the live forecast models (ones already registered are left as they are).
@@ -119,6 +123,42 @@ async def main():
 asyncio.run(main())
 '''
 
+# Run in AI Almanac's container (argv: the country's folder, /datasets/<slug>): its registered
+# sources whose file pattern isn't {}.nc (the files' year names) are switched to it, through AI
+# Almanac's update_source, which checks the files again (years, status) as it does on registering.
+SET_PATTERNS = r'''
+import asyncio, sys
+from sqlalchemy import text
+from ai_almanac.settings import reload_settings
+from ai_almanac.server.app import _apply_migrations
+from ai_almanac.server import db
+from ai_almanac.server.services import data_sources
+
+folder = sys.argv[1].rstrip("/") + "/"
+reload_settings()
+_apply_migrations()
+
+async def main():
+    try:
+        async with db.engine.begin() as conn:
+            ids = [r[0] for r in await conn.execute(
+                text("SELECT id FROM data_sources WHERE path LIKE :p"), {"p": folder + "%"})]
+        for source_id in ids:
+            s = await data_sources.get_source(source_id)
+            key = "obs_file_pattern" if s["kind"] == "obs" else "file_pattern"
+            md = s.get("metadata") or {}
+            if md.get(key, "{}.nc") == "{}.nc":
+                continue
+            r = await data_sources.update_source(source_id, name=s["name"], path=s["path"], region=s.get("region"),
+                                                 metadata={**md, key: "{}.nc"})
+            print(f"{s['name']} ({s['path']}): file pattern {md.get(key)!r} -> '{{}}.nc', {r['status']}"
+                  + (f": {r['validation_error']}" if r.get("validation_error") else ""))
+    finally:
+        await db.engine.dispose()
+
+asyncio.run(main())
+'''
+
 
 def say(msg: str):
     print(msg, flush=True)
@@ -143,14 +183,30 @@ def sources(country: str) -> list[tuple[Path, Path, dict]]:
     return [(src, d, meta) for src, d, meta in out if src.is_dir() and any(src.glob("*.nc"))]
 
 
-def link_files(src: Path, dest: Path, dry: bool) -> tuple[int, int]:
-    """Hard-links src's NetCDF files into dest (a copy across disks); a file of the same size is kept
-    (a copy made by hand, say), one that changed is replaced. Returns (linked or copied, kept)."""
-    done = same = 0
+YEAR = re.compile(r"(?<![0-9])((?:19|20)[0-9]{2})(?![0-9])")
+
+
+def year_name(f: Path) -> str | None:
+    """The name a country data file gets in AI Almanac's folder: its year (CHIRPSv3_Peru_2001_box025.nc
+    -> 2001.nc), as the bucket's datasets are named and as AI Almanac's blends look for them."""
+    years = YEAR.findall(f.stem)
+    return f"{years[-1]}.nc" if years else None
+
+
+def link_files(src: Path, dest: Path, dry: bool) -> tuple[int, int, int]:
+    """Hard-links src's NetCDF files into dest as <year>.nc (a copy across disks); a file of the same
+    size is kept (a copy made by hand, say), one that changed is replaced. Then the files in dest
+    under the country data's own names (an earlier run's links, or a copy by hand) go.
+    Returns (linked or copied, kept, removed)."""
+    done = same = gone = 0
     if not dry:
         dest.mkdir(parents=True, exist_ok=True)
-    for f in sorted(src.glob("*.nc")):
-        target = dest / f.name
+    ours = sorted(src.glob("*.nc"))
+    for f in ours:
+        name = year_name(f)
+        if not name:
+            continue
+        target = dest / name
         try:
             if target.exists() and (os.path.samefile(f, target) or target.stat().st_size == f.stat().st_size):
                 same += 1
@@ -167,7 +223,13 @@ def link_files(src: Path, dest: Path, dry: bool) -> tuple[int, int]:
         except OSError:  # (another disk, say)
             shutil.copy2(f, tmp)
         os.replace(tmp, target)
-    return done, same
+    names = {f.name for f in ours if year_name(f)}
+    for old in sorted(dest.glob("*.nc")) if dest.is_dir() else []:
+        if old.name in names:
+            gone += 1
+            if not dry:
+                old.unlink()
+    return done, same, gone
 
 
 def names_yaml(found: list[tuple[Path, Path, dict]]) -> str:
@@ -229,8 +291,9 @@ def run(country: str, dry: bool = False) -> int:
             "data first (the dashboard's Country data, or python3 country_data.py)")
         return 1
     for src, d, meta in found:
-        done, same = link_files(src, d, dry)
-        say(f"  {meta['name']:<11} {d}: {done} file(s) {'to link' if dry else 'linked'}, {same} already there")
+        done, same, gone = link_files(src, d, dry)
+        say(f"  {meta['name']:<11} {d}: {done} file(s) {'to link' if dry else 'linked'}, {same} already there"
+            + (f", {gone} under the old names {'to remove' if dry else 'removed'}" if gone else ""))
     if not dry:
         (dest / KEEP).write_text("This folder is made on this Spark (the training program's ai_almanac_data.py)\n"
                                  "from its country data: the fleet's sync of ~/ai-almanac-data leaves it alone.\n")
@@ -241,6 +304,11 @@ def run(country: str, dry: bool = False) -> int:
                   COUNTRY_ISO3.get(name, "")], ADD_REGION, dry)
     if rc != 0:
         say("  the region wasn't added (see above): nothing registered")
+        return rc
+    say("  the sources registered before: their files' year names")
+    rc = almanac(["python", "-", f"{IN_CONTAINER}/{slug(country)}"], SET_PATTERNS, dry)
+    if rc != 0:
+        say("  the sources' file patterns weren't updated (see above): nothing registered")
         return rc
     say("  registering the sources")
     return almanac(["ai-almanac", "sources", "discover", IN_CONTAINER, "--register", "--names",
