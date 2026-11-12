@@ -59,11 +59,25 @@ MODELS = {
     "graphcast": {"name": "GraphCast", "forecast_model_id": "graphcast_operational"},
 }
 
-# Run in AI Almanac's container: adds the region (argv: display name, a folder of its NetCDF data).
+# Each country's ISO 3166-1 alpha-3 code (as Demo 5's country_boundaries.py): set on its region as
+# boundary_iso, AI Almanac's link to the country's administrative areas (geoBoundaries), so its states
+# and districts can be picked as focus areas. Without it: "couldn't load areas".
+COUNTRY_ISO3 = {
+    "Senegal": "SEN", "Rwanda": "RWA", "Colombia": "COL", "Peru": "PER",
+    "Bolivia": "BOL", "Philippines": "PHL", "Indonesia": "IDN", "Pakistan": "PAK",
+    "Nigeria": "NGA", "Ethiopia": "ETH", "Kenya": "KEN", "Sierra Leone": "SLE",
+    "Chile": "CHL", "Bangladesh": "BGD",
+}
+
+# Run in AI Almanac's container: adds the region (argv: display name, a folder of its NetCDF data,
+# the country's ISO code or ""), or finds it, and gives it the country code if it has none. The code
+# is set with its own UPDATE (the column is in every AI Almanac since its regions table), so this works
+# whether or not that AI Almanac's create_region takes boundary_iso.
 ADD_REGION = r'''
 import asyncio, sys
 from pathlib import Path
 import xarray as xr
+from sqlalchemy import text
 from ai_almanac.settings import reload_settings
 from ai_almanac.server.app import _apply_migrations
 from ai_almanac.server import db
@@ -71,6 +85,7 @@ from ai_almanac.server.services import region_catalog
 from ai_almanac.server.services.data_sources import _spatial_bounds
 
 name, folder = sys.argv[1], Path(sys.argv[2])
+iso = sys.argv[3] if len(sys.argv) > 3 else ""
 reload_settings()
 _apply_migrations()
 with xr.open_dataset(sorted(folder.glob("*.nc"))[0]) as ds:
@@ -80,14 +95,24 @@ async def main():
     try:
         await region_catalog.seed_packaged_regions()
         slug = region_catalog.region_slug(name)
-        for r in await region_catalog.list_regions():
-            if r["id"] == slug or str(r.get("display_name") or "").lower() == name.lower():
-                print(f"region {r['id']!r} ({r['display_name']}) is already there")
-                return
-        r = await region_catalog.create_region(display_name=name, land_only=False,
-                                               description=f"{name}: the training program's country data", **box)
-        print(f"added region {r['id']!r} ({name}): lat {box['lat_min']} to {box['lat_max']}, "
-              f"lon {box['lon_min']} to {box['lon_max']}")
+        r = next((r for r in await region_catalog.list_regions()
+                  if r["id"] == slug or str(r.get("display_name") or "").lower() == name.lower()), None)
+        if r:
+            print(f"region {r['id']!r} ({r['display_name']}) is already there")
+        else:
+            r = await region_catalog.create_region(display_name=name, land_only=False,
+                                                   description=f"{name}: the training program's country data", **box)
+            print(f"added region {r['id']!r} ({name}): lat {box['lat_min']} to {box['lat_max']}, "
+                  f"lon {box['lon_min']} to {box['lon_max']}")
+        if not iso or r.get("is_builtin"):
+            return
+        if r.get("boundary_iso"):
+            print(f"its country code: {r['boundary_iso']}")
+            return
+        async with db.engine.begin() as conn:
+            await conn.execute(text("UPDATE regions SET boundary_iso = :iso WHERE id = :id AND "
+                                    "(boundary_iso IS NULL OR boundary_iso = '')"), {"iso": iso, "id": r["id"]})
+        print(f"its country code: {iso} (its states and districts can be picked as areas)")
     finally:
         await db.engine.dispose()
 
@@ -212,7 +237,8 @@ def run(country: str, dry: bool = False) -> int:
         (dest / NAMES_FILE).write_text(names_yaml(found))
     obs = next((d for _, d, m in found if m is OBS[2]), found[0][1])
     say(f"  adding the region {name} (its bounds: the data's)")
-    rc = almanac(["python", "-", name, f"{IN_CONTAINER}/{obs.relative_to(ROOT).as_posix()}"], ADD_REGION, dry)
+    rc = almanac(["python", "-", name, f"{IN_CONTAINER}/{obs.relative_to(ROOT).as_posix()}",
+                  COUNTRY_ISO3.get(name, "")], ADD_REGION, dry)
     if rc != 0:
         say("  the region wasn't added (see above): nothing registered")
         return rc

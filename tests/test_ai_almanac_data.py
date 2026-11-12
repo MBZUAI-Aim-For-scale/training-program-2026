@@ -57,7 +57,7 @@ def test_links_rainfall_only_marks_and_registers(aad, tmp_path):
     assert "  sierra-leone/obs:\n    name: 'CHIRPS v3'\n    obs_date_marks: start\n" in names
     assert "  sierra-leone/models/AIFS_v2:\n    name: AIFSv2\n    forecast_model_id: aifs2\n" in names
     assert aad.calls == [
-        (["python", "-", "Sierra Leone", "/datasets/sierra-leone/obs"], True),
+        (["python", "-", "Sierra Leone", "/datasets/sierra-leone/obs", "SLE"], True),
         (["ai-almanac", "sources", "discover", "/datasets", "--register", "--names",
           "/datasets/sierra-leone/ai-almanac-names.yaml"], False)]
     assert aad.link_files(src.parent, root / "obs", dry=False) == (0, 2)  # (again: nothing to do)
@@ -86,3 +86,9 @@ def test_dry_run_changes_nothing_and_no_data(aad, tmp_path):
     assert aad.run("Rwanda", dry=True) == 0
     assert not (tmp_path / "ai-almanac-data").exists()
     assert aad.run("Peru") == 1                                        # (no country data yet)
+
+
+def test_every_country_has_its_iso_code(aad):
+    # (the region's boundary_iso: its states and districts as focus areas in AI Almanac)
+    assert {aad.display(c) for c in aad.country_data.COUNTRIES} <= set(aad.COUNTRY_ISO3)
+    assert all(len(v) == 3 and v.isupper() for v in aad.COUNTRY_ISO3.values())
