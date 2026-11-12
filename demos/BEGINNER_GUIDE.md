@@ -113,7 +113,7 @@ To stop a demo, click **Stop** on its page in the dashboard.
 | `spark-setup --host-only` | Runs only the Spark health checks |
 | `spark-setup --only demo3` | Health checks, then sets up just one demo (`demo2` to `demo5`) |
 | `spark-setup --build-only` | Health checks, then builds the demos whose code changed, without starting any |
-| `spark-setup --rebuild` | Rebuilds every demo, even if its code didn't change |
+| `spark-setup --rebuild` | Rebuilds every demo, even if its code didn't change, and checks each one starts; then stops them again (start the one you want from the dashboard) |
 | `python3 ~/training-program-2026/demos/demo1/verify_bucket_access.py` | Checks only that the Spark can read the program's data bucket |
 | `bash ~/training-program-2026/demos/demo1/shutdown.sh` | Stops everything: setup runs, the dashboard and all demos. Nothing is deleted. |
 

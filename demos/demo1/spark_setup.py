@@ -2,7 +2,9 @@
 """Set up a DGX Spark for the ai_weather demos, with a live progress dashboard.
 
   python3 spark_setup.py                      start the dashboard, check the host, then build,
-                                              start and health-check a container for every demo
+                                              start and health-check a container for every demo,
+                                              then stop the ones it started (the dashboard's Launch
+                                              runs one demo at a time; --keep-running leaves them up)
   python3 spark_setup.py --only demo3         host checks + one demo (repeatable)
   python3 spark_setup.py --rebuild            rebuild demo images even if they're up to date
   python3 spark_setup.py --build-only         host checks + build images (if their code changed),
@@ -658,7 +660,7 @@ HOST_STEPS = [
 
 
 def plan(cfg: dict, only: list[str] | None, host_only: bool,
-         build_only: bool = False) -> tuple[list[dict], list[dict]]:
+         build_only: bool = False, stop_after: bool = False) -> tuple[list[dict], list[dict]]:
     demos = [] if host_only else [d for d in cfg["demo"] if not only or d["id"] in only]
     if only and not host_only and len(demos) != len(only):
         sys.exit(f"unknown demo id(s): {set(only) - {d['id'] for d in demos}}")
@@ -676,7 +678,30 @@ def plan(cfg: dict, only: list[str] | None, host_only: bool,
         if d.get("prefetch") and not d.get("checkout"):
             steps.append({"id": f"{d['id']}.prefetch", "group": d["id"], "title": d.get(
                 "prefetch_title", "Download what it needs on first use (in the background)")})
+    if stop_after and demos:
+        steps.append({"id": "demos.stop", "group": "demo1",
+                      "title": "Stop the demos this run started (Launch runs one at a time)"})
     return demos, steps
+
+
+def step_stop_started(run, sid, log, demos: list[dict]):
+    """After a full run's checks: stop each demo this run started, so they don't all stay up at
+    once (the dashboard's Launch runs one at a time). One that was already running is left as it is."""
+    started = {s["id"].rsplit(".", 1)[0] for s in run.data["steps"]
+               if s["id"].endswith(".start") and s.get("detail") == "container started"}
+    stopped, left = [], []
+    for d in demos:
+        if d["id"] in started:
+            rc, out = sh(["docker", "stop", "-t", "30", d["container"]], log, timeout=120)
+            if rc:
+                raise Warn(f"couldn't stop {d['container']}: {last_line(out)}")
+            stopped.append(d["container"])
+        elif (inspect("container", d["container"]) or {}).get("State", {}).get("Running"):
+            left.append(d["container"])
+    parts = [f"stopped {', '.join(stopped)}" if stopped else "none to stop"]
+    if left:
+        parts.append(f"left running (it was before): {', '.join(left)}")
+    return "; ".join(parts)
 
 
 def prefetch(run, demo: dict, build_sid: str):
@@ -697,7 +722,10 @@ def cmd_run(args, argv):
         sys.exit(f"setup already running (pid {LOCK.read_text().strip()})")
     LOCK.write_text(str(os.getpid()))
     try:
-        demos, steps = plan(cfg, args.only, args.host_only, args.build_only)
+        # (A full run checks every demo starts and answers, then stops the ones it started; Launch
+        # and --only start a demo to use it, so they keep it running.)
+        stop_after = not (args.build_only or args.host_only or args.only or args.keep_running)
+        demos, steps = plan(cfg, args.only, args.host_only, args.build_only, stop_after)
         run = Run(steps, argv)
         if args.no_dashboard and args.build_only:
             # (unattended setup: the dashboard opens fast from the desktop later)
@@ -763,6 +791,10 @@ def cmd_run(args, argv):
                 run.step(ids[2], step_health, d)
             prefetch(run, d, ids[0])
 
+        if stop_after and demos:
+            print("\nAfter the checks", flush=True)
+            run.step("demos.stop", step_stop_started, demos)
+
         failed = any(s["status"] == "failed" for s in run.data["steps"])
         run.data.update(state="failed" if failed else "done", finished=time.time())
         run.save()
@@ -800,6 +832,8 @@ def main(argv=None):
     how.add_argument("--build-only", action="store_true",
                      help="host checks and builds (of images whose code changed); start nothing")
     r.add_argument("--no-dashboard", action="store_true", help="don't start the progress dashboard")
+    r.add_argument("--keep-running", action="store_true",
+                   help="leave every demo it started running (a full run stops them after its checks)")
     r.add_argument("--no-pull", action="store_true",
                    help="don't update demos whose code is in another repository (the dashboard's Launch)")
     sub.add_parser("status", help="print the last run's steps")
