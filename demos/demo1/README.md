@@ -19,7 +19,8 @@ and show their progress, flag errors, and suggest fixes. A Launch link only star
 The same steps from the terminal, printed as they run:
 
 ```bash
-python3 spark_setup.py                    # host checks + every demo, and leaves them all running
+python3 spark_setup.py                    # host checks + every demo: builds, starts and checks each,
+                                          # then stops the ones it started (--keep-running leaves them up)
 python3 spark_setup.py --only demo3       # host checks + one demo
 python3 spark_setup.py --build-only       # host checks + builds, start nothing (Launch starts a demo)
 python3 spark_setup.py --rebuild          # rebuild images even if they're up to date
