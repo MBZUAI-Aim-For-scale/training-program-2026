@@ -1,315 +1,57 @@
 # Climate Data Tools
 
-Climate Data Tools `CDT` is a  set of utility functions for meteorological data quality control, homogenization and merging station data with satellite and others proxies such as reanalysis, all functions are available in the GUI mode.
+Climate Data Tools (`CDT`) is a set of utility functions for meteorological data quality control,
+homogenization, and merging station data with satellite and other proxies such as reanalysis. All
+of its functions are available in its GUI.
 
-## `CDT` installation on Windows
+On the Spark, CDT is Demo 2. It is already set up: it runs in its own Docker container, and you use
+it in your web browser. You don't need to install R, CDT or anything else.
 
-### 1) Install `R`
+To install CDT on another computer instead (Windows, macOS or Linux), follow the instructions in
+the CDT repository: <https://github.com/rijaf-iri/CDT>.
 
-Go to the CRAN website [CRAN](https://CRAN.R-project.org).
-Then click on the link [Download R for Windows](https://cran.r-project.org/bin/windows/) and [base](https://cran.r-project.org/bin/windows/base/). Download the latest version of `R`.
-Install the downloaded file (example: R-4.3.0-win.exe). Perform a default installation (Just click on **Next**).
+## Start CDT
 
-```
-CDT requires R version 4.0.0 or higher. It is recommend to have the latest version of R.
-```
+1. Open a web browser on the Spark and go to the dashboard, **http://localhost:8500**.
+2. Open **Demo 2 · Climate Data Tools** and click **Launch CDT**.
 
-### 2) Install `Rtools`
+The first launch builds CDT's image, which takes a few minutes; a new tab shows the progress. When
+it's ready, CDT opens in the browser at **http://localhost:8504** (its window on a virtual desktop,
+shown by noVNC). Later launches open it straight away.
 
-Go to the CRAN website [CRAN](https://CRAN.R-project.org).
-Then click on the link [Download R for Windows](https://cran.r-project.org/bin/windows/) and [Rtools](https://cran.r-project.org/bin/windows/Rtools/). Download the recommended version of `Rtools` compatible with your R version.
-Install the downloaded file. Follow the installation instructions displayed on the page. 
-
-### 3) Install `CDT`
-
-Open `R` and install `devtools` package with:
-
-```
-install.packages("devtools")
-```
-
-Now, you can install the the development version of `CDT` from GitHub with:
-
-``` r
-library(devtools)
-install_github("rijaf-iri/CDT")
-```
-
-## `CDT` installation on MacOS X
-
-### 1) Install `XQuartz`
-Type `XQuartz` in Apple's search, if you don't find it, that means `XQuartz` is not installed yet. It's better to update `XQuartz` to the latest version if it is already installed.
-
-Download and install it from [https://www.xquartz.org](https://www.xquartz.org/).
-
-Restart your computer.
-
-### 2) Install `Tcl/Tk`
-
-#### Check `Tcl/Tk` installation
-Check if the `Tcl/Tk` libraries are already installed in your computer. Open a terminal and run the following command:
+From your own computer, forward the port over SSH first, then open the same address there:
 
 ```bash
-echo 'puts $tcl_library;exit 0' | tclsh
-```
-If `Tcl/Tk` libraries are installed in your computer, you should get the path to the Tcl library like this: `/usr/local/lib/tcl8.6`.
-
-If `Tcl/Tk` libraries are not yet installed in your computer, you can install ActiveTcl&#174;. Go directly to the ActiveTcl&#174; installation below.
-
-#### Check `Tktable` package
-Check if the package `Tktable` is installed. Run the following command from terminal:
-
-```bash
-echo 'puts [package require Tktable];exit 0' | tclsh
-```
-If the package is installed, you should have the version number of the package. If `Tktable` is not installed, you can download it from [here](https://sourceforge.net/projects/tktable/files/tktable/2.10/Tktable2.10.tar.gz/download).
-
-Change to the directory where you downloaded `Tktable` archive file.
-
-```bash
-cd ~/path/to/Tktable/archive
-```
-Uncompressed the archive file.
-
-```bash
-tar -zxvf Tktable2.10.tar.gz
-```
-This will create a subdirectory `Tktable2.10` with all the files in it. Change to this directory.
-
-```bash
-cd Tktable2.10
+ssh -L 8504:localhost:8504 <your account>@<your Spark>
 ```
 
-The default installation path of `Tktable` is under `/usr/local`. If the Tcl Library Path directory is under this directory, you can install `Tktable` by default using the following commands:
-
-```bash
-./configure
-make install
-```
-
-If Tcl Library Path directory is anywhere else. Check the `auto_path` global variable using the following command
-
-```bash
-echo 'puts $auto_path;exit 0' | tclsh
-```
-
-You should have a list of directories like this: `/usr/local/lib/tcl8.6` `/usr/local/lib`. You need to set the `--prefix` option of configure
-
-```bash
-./configure --prefix=/usr/local
-make install
-```
-
-#### Check `BWidget` package
-Check if the package BWidget is installed. Run the following command from terminal:
-
-```bash
-echo 'puts [package require BWidget];exit 0' | tclsh
-```
-
-If the package is installed, you should have the version number of the package. If `BWidget` is not installed, you can download it from [here](https://sourceforge.net/projects/tcllib/files/BWidget/1.9.12/bwidget-1.9.12.zip/download).
-Unzipped the file `bwidget-1.9.12.zip` and copy it under the Tcl Library Path directory. Copy the bwidget directory `bwidget-1.9.12` under one of the `auto_path` global variable directories.
-
->  **Note**
->  If you install `Tktable` and `BWidget` anywhere else, remember the path you put the packages, you will need it when you install `CDT`.
-
-#### Install ActiveTcl&#174;
-
-Download ActiveTcl&#174; from [https://www.activestate.com/products/activetcl/downloads/](https://www.activestate.com/products/activetcl/downloads/).
-
-ActiveTcl&#174; executables will be installed (`wish`, `tclsh` and `tkcon`) in `/usr/local/bin` and the library will be put in `/usr/local/lib/tcl8.6` or `/usr/local/lib/tcl8.5` depending on the version.
-
-`Tktable` will be put in `/Library/Tcl/teapot/package/macosx10.5-i386-x86_64/lib/Tktable2.11` 
-and `BWidget` in `/Library/Tcl/teapot/package/tcl/lib/BWidget1.9.8`. 
-
-### 3) Install GDAL/GEOS/PROJ.4
-Download and install `GDAL` binaries from [http://www.kyngchaos.com/software/frameworks](http://www.kyngchaos.com/software/frameworks). Install the latest version of **GDAL Complete**.
-
-`GDAL` will be installed in `/Library/Frameworks/GDAL.framework`, 
-
-`GEOS` in `/Library/Frameworks/GEOS.framework`
-
-and `PROJ` in `/Library/Frameworks/PROJ.framework`.
-
-The configuration files are located in
-
-`GEOS`:  `/Library/Frameworks/GEOS.framework/unix/bin/geos-config`
-
-`GDAL`:  `/Library/Frameworks/GDAL.framework/unix/bin/gdal-config`
-
-And `PROJ` `include` and `lib` are located in `/Library/Frameworks/PROJ.framework/unix/include` and
- `/Library/Frameworks/PROJ.framework/unix/lib` respectively.
-
-Remember these paths, you will need them when you install the package `rgdal` and `rgeos` on `R`.
-
-### 4) Install `R`
-Download and install `R` binary for your MacOS X version from [https://cran.r-project.org/bin/macosx](https://cran.r-project.org/bin/macosx/)
-
-```
-CDT requires R version 4.0.0 or higher. We recommend that you have the latest version of R.
-```
-
-### 5) Install `CDT`
-Open `R` and install `devtools` package with: 
-
-```r
-install.packages("devtools")
-```
-
-Now, you can install the development version of `CDT` from GitHub with:
-
-```r
-library(devtools)
-install_github("rijaf-iri/CDT")
-```
-
-If you get a warning message telling you that `Tktable` or `BWidget` not found, you need to edit CDT's local configuration for Tcl: `~/Library/Application Support/CDT/config/Tcl_config.json`.
-Go to the MacOS configuration and change `Tktable.auto` or `Bwidget.auto` to `false`, then set the full path to `Tktable` or `BWidget` directory with `Tktable.path` or `Bwidget.path`, as shown in the following example:
-
-```json
-"MacOS": {
-    "Tktable.auto": false,
-    "Tktable.path": "/Library/Tcl/teapot/package/macosx10.5-i386-x86_64/lib/Tktable2.11",
-    "Bwidget.auto": false,
-    "Bwidget.path": "/Library/Tcl/teapot/package/tcl/lib/BWidget1.9.8"
-  },
-```
-
-After editing `Tcl_config.json`, save it. Open a new `R` session and load and start `CDT`.
-
-
-## `CDT` installation on Ubuntu
-
-### 1) Install `Tcl/Tk`
-
-Check if the `Tcl/Tk` libraries are already installed in your computer, make sure that the `*-dev` packages are installed. If not, you can install it with:
-
-```bash
-sudo apt-get install tk-dev tcl-dev
-```
-
-Check if the Tcl package `Tktable` is installed. If it is not installed, you can download it from [here](https://sourceforge.net/projects/tktable/files/tktable/2.10/Tktable2.10.tar.gz/download). 
-
-Check if the Tcl package `BWidget` is installed. If it is not installed, you can download it from [here](https://sourceforge.net/projects/tcllib/files/BWidget/1.9.12/bwidget-1.9.12.zip/download).
-
->  **Note**
-> See MacOS X `Tktable` and `BWidget` installation.
-
-### 2) Install GDAL/OGR
-
-Add the `PPA` to your sources
-
-```bash
-sudo add-apt-repository ppa:ubuntugis/ppa
-sudo apt-get update && sudo apt-get upgrade
-```
-
-Install `GDAL`
-
-```bash
-sudo apt-get install gdal-bin libgdal-dev
-```
-
-Verify the installation with
-
-```bash
-ogrinfo
-```
-
-Get the installation path of `gdal-config` and `geos-config`. Save these paths somewhere, you will need it later when installing the `R` packages `rgdal` and `rgeos`.
-
-
-### 3) Install `NetCDF`
-
-```bash
-sudo apt-get install netcdf-bin libnetcdf-dev
-```
-
-### 4) Install `R`
-
-Install `R` if not installed yet.
-Add the `R` repository to your sources
-
-```
-CDT requires R version 4.0.0 or higher. We recommend that you have the latest version of R, this implies that you have to install R from source.
-```
-
-```bash
-sudo add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -sc)/"
-sudo apt-get update
-```
-
-Add GPG key
-
-```bash
-sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E298A3A825C0D65DFD57CBB651716619E084DAB9
-```
-
-Install R
-
-```bash
-sudo apt-get install r-base r-base-dev
-```
-
-### 5) Install `R` package `ncdf4`
-
-```bash
-sudo apt-get install r-cran-ncdf4
-```
-
-You can install `ncdf4` package with:
-
-```r
-## edit the path
-nc_config <- '/usr/bin/nc-config'
-
-install.packages('ncdf4', type = "source",
-        configure.args = paste0('--with-nc-config=', nc_config))
-```
-
-### 6) Install `CDT`
-
-Open `R` and install `devtools` package with: 
-
-```r
-install.packages("devtools")
-```
-Now, you can install the development version of `CDT` from GitHub with:
-
-```r
-devtools::install_github("rijaf-iri/CDT")
-```
-
-If you get a warning message telling you that `Tktable` or `BWidget` not found, you need to edit CDT’s local configuration for Tcl:  `~/.local/CDT/config/Tcl_config.json`
-Go to the Linux configuration and change `Tktable.auto` or `Bwidget.auto` to `false`, then set the full path to `Tktable` or `BWidget` directory with `Tktable.path` or `Bwidget.path`.
-
-## Usage
-
-``` r
-# Load  CDT library
-library(CDT)
-
-# Starting CDT
-startCDT()
-```
-
-## Updating `CDT`
-
-To only update `CDT` without updating all dependencies packages, enter the following command on `R` console
-
-```r
-if(packageVersion("devtools") >= "2.0.0"){
-    devtools::install_github("rijaf-iri/CDT", dependencies = FALSE,
-                              upgrade = FALSE, force = TRUE)
-}else{
-    devtools::install_github("rijaf-iri/CDT", dependencies = FALSE, 
-                              upgrade_dependencies = FALSE, force = TRUE)
-}
-```
-
-To update `CDT` and all dependencies packages, use 
-
-```r
-update.packages(ask = FALSE)
-devtools::install_github("rijaf-iri/CDT")
-```
+## Your files
+
+CDT works in the folder `/data`. On the Spark that's the training program's
+`demos/demo2/data` folder, in your home folder: `~/training-program-2026/demos/demo2/data`.
+
+- In CDT, open and save files under `/data`.
+- In the dashboard, Demo 2's **Data folder** section shows the same files. You can upload, download,
+  view, edit, rename and delete them there, and make folders. Changes show up in CDT at once.
+- You can also copy files into that folder from a terminal on the Spark.
+
+CDT's own settings, including the details you enter the first time it starts, are kept in
+`~/.cdt-docker`. They stay when CDT or the Spark restarts.
+
+## If something goes wrong
+
+- **You closed the CDT window.** CDT starts again by itself after a moment. Reload the browser tab if
+  the window doesn't come back.
+- **The page doesn't load.** Click **Launch CDT** again in the dashboard. It starts the container if
+  it has stopped.
+- **CDT is stuck.** Restart its container from a terminal on the Spark: `docker restart cdt`.
+
+## For developers
+
+- `Dockerfile`: CDT's image (based on `rocker/r2u:noble`; amd64 and arm64).
+- `docker/entrypoint.sh`: starts CDT inside the container (`vnc` mode on the Spark).
+- `../docker/run.sh`: how the dashboard starts the container (`spark_setup.py --only cdt` builds the
+  image first).
+- `cdt-docker.sh` and `docker/README.md`: running this container on another Linux server, over
+  SSH with X11 forwarding or noVNC.
+- The rest of this folder is CDT's source code, from <https://github.com/rijaf-iri/CDT>.
